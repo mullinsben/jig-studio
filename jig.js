@@ -11,6 +11,15 @@
   const wanted = url.searchParams.has('jig') || location.hash === '#jig' || safeGet('jig') === '1';
   if (!wanted) return;
   if (window.__jig) return;
+  const EMBED = url.searchParams.get('jig') === 'embed' && window.parent !== window;
+  const DEVICE = url.searchParams.get('device') || '';
+  const DEVICES = [
+    { id: 'iphone-15-pro', name: 'iPhone 15 Pro', w: 393, h: 852, bp: 'phone' },
+    { id: 'iphone-se', name: 'iPhone SE', w: 375, h: 667, bp: 'phone' },
+    { id: 'pixel-8', name: 'Pixel 8', w: 412, h: 915, bp: 'phone' },
+    { id: 'galaxy-s24', name: 'Galaxy S24', w: 360, h: 780, bp: 'phone' },
+    { id: 'ipad-mini', name: 'iPad Mini', w: 744, h: 1133, bp: 'tablet' }
+  ];
 
   const SCRIPT = document.currentScript;
   const DEFAULT_FOUNDATION = {
@@ -30,7 +39,9 @@
     warnings: [],
     grid: false,
     selected: null,
-    bp: 'desktop'
+    bp: 'desktop',
+    device: null,          // active device preview
+    frame: { changes: [], warnings: [] }   // changes reported by an embedded device frame
   };
 
   function safeGet(k) { try { return localStorage.getItem('__' + k); } catch (e) { return null; } }
@@ -101,11 +112,15 @@
   // ------------------------------------------------------------ change log
   function record(el, ctl, data, summary) {
     const k = keyOf(el, ctl);
-    const base = { el: selectorOf(el), name: nameOf(el), ctl, bp: state.bp };
+    const base = { el: selectorOf(el), name: nameOf(el), ctl, bp: state.bp, ...(DEVICE ? { device: DEVICE } : {}) };
     state.changes.set(k, Object.assign(base, data, { summary }));
-    renderHUD();
+    renderHUD(); postToParent();
   }
-  function unrecord(el, ctl) { state.changes.delete(keyOf(el, ctl)); renderHUD(); }
+  function unrecord(el, ctl) { state.changes.delete(keyOf(el, ctl)); renderHUD(); postToParent(); }
+  function postToParent() {
+    if (!EMBED) return;
+    try { window.parent.postMessage({ jig: 'frame', changes: Array.from(state.changes.values()), warnings: state.warnings.map(w => ({ kind: w.kind, el: selectorOf(w.el), name: nameOf(w.el), msg: w.msg, value: w.value, min: w.min })), bp: state.bp, device: DEVICE }, '*'); } catch (e) {}
+  }
 
   // ------------------------------------------------------------ controls
   const Controls = {};
@@ -418,45 +433,56 @@
   const style = document.createElement('style');
   style.id = 'jig-style';
   style.textContent = `
-    .jig-el { outline: 1.5px dashed rgba(224,122,31,.55); outline-offset: 2px; }
-    .jig-el:hover, .jig-el.jig-selected { outline: 2px solid #e07a1f; }
+    .jig-el { outline: 1.5px dashed rgba(63,111,255,.55); outline-offset: 2px; }
+    .jig-el:hover, .jig-el.jig-selected { outline: 2px solid #3f6fff; }
     .jig-badge { position: fixed; z-index: 2147483646; pointer-events: none; font: 11px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
-      background: #1b1612; color: #ffe8c9; padding: 3px 7px; border-radius: 4px; white-space: nowrap; transform: translate(0,-110%); box-shadow: 0 2px 8px rgba(0,0,0,.3); }
-    .jig-tb { position: fixed; z-index: 2147483646; display: flex; gap: 4px; align-items: center; background: #1b1612; border-radius: 8px; padding: 4px; box-shadow: 0 4px 16px rgba(0,0,0,.35); }
-    .jig-tb button { font: 600 13px ui-sans-serif, system-ui; background: #3a2f26; color: #fff; border: 0; border-radius: 6px; width: 28px; height: 28px; cursor: pointer; }
-    .jig-tb button:hover { background: #e07a1f; }
-    .jig-tb .chip { font: 11px ui-monospace, Menlo, monospace; color: #ffe8c9; padding: 0 6px; min-width: 34px; text-align: center; }
-    .jig-tb .sep { width: 1px; height: 18px; background: #5a4a3c; margin: 0 2px; }
+      background: #0b0b0d; color: #dfe6ff; padding: 3px 7px; border-radius: 4px; white-space: nowrap; transform: translate(0,-110%); box-shadow: 0 2px 8px rgba(0,0,0,.3); }
+    .jig-tb { position: fixed; z-index: 2147483646; display: flex; gap: 4px; align-items: center; background: #0b0b0d; border-radius: 8px; padding: 4px; box-shadow: 0 4px 16px rgba(0,0,0,.35); }
+    .jig-tb button { font: 600 13px ui-sans-serif, system-ui; background: #262833; color: #fff; border: 0; border-radius: 6px; width: 28px; height: 28px; cursor: pointer; }
+    .jig-tb button:hover { background: #3f6fff; }
+    .jig-tb .chip { font: 11px ui-monospace, Menlo, monospace; color: #dfe6ff; padding: 0 6px; min-width: 34px; text-align: center; }
+    .jig-tb .sep { width: 1px; height: 18px; background: #3a3d4a; margin: 0 2px; }
     #jig-grid { position: absolute; inset: 0; pointer-events: none; z-index: 2147483640; }
     #jig-grid .cols { position: sticky; top: 0; height: 100vh; margin: 0 auto; display: grid; }
-    #jig-grid .cols i { background: rgba(224,122,31,.09); border-inline: 1px solid rgba(224,122,31,.35); }
-    #jig-hud { position: fixed; top: 16px; right: 16px; width: 340px; max-height: calc(100vh - 32px); display: flex; flex-direction: column; z-index: 2147483647;
-      background: #1b1612; color: #f3e9da; border-radius: 12px; box-shadow: 0 12px 40px rgba(0,0,0,.45); font: 13px/1.45 ui-sans-serif, system-ui, sans-serif; overflow: hidden; }
-    #jig-hud header { display: flex; align-items: center; gap: 8px; padding: 10px 12px; background: #2b2118; cursor: move; user-select: none; }
-    #jig-hud header b { font-size: 14px; letter-spacing: .02em; } #jig-hud header b i { color: #e07a1f; font-style: normal; }
+    #jig-grid .cols i { background: rgba(63,111,255,.08); border-inline: 1px solid rgba(63,111,255,.35); }
+    #jig-hud { position: fixed; top: 16px; right: 16px; width: 340px; height: auto; max-height: calc(100vh - 32px); min-width: 280px; min-height: 92px; display: flex; flex-direction: column; z-index: 2147483647;
+      background: #0b0b0d; color: #f3f4f7; border-radius: 12px; box-shadow: 0 12px 40px rgba(0,0,0,.45); font: 13px/1.45 ui-sans-serif, system-ui, sans-serif; overflow: hidden; resize: both; }
+    #jig-hud.collapsed { resize: none; height: auto !important; }
+    #jig-hud.collapsed .tools, #jig-hud.collapsed .src, #jig-hud.collapsed .list { display: none; }
+    #jig-hud header .min { margin-left: 8px; width: 24px; height: 24px; border: 0; border-radius: 6px; background: #262833; color: #fff; cursor: pointer; font: 700 14px/1 ui-sans-serif, system-ui; }
+    #jig-hud header .min:hover { background: #3f6fff; }
+    #jig-hud .tools select { font: 600 12px ui-sans-serif, system-ui; background: #262833; color: #fff; border: 0; border-radius: 6px; padding: 6px 8px; cursor: pointer; }
+    #jig-device { position: fixed; inset: 0; z-index: 2147483645; background: rgba(27,22,18,.82); display: flex; align-items: center; justify-content: center; }
+    #jig-device .shell { position: relative; background: #0b0908; border-radius: 44px; padding: 14px; box-shadow: 0 30px 80px rgba(0,0,0,.6), inset 0 0 0 2px #2a2420; transform-origin: center; }
+    #jig-device iframe { display: block; border: 0; background: #fff; border-radius: 32px; }
+    #jig-device .cap { position: absolute; top: -34px; left: 0; right: 0; text-align: center; color: #dfe6ff; font: 12px ui-monospace, Menlo, monospace; }
+    #jig-device .close { position: absolute; top: 16px; right: 16px; width: 36px; height: 36px; border: 0; border-radius: 50%; background: #262833; color: #fff; font: 700 16px/1 ui-sans-serif, system-ui; cursor: pointer; }
+    #jig-device .close:hover { background: #3f6fff; }
+    #jig-hud header { display: flex; align-items: center; gap: 8px; padding: 10px 12px; background: #13141a; cursor: move; user-select: none; }
+    #jig-hud header b { font-size: 14px; letter-spacing: .02em; } #jig-hud header b i { color: #3f6fff; font-style: normal; }
     #jig-hud header small { opacity: .6; margin-left: auto; font-family: ui-monospace, Menlo, monospace; font-size: 11px; }
-    #jig-hud .tools { display: flex; gap: 6px; padding: 8px 12px; border-bottom: 1px solid #3a2f26; flex-wrap: wrap; }
-    #jig-hud .tools button, #jig-hud footer button { font: 600 12px ui-sans-serif, system-ui; background: #3a2f26; color: #fff; border: 0; border-radius: 6px; padding: 6px 10px; cursor: pointer; }
-    #jig-hud .tools button.on { background: #5c6b3a; }
-    #jig-hud .tools button:hover, #jig-hud footer button:hover { background: #e07a1f; }
+    #jig-hud .tools { display: flex; gap: 6px; padding: 8px 12px; border-bottom: 1px solid #262833; flex-wrap: wrap; }
+    #jig-hud .tools button, #jig-hud footer button { font: 600 12px ui-sans-serif, system-ui; background: #262833; color: #fff; border: 0; border-radius: 6px; padding: 6px 10px; cursor: pointer; }
+    #jig-hud .tools button.on { background: #2bb673; }
+    #jig-hud .tools button:hover, #jig-hud footer button:hover { background: #3f6fff; }
     #jig-hud .list { overflow: auto; padding: 8px 12px; flex: 1; }
     #jig-hud h6 { margin: 8px 0 4px; font-size: 11px; letter-spacing: .14em; text-transform: uppercase; opacity: .6; }
-    #jig-hud .row { display: flex; gap: 8px; align-items: baseline; padding: 4px 0; border-bottom: 1px dashed #3a2f26; cursor: pointer; }
-    #jig-hud .row:hover { color: #ffe8c9; }
+    #jig-hud .row { display: flex; gap: 8px; align-items: baseline; padding: 4px 0; border-bottom: 1px dashed #262833; cursor: pointer; }
+    #jig-hud .row:hover { color: #dfe6ff; }
     #jig-hud .row .n { font-weight: 600; min-width: 0; } #jig-hud .row .s { opacity: .8; flex: 1; } #jig-hud .row .x { opacity: .5; }
-    #jig-hud .row.warn .n::before { content: "⚠ "; color: #f3b24a; }
+    #jig-hud .row.warn .n::before { content: "⚠ "; color: #ffb84d; }
     #jig-hud .empty { opacity: .55; padding: 8px 0; }
-    #jig-hud footer { display: flex; gap: 6px; padding: 10px 12px; border-top: 1px solid #3a2f26; background: #2b2118; align-items: center; }
-    #jig-hud footer button.primary { background: #e07a1f; flex: 1; }
+    #jig-hud footer { display: flex; gap: 6px; padding: 10px 12px; border-top: 1px solid #262833; background: #13141a; align-items: center; }
+    #jig-hud footer button.primary { background: #3f6fff; flex: 1; }
     #jig-hud footer small { opacity: .6; }
     #jig-hud .src { padding: 0 12px 8px; font: 11px ui-monospace, Menlo, monospace; opacity: .55; }
     @media (max-width: 640px) {
       #jig-hud { top: auto; bottom: 0; left: 0; right: 0; width: auto; max-height: 50vh; border-radius: 12px 12px 0 0; }
       #jig-hud header { cursor: pointer; }
-      #jig-hud header::before { content: ""; width: 36px; height: 4px; border-radius: 2px; background: #5a4a3c; position: absolute; left: 50%; top: 5px; transform: translateX(-50%); }
+      #jig-hud header::before { content: ""; width: 36px; height: 4px; border-radius: 2px; background: #3a3d4a; position: absolute; left: 50%; top: 5px; transform: translateX(-50%); }
       #jig-hud header { position: relative; padding-top: 14px; }
-      #jig-hud.collapsed .tools, #jig-hud.collapsed .src, #jig-hud.collapsed .list { display: none; }
-      #jig-phone-btn { display: none; }
+      #jig-phone-btn, #jig-device-sel { display: none; }
+      #jig-hud { resize: none; }
       .jig-tb button { width: 36px; height: 36px; }
     }
   `;
@@ -523,7 +549,7 @@
   function toggleGrid(force) {
     state.grid = force === undefined ? !state.grid : force;
     gridEl.hidden = !state.grid; if (state.grid) drawGrid();
-    $('#jig-grid-btn').classList.toggle('on', state.grid);
+    const gb = $('#jig-grid-btn'); if (gb) gb.classList.toggle('on', state.grid);
   }
 
   // ------------------------------------------------------------ protection scan (AX)
@@ -551,18 +577,28 @@
       const fg = parseColor(css(t).color); if (!fg || fg[3] === 0) return;
       const over = imageBehind(t);
       let bg = null, how = '';
+      let busy = 0;
       if (over) {
-        bg = sampleImage(over.img, t); how = 'over image';
-        if (!bg) { if ((P.textOverImage || 'warn') === 'warn' && !seen.has(over.img)) { seen.add(over.img); W.push({ kind: 'text-over-image', el: t, msg: 'text over an image; contrast could not be sampled (serve over http to enable)' }); } return; }
+        const patches = sampleImage(over.img, t); how = 'over image';
+        if (!patches) { if ((P.textOverImage || 'warn') === 'warn' && !seen.has(over.img)) { seen.add(over.img); W.push({ kind: 'text-over-image', el: t, msg: 'text over an image; contrast could not be sampled (serve over http to enable)' }); } return; }
+        // a scrim (gradient/translucent overlay) or a text-shadow earns some credit; otherwise grade by the WORST patch
+        const shadow = css(t).textShadow !== 'none';
+        const scrim = scrimBehind(t);
+        const ratios = patches.map(pc => contrast(fg, scrim ? blend(pc, scrim) : pc)).sort((a, b) => a - b);
+        const worst = ratios[Math.floor(ratios.length * 0.1)];      // 10th percentile: ignores a stray pixel, not a region
+        const lums = patches.map(lum); const mean = lums.reduce((a, b) => a + b, 0) / lums.length;
+        busy = Math.sqrt(lums.reduce((a, l) => a + (l - mean) ** 2, 0) / lums.length);
+        bg = null; var ratioOverride = shadow ? Math.max(worst, ratios[Math.floor(ratios.length * 0.5)]) : worst;
+        if (busy > 0.16 && !scrim && !shadow) W.push({ kind: 'busy-background', el: t, msg: `text over a busy image (luminance spread ${busy.toFixed(2)}); add a scrim, a shadow, or move it` });
       } else { bg = solidBehind(t); how = 'on background'; }
-      if (!bg) return;
-      const ratio = contrast(fg, bg);
+      if (!bg && ratioOverride === undefined) return;
+      const ratio = bg ? contrast(fg, bg) : ratioOverride;
       const fs = px(css(t).fontSize), bold = px(css(t).fontWeight) >= 700;
       const large = fs >= 24 || (bold && fs >= 18.66);          // WCAG large text
       const need = large ? Math.min(3, P.minContrast || 4.5) : (P.minContrast || 4.5);
-      if (ratio < need) W.push({ kind: 'contrast', el: t, msg: `contrast ${ratio.toFixed(1)} ${how}, min ${need}${large ? ' (large text)' : ''}`, value: +ratio.toFixed(1), min: need });
+      if (ratio < need) W.push({ kind: 'contrast', el: t, msg: `contrast ${ratio.toFixed(1)} ${how}${over ? ' (worst patch)' : ''}, min ${need}${large ? ' (large text)' : ''}`, value: +ratio.toFixed(1), min: need });
     });
-    state.warnings = W; renderHUD();
+    state.warnings = W; renderHUD(); postToParent();
   }
   function imageBehind(t) {
     let n = t.parentElement;
@@ -574,6 +610,19 @@
     }
     return null;
   }
+  function scrimBehind(t) {
+    // a translucent background on the text's own box or an ancestor between it and the image
+    let n = t;
+    while (n && n !== document.body) {
+      const bgc = parseColor(css(n).backgroundColor); const bgi = css(n).backgroundImage;
+      if (bgc && bgc[3] > 0.05 && bgc[3] < 1) return bgc;
+      if (bgi && /gradient/.test(bgi)) { const m = bgi.match(/rgba?\([^)]+\)/g); if (m) { const cs = m.map(parseColor).filter(Boolean); const a = cs.reduce((x, c) => x + c[3], 0) / cs.length; const avg = cs.reduce((x, c) => [x[0] + c[0] / cs.length, x[1] + c[1] / cs.length, x[2] + c[2] / cs.length], [0, 0, 0]); return [avg[0], avg[1], avg[2], Math.min(0.95, a)]; } }
+      if (bgc && bgc[3] >= 1) return null; // solid: not "over image" at all
+      n = n.parentElement;
+    }
+    return null;
+  }
+  function blend(under, over) { const a = over[3]; return [over[0] * a + under[0] * (1 - a), over[1] * a + under[1] * (1 - a), over[2] * a + under[2] * (1 - a), 1]; }
   function solidBehind(t) {
     let n = t;
     while (n && n !== document.documentElement) { const c = parseColor(css(n).backgroundColor); if (c && c[3] > 0.9) return c; n = n.parentElement; }
@@ -590,11 +639,12 @@
       const x0 = clamp((tr.left - ir.left - offX) / s, 0, img.naturalWidth), y0 = clamp((tr.top - ir.top - offY) / s, 0, img.naturalHeight);
       const x1 = clamp((tr.right - ir.left - offX) / s, 0, img.naturalWidth), y1 = clamp((tr.bottom - ir.top - offY) / s, 0, img.naturalHeight);
       const w = Math.max(1, Math.round(x1 - x0)), h = Math.max(1, Math.round(y1 - y0));
-      c.width = 24; c.height = 24; const ctx = c.getContext('2d');
-      ctx.drawImage(img, x0, y0, w, h, 0, 0, 24, 24);
-      const d = ctx.getImageData(0, 0, 24, 24).data; let r = 0, g = 0, b = 0, n = 0;
-      for (let i = 0; i < d.length; i += 4) { r += d[i]; g += d[i + 1]; b += d[i + 2]; n++; }
-      return [r / n, g / n, b / n, 1];
+      // 8x8 patches; each patch is averaged, then we keep every patch so the caller can grade by the worst one
+      const N = 8; c.width = N; c.height = N; const ctx = c.getContext('2d');
+      ctx.imageSmoothingEnabled = true; ctx.drawImage(img, x0, y0, w, h, 0, 0, N, N);
+      const d = ctx.getImageData(0, 0, N, N).data; const patches = [];
+      for (let i = 0; i < d.length; i += 4) patches.push([d[i], d[i + 1], d[i + 2], 1]);
+      return patches;
     } catch (e) { return null; } // tainted canvas (file://) or cross-origin
   }
   function parseColor(s) { const m = (s || '').match(/rgba?\(([^)]+)\)/); if (!m) return null; const p = m[1].split(',').map(parseFloat); return [p[0], p[1], p[2], p.length > 3 ? p[3] : 1]; }
@@ -604,11 +654,12 @@
   // ------------------------------------------------------------ HUD
   const hud = document.createElement('div'); hud.id = 'jig-hud';
   hud.innerHTML = `
-    <header><b>jig <i>studio</i></b><small id="jig-bp"></small></header>
+    <header><b>jig <i>studio</i></b><small id="jig-bp"></small><button class="min" id="jig-min-btn" title="minimize">–</button></header>
     <div class="tools">
       <button id="jig-grid-btn" title="g">grid</button>
       <button id="jig-scan-btn">rescan</button>
-      <button id="jig-phone-btn">phone preview</button>
+      <select id="jig-device-sel" title="device preview"><option value="">desktop</option>${DEVICES.map(d => `<option value="${d.id}">${d.name} · ${d.w}×${d.h}</option>`).join('')}</select>
+      <button id="jig-phone-btn" hidden>phone preview</button>
       <button id="jig-reset-btn">reset all</button>
     </div>
     <div class="src" id="jig-src"></div>
@@ -616,6 +667,7 @@
     <footer><button class="primary" id="jig-copy-btn">Copy patch</button><small id="jig-count"></small></footer>`;
 
   function renderHUD() {
+    if (EMBED || !hud.isConnected) return;
     const ch = $('#jig-changes'), wn = $('#jig-warn');
     ch.innerHTML = ''; wn.innerHTML = '';
     if (!state.changes.size) ch.innerHTML = '<div class="empty">Nothing changed yet. Hover anything outlined; drag, pinch, or click it.</div>';
@@ -626,6 +678,10 @@
       row.onclick = () => { const el = $(c.el); if (el) { el.scrollIntoView({ block: 'center', behavior: 'smooth' }); select(el); } };
       ch.appendChild(row);
     }
+    if (state.frame.changes.length) {
+      const h = document.createElement('h6'); h.textContent = (state.frame.device || 'device') + ' changes'; ch.appendChild(h);
+      state.frame.changes.forEach(c => { const row = document.createElement('div'); row.className = 'row'; row.innerHTML = `<span class="n">${esc(c.name)}</span><span class="s">${esc(c.summary)}</span>`; ch.appendChild(row); });
+    }
     if (!state.warnings.length) wn.innerHTML = '<div class="empty">No protection warnings on this page.</div>';
     state.warnings.forEach(w => {
       const row = document.createElement('div'); row.className = 'row warn';
@@ -633,7 +689,8 @@
       row.onclick = () => { w.el.scrollIntoView({ block: 'center', behavior: 'smooth' }); if (w.el.classList.contains('jig-el')) select(w.el); };
       wn.appendChild(row);
     });
-    $('#jig-count').textContent = `${state.changes.size} change${state.changes.size === 1 ? '' : 's'} · ${state.warnings.length} warning${state.warnings.length === 1 ? '' : 's'}`;
+    const total = state.changes.size + state.frame.changes.length;
+    $('#jig-count').textContent = `${total} change${total === 1 ? '' : 's'} · ${state.warnings.length + state.frame.warnings.length} warning${state.warnings.length + state.frame.warnings.length === 1 ? '' : 's'}`;
     $('#jig-bp').textContent = `${state.bp} · ${window.innerWidth}px`;
     $('#jig-src').textContent = `foundation: ${state.F.name} (${state.foundationSource})`;
   }
@@ -643,12 +700,14 @@
   function buildPatch() {
     const when = new Date(); const stamp = when.toISOString().slice(0, 16).replace('T', ' ');
     const lines = [`# jig patch · ${state.F.name} · ${location.pathname} · ${stamp}`, ''];
-    if (!state.changes.size) lines.push('- (no changes)');
-    for (const c of state.changes.values()) lines.push(`- ${c.name}: ${c.summary}${c.bp !== 'desktop' ? ` (${c.bp})` : ''}`);
-    if (state.warnings.length) { lines.push('', `⚠ ${state.warnings.length} protection warning${state.warnings.length === 1 ? '' : 's'}:`); state.warnings.forEach(w => lines.push(`- ${nameOf(w.el)}: ${w.msg}`)); }
+    const all = [...state.changes.values(), ...state.frame.changes];
+    if (!all.length) lines.push('- (no changes)');
+    all.forEach(c => lines.push(`- ${c.name}: ${c.summary}${c.bp !== 'desktop' ? ` (${c.device ? c.device + ', ' : ''}${c.bp})` : ''}`));
+    const warns = [...state.warnings.map(w => ({ kind: w.kind, el: selectorOf(w.el), name: nameOf(w.el), msg: w.msg, value: w.value, min: w.min })), ...state.frame.warnings.map(w => ({ ...w, msg: w.msg + ' (' + (state.frame.device || 'device') + ')' }))];
+    if (warns.length) { lines.push('', `⚠ ${warns.length} protection warning${warns.length === 1 ? '' : 's'}:`); warns.forEach(w => lines.push(`- ${w.name}: ${w.msg}`)); }
     const json = [];
-    for (const c of state.changes.values()) { const { name, summary, ...rest } = c; json.push(rest); }
-    state.warnings.forEach(w => json.push({ warn: w.kind, el: selectorOf(w.el), msg: w.msg, ...(w.value ? { value: w.value, min: w.min } : {}) }));
+    all.forEach(c => { const { name, summary, ...rest } = c; json.push(rest); });
+    warns.forEach(w => json.push({ warn: w.kind, el: w.el, msg: w.msg, ...(w.value ? { value: w.value, min: w.min } : {}) }));
     lines.push('', '---', JSON.stringify(json, null, 2));
     return lines.join('\n');
   }
@@ -659,30 +718,66 @@
   }
   function flash(msg) { const b = $('#jig-copy-btn'); const t = b.textContent; b.textContent = msg; setTimeout(() => (b.textContent = t), 1800); }
 
+  // ------------------------------------------------------------ device preview
+  let deviceEl = null;
+  function openDevice(id) {
+    closeDevice();
+    const d = DEVICES.find(x => x.id === id); if (!d) return;
+    state.device = d;
+    const u = new URL(location.href); u.searchParams.set('jig', 'embed'); u.searchParams.set('device', d.id);
+    deviceEl = document.createElement('div'); deviceEl.id = 'jig-device';
+    deviceEl.innerHTML = `<button class="close" title="close">×</button><div class="shell"><div class="cap">${d.name} · ${d.w}×${d.h} · changes here are tagged ${d.bp}</div><iframe width="${d.w}" height="${d.h}" title="${d.name} preview"></iframe></div>`;
+    document.body.appendChild(deviceEl);
+    const fr = $('iframe', deviceEl); fr.src = u.toString();
+    const fit = () => { const sh = $('.shell', deviceEl); const sc = Math.min(1, (window.innerHeight - 90) / (d.h + 28), (window.innerWidth - 400) / (d.w + 28)); sh.style.transform = `scale(${sc})`; };
+    fit(); on(window, 'resize', fit);
+    $('.close', deviceEl).onclick = closeDevice;
+    on(deviceEl, 'click', e => { if (e.target === deviceEl) closeDevice(); });
+  }
+  function closeDevice() {
+    if (deviceEl) { deviceEl.remove(); deviceEl = null; }
+    state.device = null; $('#jig-device-sel').value = '';
+    // keep frame changes in the patch until reset; they were real
+    renderHUD();
+  }
+
   // ------------------------------------------------------------ boot
   async function boot() {
     await loadFoundation();
     document.head.appendChild(style);
-    document.body.append(gridEl, badge, toolbar, hud);
-    state.bp = window.innerWidth <= (state.F.breakpoints && state.F.breakpoints.phone || 480) + 40 ? 'phone' : 'desktop';
+    document.body.append(gridEl, badge, toolbar);
+    const dev = DEVICES.find(d => d.id === DEVICE);
+    state.bp = dev ? dev.bp : (window.innerWidth <= (state.F.breakpoints && state.F.breakpoints.phone || 480) + 40 ? 'phone' : 'desktop');
     wire();
+    if (EMBED) {
+      // inside a device frame: no HUD; the parent page's HUD collects our changes
+      const imgs0 = $$('img').filter(i => !i.complete);
+      await Promise.all(imgs0.map(i => new Promise(r => { i.onload = i.onerror = r; })));
+      scanProtection();
+      window.__jig = { state, patch: buildPatch, scan: scanProtection, Controls, embed: true };
+      return;
+    }
+    document.body.append(hud);
+    on(window, 'message', e => { if (e.data && e.data.jig === 'frame') { state.frame = { changes: e.data.changes || [], warnings: e.data.warnings || [], device: e.data.device, bp: e.data.bp }; renderHUD(); } });
+    $('#jig-min-btn').onclick = e => { e.stopPropagation(); hud.classList.toggle('collapsed'); $('#jig-min-btn').textContent = hud.classList.contains('collapsed') ? '+' : '–'; };
+    $('#jig-device-sel').onchange = e => openDevice(e.target.value);
     $('#jig-grid-btn').onclick = () => toggleGrid();
     $('#jig-scan-btn').onclick = scanProtection;
-    $('#jig-reset-btn').onclick = () => { $$('.jig-el').forEach(el => el.__jigReset && el.__jigReset()); state.changes.clear(); scanProtection(); };
+    $('#jig-reset-btn').onclick = () => { $$('.jig-el').forEach(el => el.__jigReset && el.__jigReset()); state.changes.clear(); state.frame = { changes: [], warnings: [] }; closeDevice(); scanProtection(); };
     $('#jig-copy-btn').onclick = copyPatch;
-    $('#jig-phone-btn').onclick = () => { const u = new URL(location.href); u.searchParams.set('jig', '1'); window.open(u, 'jig-phone', `width=${(state.F.breakpoints && state.F.breakpoints.phone) || 390},height=844`); };
+    $('#jig-phone-btn').onclick = () => openDevice('iphone-15-pro');
     // HUD drag
     let d = null; const hdr = $('header', hud);
-    on(hdr, 'pointerdown', e => { d = { x: e.clientX - hud.offsetLeft, y: e.clientY - hud.offsetTop }; hdr.setPointerCapture(e.pointerId); });
+    on(hdr, 'pointerdown', e => { if (e.target.closest('.min')) return; d = { x: e.clientX - hud.offsetLeft, y: e.clientY - hud.offsetTop }; hdr.setPointerCapture(e.pointerId); });
     on(hdr, 'pointermove', e => { if (!d || window.innerWidth <= 640) return; hud.style.left = `${e.clientX - d.x}px`; hud.style.top = `${e.clientY - d.y}px`; hud.style.right = 'auto'; });
-    on(hdr, 'pointerup', e => { const moved = d && (Math.abs(e.clientX - d.x - hud.offsetLeft) > 4 || Math.abs(e.clientY - d.y - hud.offsetTop) > 4); d = null; if (window.innerWidth <= 640 && !moved) hud.classList.toggle('collapsed'); });
+    on(hdr, 'pointerup', e => { if (e.target.closest('.min')) { d = null; return; } const moved = d && (Math.abs(e.clientX - d.x - hud.offsetLeft) > 4 || Math.abs(e.clientY - d.y - hud.offsetTop) > 4); d = null; if (window.innerWidth <= 640 && !moved) hud.classList.toggle('collapsed'); });
     if (window.innerWidth <= 640) hud.classList.add('collapsed');
     // first scan once images are in
     const imgs = $$('img').filter(i => !i.complete);
     await Promise.all(imgs.map(i => new Promise(r => { i.onload = i.onerror = r; })));
     scanProtection();
     window.__jig = { state, patch: buildPatch, scan: scanProtection, Controls };
-    console.log('%cjig studio%c ready · ' + $$('.jig-el').length + ' elements · foundation ' + state.F.name, 'color:#e07a1f;font-weight:700', '');
+    console.log('%cjig studio%c ready · ' + $$('.jig-el').length + ' elements · foundation ' + state.F.name, 'color:#3f6fff;font-weight:700', '');
   }
   function r1(v) { return Math.round(v * 10) / 10; }
   function r2(v) { return Math.round(v * 100) / 100; }
