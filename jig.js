@@ -113,7 +113,7 @@
   // --- crop: drag to pan, wheel/pinch to zoom -------------------------------
   Controls.crop = {
     match: el => el.matches('img, picture > img') || css(el).backgroundImage !== 'none',
-    label: 'crop · drag to pan · pinch/⌘-wheel to zoom',
+    label: 'crop · drag to pan · pinch or ⌘-wheel to zoom · click for zoom buttons · arrows nudge',
     init(el) {
       const isImg = el.tagName === 'IMG';
       const orig = {
@@ -137,7 +137,7 @@
         if (!drag) return;
         const r = el.getBoundingClientRect();
         // moving the image by its own overflow: 1px of drag = overflow-proportional % shift
-        const nat = isImg ? naturalFit(el) : { ovx: r.width, ovy: r.height };
+        const nat = isImg ? naturalFit(el, zoom) : { ovx: r.width, ovy: r.height };
         const dx = (e.clientX - drag.x), dy = (e.clientY - drag.y);
         ox = clamp(drag.ox - (nat.ovx > 0 ? dx / nat.ovx * 100 : 0), 0, 100);
         oy = clamp(drag.oy - (nat.ovy > 0 ? dy / nat.ovy * 100 : 0), 0, 100);
@@ -148,9 +148,21 @@
       on(el, 'wheel', e => {
         if (!(e.ctrlKey || e.metaKey) || !isImg) return;
         e.preventDefault();
-        zoom = clamp(zoom * (e.deltaY < 0 ? 1.04 : 0.96), 1, 3);
-        apply(); commit();
+        setZoom(zoom * (e.deltaY < 0 ? 1.04 : 0.96));
       }, { passive: false });
+      // two-finger pinch on touch
+      let pinch = null;
+      on(el, 'touchstart', e => { if (e.touches.length === 2) pinch = { d: dist(e.touches), z: zoom }; }, { passive: true });
+      on(el, 'touchmove', e => { if (pinch && e.touches.length === 2) { e.preventDefault(); setZoom(pinch.z * dist(e.touches) / pinch.d, true); } }, { passive: false });
+      on(el, 'touchend', () => { if (pinch) { pinch = null; commit(); } });
+      function dist(t) { return Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY); }
+      function setZoom(z, silent) { if (!isImg) return; zoom = clamp(Math.round(z * 100) / 100, 1, 4); apply(); if (!silent) commit(); refreshToolbar(el); }
+      el.__jigToolbar = () => [
+        btn('−', () => setZoom(zoom - 0.1)), chip(() => (isImg ? r2(zoom).toFixed(2) + '×' : 'pan')), btn('+', () => setZoom(zoom + 0.1)),
+        sep(), btn('←', () => nudge(-1, 0)), btn('→', () => nudge(1, 0)), btn('↑', () => nudge(0, -1)), btn('↓', () => nudge(0, 1))
+      ];
+      function nudge(dx, dy) { ox = clamp(ox + dx, 0, 100); oy = clamp(oy + dy, 0, 100); apply(); commit(); }
+      el.__jigNudge = nudge;
 
       function apply() {
         const pos = `${r1(ox)}% ${r1(oy)}%`;
@@ -174,12 +186,13 @@
     const m = (s || '50% 50%').split(/\s+/).map(v => px(v));
     return [isFinite(m[0]) ? m[0] : 50, isFinite(m[1]) ? m[1] : 50];
   }
-  function naturalFit(img) {
-    // overflow in px for object-fit: cover
-    const r = img.getBoundingClientRect();
-    const nw = img.naturalWidth || r.width, nh = img.naturalHeight || r.height;
-    const s = Math.max(r.width / nw, r.height / nh);
-    return { ovx: nw * s - r.width, ovy: nh * s - r.height };
+  function naturalFit(img, zoom) {
+    // overflow in px for object-fit: cover at a given zoom (box = the untransformed layout box)
+    const z = zoom || 1;
+    const W = img.offsetWidth, H = img.offsetHeight;
+    const nw = img.naturalWidth || W, nh = img.naturalHeight || H;
+    const s = Math.max(W / nw, H / nh) * z;
+    return { ovx: nw * s - W, ovy: nh * s - H };
   }
 
   // --- heading: step up / down the type ramp -------------------------------
@@ -489,6 +502,10 @@
   on(document, 'keydown', e => {
     if (e.key === 'Escape') { $$('.jig-selected').forEach(x => x.classList.remove('jig-selected')); state.selected = null; toolbar.hidden = true; }
     if (e.key === 'g' && !e.metaKey && !e.ctrlKey && !/input|textarea/i.test(e.target.tagName)) toggleGrid();
+    if (state.selected && state.selected.__jigNudge && /^Arrow/.test(e.key)) {
+      e.preventDefault(); const step = e.shiftKey ? 5 : 1;
+      state.selected.__jigNudge(e.key === 'ArrowLeft' ? -step : e.key === 'ArrowRight' ? step : 0, e.key === 'ArrowUp' ? -step : e.key === 'ArrowDown' ? step : 0);
+    }
   });
 
   // ------------------------------------------------------------ grid overlay
