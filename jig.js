@@ -184,7 +184,7 @@
 
   // --- heading: step up / down the type ramp -------------------------------
   Controls.heading = {
-    match: el => /^H[1-6]$/.test(el.tagName) || el.dataset.jig === 'heading',
+    match: el => true,
     label: 'heading · − / + steps the ramp · pinch also works',
     init(el) {
       const ramp = rampPx();
@@ -359,20 +359,46 @@
   const listeners = [];
   function on(el, ev, fn, opt) { el.addEventListener(ev, fn, opt); listeners.push([el, ev, fn, opt]); }
 
+  // Auto-targeting: the jig finds its own targets. data-jig="<ctl>" forces a control,
+  // data-jig="off" excludes an element (and its subtree), data-jig-name names it.
+  function autoTargets() {
+    const out = new Map(); // el -> ctl
+    const skip = el => !el.offsetParent && css(el).position !== 'fixed' || el.closest('#jig-hud, .jig-tb, [data-jig="off"]');
+    const add = (el, ctl) => { if (!out.has(el) && !skip(el) && Controls[ctl]) out.set(el, ctl); };
+    // explicit first
+    $$('[data-jig]').forEach(el => { const c = el.dataset.jig; if (c && c !== 'off') add(el, c); });
+    // crop: cover-fit images and background images of a useful size
+    $$('img').forEach(img => { const r = img.getBoundingClientRect(); if (r.width >= 80 && r.height >= 80 && /cover|none/.test(css(img).objectFit)) add(img, 'crop'); });
+    $$('body *').forEach(el => { if (el.tagName === 'IMG') return; const bg = css(el).backgroundImage; if (bg && bg !== 'none' && /url\(/.test(bg)) { const r = el.getBoundingClientRect(); if (r.width >= 80 && r.height >= 80) add(el, 'crop'); } });
+    // headings
+    $$('h1,h2,h3,h4,h5,h6').forEach(h => add(h, 'heading'));
+    // buttons: anything using the foundation's button classes, plus real buttons
+    const P = (state.F.buttons && state.F.buttons.classPrefix) || 'btn-';
+    $$(`a[class*="${P}"], button, [role="button"], a.btn`).forEach(b => add(b, 'button'));
+    // sections: top-level landmarks
+    $$('body > section, main > section, body > main > section, section[id]').forEach(sec => add(sec, 'section'));
+    // text overlays: absolutely positioned text sitting on an image
+    $$('body *').forEach(el => {
+      if (css(el).position !== 'absolute' || !(el.textContent || '').trim()) return;
+      const par = el.parentElement; if (!par) return;
+      const hasImg = Array.from(par.children).some(c => c !== el && (c.tagName === 'IMG' || css(c).backgroundImage !== 'none'));
+      if (hasImg) add(el, 'text');
+    });
+    return out;
+  }
+
   function wire() {
-    $$('[data-jig]').forEach(el => {
-      const ctl = el.dataset.jig;
+    for (const [el, ctl] of autoTargets()) {
       const C = Controls[ctl];
-      if (!C || !C.match(el)) return;
-      // hide the control when the foundation lacks its key
-      if (ctl === 'heading' && !state.F.type) return;
-      if (ctl === 'button' && !state.F.buttons) return;
+      if (!C || !C.match(el)) continue;
+      if (ctl === 'heading' && !state.F.type) continue;
+      if (ctl === 'button' && !state.F.buttons) continue;
       el.classList.add('jig-el'); el.dataset.jigCtl = ctl;
       C.init(el);
       on(el, 'pointerenter', () => hover(el));
       on(el, 'pointerleave', () => hover(null));
       on(el, 'click', e => { if (ctl !== 'crop' && e.target.closest('a, button')) e.preventDefault(); e.stopPropagation(); select(el); });
-    });
+    }
   }
 
   // ------------------------------------------------------------ overlay UI

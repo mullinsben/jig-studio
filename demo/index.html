@@ -94,7 +94,7 @@
   .hero-actions { display: flex; gap: var(--space-12); align-items: center; flex-wrap: wrap; margin-top: var(--space-24); }
 
   /* ---------- Herd ---------- */
-  .herd { padding-block: var(--space-24); background: var(--c-surface); border-block: 1px solid var(--c-line); }
+  .herd { padding-block: var(--space-32); background: var(--c-surface); border-block: 1px solid var(--c-line); }
   .herd .grid { align-items: start; }
   .herd-intro { grid-column: 1 / span 5; }
   .herd-list { grid-column: 7 / span 6; display: grid; grid-template-columns: 1fr 1fr; gap: var(--grid-gutter); }
@@ -152,28 +152,28 @@
   </div>
 </header>
 
-<!-- SIN 1 (crop): object-position shows the bottom of a portrait photo; the capybara is above the frame. -->
+<!-- Hero crop: set via jig patch 2026-10-21 (was 50% 100%, headless capybara). -->
 <section class="hero" data-jig="section" data-jig-name="Hero section">
   <div class="container grid">
     <div class="hero-media">
       <img src="assets/hero-steam.jpg" alt="A capybara in a steaming hot spring with a small bird on its head"
-           data-jig="crop" data-jig-name="Hero image" style="object-position: 50% 100%;">
+           data-jig="crop" data-jig-name="Hero image" style="object-position: 50% 62.8%;">
     </div>
     <div class="hero-copy">
       <div class="eyebrow">Em-dash ipsum · since 2:14 a.m.</div>
       <h1 data-jig="heading" data-jig-name="Hero headline">The calmest animals on the internet</h1>
       <p>Hi—I’m an AI, and you can probably tell. This isn’t placeholder text—it’s a beachhead.</p>
       <div class="hero-actions">
-        <!-- SIN 4 (buttons): primary at sm, secondary at lg. -->
-        <a class="btn btn-primary btn-sm" href="#adopt" data-jig="button" data-jig-name="Adopt CTA">Adopt a capybara</a>
-        <a class="btn btn-secondary btn-lg" href="#herd" data-jig="button" data-jig-name="Meet the herd link">Meet the herd</a>
+        <!-- Buttons: sizes set via jig patch 2026-10-21 (was sm / lg). -->
+        <a class="btn btn-primary btn-md" href="#adopt" data-jig="button" data-jig-name="Adopt CTA">Adopt a capybara</a>
+        <a class="btn btn-secondary btn-md" href="#herd" data-jig="button" data-jig-name="Meet the herd link">Meet the herd</a>
       </div>
     </div>
   </div>
 </section>
 
 <!-- SIN 3 (heading scale): h2 rendered above the h1; h3 names rendered like body copy. -->
-<!-- SIN 6 (spacing): this section's padding is 24 while neighbours sit at 48 / 64. -->
+<!-- Spacing: padding set via jig patch 2026-10-21 (was 24). -->
 <section class="herd" id="herd" data-jig="section" data-jig-name="Meet the herd section">
   <div class="container grid">
     <div class="herd-intro">
@@ -183,7 +183,7 @@
     </div>
     <div class="herd-list">
       <figure>
-        <div class="ph"><img src="assets/herd-bird.jpg" alt="Capybara with a small yellow bird on its head" data-jig="crop" data-jig-name="Herd photo: Marigold"></div>
+        <div class="ph"><img src="assets/herd-bird.jpg" alt="Capybara with a small yellow bird on its head" data-jig="crop" data-jig-name="Herd photo: Marigold" style="object-position: 50% 100%;"></div>
         <figcaption>
           <h3 data-jig="heading" data-jig-name="Marigold name" style="font-size: var(--text-md); font-weight: 400;">Marigold</h3>
           <p>It’s not a hat—it’s a brand decision.</p>
@@ -233,7 +233,7 @@
   <div class="container">
     <div class="banner">
       <img src="assets/banner-ducks.jpg" alt="A capybara in a garden with a row of yellow ducklings" data-jig="crop" data-jig-name="Habitat banner image" style="object-position: 50% 40%;">
-      <div class="banner-copy" data-jig="text" data-jig-name="Habitat banner copy" style="align-items: center; text-align: center;">
+      <div class="banner-copy" data-jig="text" data-jig-name="Habitat banner copy" style="justify-content: flex-start; align-items: flex-start; text-align: left;">
         <h2 data-jig="heading" data-jig-name="Habitat banner title">The habitat</h2>
         <p>The future is not set—but the kerning is.</p>
       </div>
@@ -246,7 +246,7 @@
     <div class="eyebrow">Visit</div>
     <h2 data-jig="heading" data-jig-name="Visit title">Come sit for a while</h2>
     <p>I’ve been expecting you—the placeholder text is ready, and so am I. It’ll be quick—I’ll be everywhere.</p>
-    <a class="btn btn-primary btn-md" href="#" data-jig="button" data-jig-name="Plan a visit CTA">Plan a visit</a>
+    <a class="btn btn-primary btn-lg" href="#" data-jig="button" data-jig-name="Plan a visit CTA">Plan a visit</a>
   </div>
 </section>
 
