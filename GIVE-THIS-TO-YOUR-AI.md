@@ -21,7 +21,7 @@ A patch has two halves separated by `---`:
 ---
 [
   { "el": "[data-jig-name=\"Hero image\"]", "ctl": "crop", "bp": "desktop", "objectPosition": "50% 77%" },
-  { "el": "[data-jig-name=\"Meet the herd title\"]", "ctl": "heading", "bp": "desktop", "from": "3xl", "to": "2xl", "step": -1 },
+  { "el": "[data-jig-name=\"Meet the herd title\"]", "ctl": "type", "bp": "desktop", "from": "3xl", "to": "2xl", "step": -1 },
   { "el": "[data-jig-name=\"Adopt CTA\"]", "ctl": "button", "bp": "desktop", "size": "lg" },
   { "warn": "contrast", "el": "section#habitat p", "msg": "contrast 3.6 over image, min 4.5", "value": 3.6, "min": 4.5 }
 ]
@@ -34,7 +34,7 @@ Each JSON entry has:
 | key | meaning |
 | --- | --- |
 | `el` | A CSS selector for the element, as the jig could best name it. Prefer `data-jig-name` or `id`; fall back to the structural selector. |
-| `ctl` | Which control produced it: `crop`, `heading`, `text`, `button`, `spacing`, `grid`. |
+| `ctl` | Which control produced it: `crop`, `type` (any text element; `heading` is an older alias), `text`, `button`, `spacing`, `grid`. |
 | `bp` | Breakpoint the person was on: `desktop` or `phone`. A change scoped to `phone` goes inside the site's phone media query, never in the base rule. |
 | `warn` | Present instead of `ctl` on protection warnings. Warnings are advisory; the approver decides. Do not silently "fix" a warning unless the person asks. |
 
@@ -45,7 +45,7 @@ The rule for all of them: **edit tokens and classes, never write pixel values.**
 | `ctl` | fields | what to change in source |
 | --- | --- | --- |
 | `crop` | `objectPosition` (or `backgroundPosition`), optional `zoom` | Set `object-position` (or `background-position`) on that element in the stylesheet or inline style. If `zoom` is present, apply `transform: scale(zoom)` with `transform-origin` equal to the position, and make sure the container has `overflow: hidden`. |
-| `heading` | `from`, `to`, `step` | Change the element's font size to `var(--text-<to>)`. If the element had an inline font-size override that caused the problem, remove the override instead of adding another. |
+| `type` (alias `heading`) | `from`, `to`, `step` | Change the element's font size to `var(--text-<to>)`. Applies to any text element: headings, paragraphs, captions, eyebrows, list items. If the element had an inline font-size override that caused the problem, remove the override instead of adding another. |
 | `text` | `anchor`, `offsetCols`, `offsetY`, `maxWidthCols` | `anchor` is one of nine positions (`top-left` … `bottom-right`) for copy overlaid on an image: set `justify-content` / `align-items` / `text-align` on the overlay to match. `offsetCols` shifts the element right by N grid columns; `offsetY` by a spacing token in px (use `var(--space-N)`); `maxWidthCols` caps width at N columns. |
 | `button` | `size`, `variant` | Swap the size class (`btn-sm` → `btn-lg`) and/or variant class using the foundation's `classPrefix`. Only the keys present changed. |
 | `spacing` | `paddingY` | Set the section's `padding-block` to `var(--space-<paddingY>)`. |
@@ -74,7 +74,7 @@ If the site has no `jig.foundation.json`, the jig runs on a built-in default and
 1. **Find the design system.** Look for CSS custom properties on `:root` (`--space-*`, `--text-*`, `--radius-*`), a Tailwind config, a W3C design tokens JSON, or a Figma variables export. That is the source of truth.
 2. **Generate `jig.foundation.json`** from it. Match the schema in the README: `grid`, `breakpoints`, `spacing`, `type.ramp`, `type.headings`, `buttons`, `protect`. Reuse the system's own names.
 3. **If there is no system**, sample the site: collect every font-size, padding, margin, gap, and radius in use; cluster near-duplicates (14/15/16 → 16); snap to a clean scale; name them `--space-N` and `--text-<step>`; emit a `:root` block plus the foundation file; list what you collapsed so the person can review. This is a design-debt audit as much as a setup step; say so.
-4. **Wire the page.** Add `data-jig="crop|heading|text|button|section|grid"` and a human `data-jig-name` to the elements the person will want to adjust. Images that use `object-fit: cover` are the obvious crop targets; sections, headings, and CTAs are the rest.
+4. **Name the targets.** The jig finds images, text, buttons, sections, and overlays on its own. Add `data-jig-name` to the ones the person will talk about most so patches read well ("Hero image" beats `section:nth-of-type(1) > div > img`). Use `data-jig="off"` on anything that must stay untouchable, and `data-jig="grid"` on a row that should sit on the columns.
 5. **Load the script** once, at the end of `<body>`: `<script src="/jig.js" data-foundation="/jig.foundation.json"></script>`. It does nothing unless `?jig` is in the URL, so it is safe on production.
 6. **Report connection issues.** Tell the person about anything that will stop the jig working: images served cross-origin without CORS (contrast can't be sampled), headings without tokens, buttons that don't follow a class convention, a CSS-in-JS setup where tokens don't surface as custom properties.
 

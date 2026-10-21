@@ -211,9 +211,9 @@
   }
 
   // --- heading: step up / down the type ramp -------------------------------
-  Controls.heading = {
+  Controls.type = {
     match: el => true,
-    label: 'heading · − / + steps the ramp · pinch also works',
+    label: 'type · − / + steps the ramp · ⌘-wheel also works',
     init(el) {
       const ramp = rampPx();
       const origPx = px(css(el).fontSize);
@@ -229,14 +229,16 @@
         el.style.fontSize = `var(--text-${ramp[idx].token})`;
         el.style.fontWeight = '';
         setBadge(el, `--text-${ramp[idx].token}`);
-        if (idx === origIdx) unrecord(el, 'heading');
-        else record(el, 'heading', { from: origTok, to: ramp[idx].token, step: idx - origIdx },
+        if (idx === origIdx) unrecord(el, 'type');
+        else record(el, 'type', { from: origTok, to: ramp[idx].token, step: idx - origIdx },
           `ramp ${origTok} → ${ramp[idx].token} (${idx - origIdx > 0 ? '+' : ''}${idx - origIdx})`);
         refreshToolbar(el);
       }
-      el.__jigReset = () => { idx = origIdx; el.style.fontSize = ''; unrecord(el, 'heading'); refreshToolbar(el); };
+      el.__jigReset = () => { idx = origIdx; el.style.fontSize = ''; unrecord(el, 'type'); refreshToolbar(el); };
     }
   };
+
+  Controls.heading = Controls.type; // alias: data-jig="heading" still works
 
   // --- text: drag inside container, snapped to grid columns ----------------
   Controls.text = {
@@ -394,12 +396,17 @@
     const skip = el => !el.offsetParent && css(el).position !== 'fixed' || el.closest('#jig-hud, .jig-tb, [data-jig="off"]');
     const add = (el, ctl) => { if (!out.has(el) && !skip(el) && Controls[ctl]) out.set(el, ctl); };
     // explicit first
-    $$('[data-jig]').forEach(el => { const c = el.dataset.jig; if (c && c !== 'off') add(el, c); });
+    $$('[data-jig]').forEach(el => { let c = el.dataset.jig; if (c === 'heading') c = 'type'; if (c && c !== 'off') add(el, c); });
     // crop: cover-fit images and background images of a useful size
     $$('img').forEach(img => { const r = img.getBoundingClientRect(); if (r.width >= 80 && r.height >= 80 && /cover|none/.test(css(img).objectFit)) add(img, 'crop'); });
     $$('body *').forEach(el => { if (el.tagName === 'IMG') return; const bg = css(el).backgroundImage; if (bg && bg !== 'none' && /url\(/.test(bg)) { const r = el.getBoundingClientRect(); if (r.width >= 80 && r.height >= 80) add(el, 'crop'); } });
-    // headings
-    $$('h1,h2,h3,h4,h5,h6').forEach(h => add(h, 'heading'));
+    // type: headings first, then any text block that has its own words and no block children
+    $$('h1,h2,h3,h4,h5,h6').forEach(h => add(h, 'type'));
+    $$('p, li, figcaption, blockquote, small, label, dt, dd, summary, [class*="eyebrow"], [class*="caption"], [class*="lede"], [class*="subtitle"]').forEach(t => {
+      if (!(t.textContent || '').trim()) return;
+      if (Array.from(t.children).some(c => /^(P|DIV|UL|OL|H[1-6]|SECTION|FIGURE|TABLE)$/.test(c.tagName))) return;
+      add(t, 'type');
+    });
     // buttons: anything using the foundation's button classes, plus real buttons
     const P = (state.F.buttons && state.F.buttons.classPrefix) || 'btn-';
     $$(`a[class*="${P}"], button, [role="button"], a.btn`).forEach(b => add(b, 'button'));
@@ -419,7 +426,7 @@
     for (const [el, ctl] of autoTargets()) {
       const C = Controls[ctl];
       if (!C || !C.match(el)) continue;
-      if (ctl === 'heading' && !state.F.type) continue;
+      if ((ctl === 'type' || ctl === 'heading') && !state.F.type) continue;
       if (ctl === 'button' && !state.F.buttons) continue;
       el.classList.add('jig-el'); el.dataset.jigCtl = ctl;
       C.init(el);

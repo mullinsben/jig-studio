@@ -21,7 +21,7 @@ Open <http://localhost:8000/demo/>. Six things are deliberately wrong. Then open
 | What's wrong | Fix it with |
 | --- | --- |
 | The hero capybara has no head | drag the hero image |
-| "Meet the herd" is bigger than the h1; the names look like body copy | click a heading, press − / + |
+| "Meet the herd" is bigger than the h1; the names look like body copy | click any text, press − / + |
 | The primary CTA is tiny next to a huge secondary | click a button, step its size |
 | The card row is nudged off the grid | press **g** for the grid, click the row, press **0** |
 | White copy over the palest part of the banner; contrast fails | drag the copy to a darker corner |
@@ -32,15 +32,13 @@ Press **Copy patch**. Paste it to your AI along with [`GIVE-THIS-TO-YOUR-AI.md`]
 ## Install on your site
 
 1. Copy `jig.js` and write a `jig.foundation.json` (or let your AI generate one from your design system; the handoff file explains how).
-2. Mark the things you want adjustable:
+2. Optionally name things. The jig finds cover-cropped images, all text, buttons, sections, and image overlays by itself; names just make the patch read better:
 
 ```html
-<img src="hero.jpg" data-jig="crop" data-jig-name="Hero image">
-<h1 data-jig="heading" data-jig-name="Hero headline">…</h1>
-<a class="btn btn-primary btn-md" data-jig="button" data-jig-name="Signup CTA">…</a>
-<section data-jig="section" data-jig-name="Pricing">…</section>
-<div class="overlay-copy" data-jig="text" data-jig-name="Banner copy">…</div>
-<div class="cards" data-jig="grid" data-jig-name="Card row">…</div>
+<img src="hero.jpg" data-jig-name="Hero image">
+<h1 data-jig-name="Hero headline">…</h1>
+<div class="cards" data-jig="grid" data-jig-name="Card row">…</div>   <!-- grid is opt-in -->
+<aside data-jig="off">…</aside>                                       <!-- leave this alone -->
 ```
 
 3. Load the script once, at the end of `<body>`:
@@ -53,16 +51,18 @@ It is inert without `?jig` in the URL, so it is fine on production. "It's just a
 
 ## Controls
 
-| `data-jig` | gesture | emits |
+Everything below is found automatically; `data-jig="<control>"` forces one, `data-jig="off"` excludes an element and its children.
+
+| control | gesture | emits |
 | --- | --- | --- |
-| `crop` | drag to pan; ⌘/Ctrl + wheel (trackpad pinch) to zoom | `objectPosition`, `zoom` |
-| `heading` | click, then − / +; or ⌘/Ctrl + wheel | ramp step, e.g. `3xl → 2xl` |
+| `crop` | drag to pan; click for −/+ zoom and arrow buttons; ⌘/Ctrl + wheel or pinch to zoom; arrow keys nudge (Shift = 5%) | `objectPosition`, `zoom` |
+| `type` | click any text, then − / +; or ⌘/Ctrl + wheel | ramp step, e.g. `3xl → 2xl`; works on headings, body, captions, eyebrows |
 | `text` | drag to a nine-point anchor (overlays) or along columns (in flow); ⌘/Ctrl + wheel sets max-width in columns | `anchor`, `offsetCols`, `offsetY`, `maxWidthCols` |
 | `button` | click, then − / + for size, ◐ for variant | `size`, `variant` |
 | `section` | click, then − / + | `paddingY` on the spacing scale |
 | `grid` | click, then − / 0 / + | `marginLeft` |
 
-HUD: **grid** (or press **g**), **rescan** protection, **phone preview** (opens the page at the phone breakpoint; changes made there are tagged `bp: phone`), **reset all**, **Copy patch**. Esc deselects. Click × on any change to undo just that one.
+HUD: **grid** (or press **g**), **rescan** protection, a **device** picker (iPhone 15 Pro, iPhone SE, Pixel 8, Galaxy S24, iPad Mini; opens the page in a true-size frame, and changes made there land in the same patch tagged with the device), **reset all**, **Copy patch**. The HUD drags by its header, minimizes with –, and resizes from its corner. Esc deselects. Click × on any change to undo just that one.
 
 ## Protection
 
