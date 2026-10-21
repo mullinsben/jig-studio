@@ -145,8 +145,8 @@
       let drag = null;
       on(el, 'pointerdown', e => {
         if (e.button !== 0) return;
-        e.preventDefault(); el.setPointerCapture(e.pointerId);
-        drag = { x: e.clientX, y: e.clientY, ox, oy }; el.style.cursor = 'grabbing';
+        e.preventDefault(); e.stopPropagation(); try { el.setPointerCapture(e.pointerId); } catch (x) {}
+        drag = { x: e.clientX, y: e.clientY, ox, oy, id: e.pointerId }; el.style.cursor = 'grabbing';
       });
       on(el, 'pointermove', e => {
         if (!drag) return;
@@ -158,8 +158,8 @@
         oy = clamp(drag.oy - (nat.ovy > 0 ? dy / nat.ovy * 100 : 0), 0, 100);
         apply();
       });
-      const end = () => { if (drag) { drag = null; el.style.cursor = 'grab'; commit(); } };
-      on(el, 'pointerup', end); on(el, 'pointercancel', end);
+      const end = () => { if (drag) { try { el.releasePointerCapture(drag.id); } catch (x) {} drag = null; el.style.cursor = 'grab'; commit(); } };
+      on(el, 'pointerup', end); on(el, 'pointercancel', end); on(window, 'pointerup', end); on(window, 'blur', end);
       on(el, 'wheel', e => {
         if (!(e.ctrlKey || e.metaKey) || !isImg) return;
         e.preventDefault();
@@ -275,9 +275,9 @@
       el.style.cursor = 'move';
       let drag = null;
       on(el, 'pointerdown', e => {
-        if (e.target.closest('a, button')) return;
-        e.preventDefault(); el.setPointerCapture(e.pointerId);
-        drag = { x: e.clientX, y: e.clientY, cols, rowTok, offX, offY, anchor };
+        if (e.button !== 0 || e.target.closest('a, button')) return;
+        e.preventDefault(); e.stopPropagation(); try { el.setPointerCapture(e.pointerId); } catch (x) {}
+        drag = { x: e.clientX, y: e.clientY, cols, rowTok, offX, offY, anchor, id: e.pointerId };
       });
       on(el, 'pointermove', e => {
         if (!drag) return;
@@ -308,8 +308,8 @@
           setBadge(el, `offset ${cols} col · ${rowTok}px`);
         }
       });
-      const end = () => { if (!drag) return; drag = null; commit(); };
-      on(el, 'pointerup', end); on(el, 'pointercancel', end);
+      const end = () => { if (!drag) return; try { el.releasePointerCapture(drag.id); } catch (x) {} drag = null; commit(); };
+      on(el, 'pointerup', end); on(el, 'pointercancel', end); on(window, 'pointerup', end); on(window, 'blur', end);
       on(el, 'wheel', e => {
         if (!(e.ctrlKey || e.metaKey) || el.dataset.jigCtl === 'type') return; e.preventDefault();   // type owns ⌘-wheel on text
         const cur = px(el.style.maxWidth) || el.getBoundingClientRect().width;
@@ -467,7 +467,8 @@
       el.classList.add('jig-el'); el.dataset.jigCtl = ctl;
       C.init(el);
       // every in-flow text element can also be repositioned: compose the text control on top of type
-      if (ctl === 'type' && css(el).position !== 'absolute') {
+      const inOverlay = (() => { let n = el.parentElement; while (n && n !== document.body) { if (css(n).position === 'absolute' || n.dataset.jig === 'text') return true; n = n.parentElement; } return false; })();
+      if (ctl === 'type' && css(el).position !== 'absolute' && !inOverlay) {
         const tb = el.__jigToolbar; const reset = el.__jigReset;
         Controls.text.init(el);
         const tbText = el.__jigToolbarText, resetText = el.__jigReset;
