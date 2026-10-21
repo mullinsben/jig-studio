@@ -24,7 +24,7 @@
   const SCRIPT = document.currentScript;
   const DEFAULT_FOUNDATION = {
     name: 'inferred', version: 0,
-    grid: { columns: 12, gutter: 24, margin: 32, maxWidth: 1200 },
+    grid: { columns: 12, gutter: 24, margin: 32, maxWidth: 1200, phone: { columns: 4, gutter: 16, margin: 16 } },
     breakpoints: { phone: 390, desktop: 1440 },
     spacing: [4, 8, 12, 16, 24, 32, 48, 64, 96],
     type: { ramp: ['xs', 'sm', 'md', 'lg', 'xl', '2xl', '3xl'] },
@@ -722,6 +722,7 @@
     #jig-grid { position: absolute; inset: 0; pointer-events: none; z-index: 2147483640; }
     #jig-grid .cols { position: sticky; top: 0; height: 100vh; margin: 0 auto; display: grid; }
     #jig-grid .cols i { background: rgba(63,111,255,.08); border-inline: 1px solid rgba(63,111,255,.35); }
+    @media (max-width: 640px) { #jig-grid .cols i { background: rgba(63,111,255,.12); border-inline: 1px solid rgba(63,111,255,.5); } }
     #jig-hud { position: fixed; top: 16px; right: 16px; width: 340px; height: auto; max-height: calc(100vh - 32px); min-width: 280px; min-height: 92px; display: flex; flex-direction: column; z-index: 2147483647;
       background: #0b0b0d; color: #f3f4f7; border-radius: 12px; box-shadow: 0 12px 40px rgba(0,0,0,.45); font: 13px/1.45 ui-sans-serif, system-ui, sans-serif; overflow: hidden; resize: both; }
     #jig-hud.collapsed { resize: none; height: auto !important; }
@@ -839,7 +840,7 @@
   function toggleGrid(force) {
     state.grid = force === undefined ? !state.grid : force;
     gridEl.hidden = !state.grid; if (state.grid) drawGrid();
-    const fr = deviceEl && $('iframe', deviceEl); if (fr && fr.contentWindow) fr.contentWindow.postMessage({ jig: 'grid', on: state.grid, columns: state.F.grid.columns }, '*');
+    const fr = deviceEl && $('iframe', deviceEl); if (fr && fr.contentWindow) fr.contentWindow.postMessage({ jig: 'grid', on: state.grid }, '*');
     const gb = $('#jig-grid-btn'); if (gb) gb.classList.toggle('on', state.grid);
   }
 
@@ -1062,7 +1063,8 @@
   function flashBtn(b, msg) { const t = b.textContent; b.textContent = msg; setTimeout(() => (b.textContent = t), 1600); }
   function exportFoundation() {
     const F = state.F; const steps = F.type.steps || [];
-    return { name: F.name, version: 1, grid: { columns: F.grid.columns, gutter: F.grid.gutter, margin: F.grid.margin, maxWidth: F.grid.maxWidth }, breakpoints: F.breakpoints || DEFAULT_FOUNDATION.breakpoints,
+    const G = F.grid.desktop ? { ...F.grid.desktop, maxWidth: F.grid.maxWidth, phone: { columns: F.grid.columns, gutter: F.grid.gutter, margin: F.grid.margin } } : { columns: F.grid.columns, gutter: F.grid.gutter, margin: F.grid.margin, maxWidth: F.grid.maxWidth, phone: F.grid.phone || { columns: 4, gutter: 16, margin: 16 } };
+    return { name: F.name, version: 1, grid: G, breakpoints: F.breakpoints || DEFAULT_FOUNDATION.breakpoints,
       spacing: (F.spacingSteps || []).map(x => x.px), type: { ramp: steps.map(x => x.token), sizes: Object.fromEntries(steps.map(x => [x.token, x.px])) },
       buttons: F.buttons.mode === 'measured' ? { sizes: F.buttons.sizes.map(x => x.token), variants: F.buttons.variants.map(x => x.token), classPrefix: 'btn-', measured: { sizes: F.buttons.sizes, variants: F.buttons.variants } } : F.buttons, protect: F.protect };
   }
@@ -1078,7 +1080,7 @@
     deviceEl.innerHTML = `<button class="close" title="close">×</button><div class="shell"><div class="cap">${d.name} · ${d.w}×${d.h} · changes here are tagged ${d.bp}</div><iframe width="${d.w}" height="${d.h}" title="${d.name} preview"></iframe></div>`;
     document.body.appendChild(deviceEl);
     const fr = $('iframe', deviceEl); fr.src = u.toString();
-    fr.onload = () => { if (state.grid) setTimeout(() => fr.contentWindow && fr.contentWindow.postMessage({ jig: 'grid', on: true, columns: state.F.grid.columns }, '*'), 400); };
+    fr.onload = () => { if (state.grid) setTimeout(() => fr.contentWindow && fr.contentWindow.postMessage({ jig: 'grid', on: true }, '*'), 400); };
     const fit = () => { const sh = $('.shell', deviceEl); const sc = Math.min(1, (window.innerHeight - 90) / (d.h + 28), (window.innerWidth - 400) / (d.w + 28)); sh.style.transform = `scale(${sc})`; };
     fit(); on(window, 'resize', fit);
     $('.close', deviceEl).onclick = closeDevice;
@@ -1100,6 +1102,11 @@
     document.body.append(gridEl, badge, toolbar);
     const dev = DEVICES.find(d => d.id === DEVICE);
     state.bp = dev ? dev.bp : (window.innerWidth <= (state.F.breakpoints && state.F.breakpoints.phone || 480) + 40 ? 'phone' : 'desktop');
+    if (state.bp === 'phone') {
+      // phones get their own grid; the desktop one is kept for the patch header
+      const G = state.F.grid; const P = G.phone || { columns: 4, gutter: 16, margin: 16 };
+      state.F.grid = { ...G, desktop: { columns: G.columns, gutter: G.gutter, margin: G.margin }, columns: P.columns, gutter: P.gutter, margin: P.margin, maxWidth: window.innerWidth };
+    }
     wire();
     if (EMBED) {
       // inside a device frame: no HUD; the parent page's HUD collects our changes and drives the grid
@@ -1120,7 +1127,7 @@
     const origCols = state.F.grid.columns;
     colSel.onchange = e => {
       state.F.grid.columns = +e.target.value; if (state.grid) drawGrid();
-      const fr = deviceEl && $('iframe', deviceEl); if (fr && fr.contentWindow) fr.contentWindow.postMessage({ jig: 'grid', on: state.grid, columns: state.F.grid.columns }, '*');
+      const fr = deviceEl && $('iframe', deviceEl); if (fr && fr.contentWindow) fr.contentWindow.postMessage({ jig: 'grid', on: state.grid }, '*');
       const k = 'foundation::grid';
       if (state.F.grid.columns === origCols) state.changes.delete(k);
       else state.changes.set(k, { el: ':root', name: 'Foundation', ctl: 'foundation', bp: state.bp, grid: { columns: state.F.grid.columns }, summary: `grid ${origCols} → ${state.F.grid.columns} columns` });
