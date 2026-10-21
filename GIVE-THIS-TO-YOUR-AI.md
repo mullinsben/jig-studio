@@ -46,7 +46,21 @@ The rule for all of them: **edit tokens and classes, never write pixel values.**
 | --- | --- | --- |
 | `crop` | `objectPosition` (or `backgroundPosition`), optional `zoom` | Set `object-position` (or `background-position`) on that element in the stylesheet or inline style. If `zoom` is present, apply `transform: scale(zoom)` with `transform-origin` equal to the position, and make sure the container has `overflow: hidden`. |
 | `type` (alias `heading`) | `from`, `to`, `step` | Change the element's font size to `var(--text-<to>)`. Applies to any text element: headings, paragraphs, captions, eyebrows, list items. If the element had an inline font-size override that caused the problem, remove the override instead of adding another. |
-| `text` | `anchor`, `offsetCols`, `offsetY`, `maxWidthCols` | `anchor` is one of nine positions (`top-left` … `bottom-right`) for copy overlaid on an image: set `justify-content` / `align-items` / `text-align` on the overlay to match. `offsetCols` shifts the element right by N grid columns; `offsetY` by a spacing token in px (use `var(--space-N)`); `maxWidthCols` caps width at N columns. |
+| `text` | `anchor`, `offsetCols`, `offsetY`, `maxWidthCols`, `scrim` | `anchor` is one of nine positions (`top-left` … `bottom-right`) for copy overlaid on an image: set `justify-content` / `align-items` / `text-align` on the overlay to match. `offsetCols` shifts the element right by N grid columns; `offsetY` by a spacing token in px (use `var(--space-N)`); `maxWidthCols` caps width at N columns. `scrim` is `gradient`, `tint`, or `glass`; see below. |
+
+Scrims (content protection for text over images). Implement each as a class on the site, then apply the class; don't inline the styles:
+
+```css
+/* gradient: fades from the anchored edge; direction follows the anchor (bottom-left → "to top") */
+.scrim-gradient { background: linear-gradient(to top, rgba(0,0,0,.62), rgba(0,0,0,0) 65%); }
+/* tint: a flat translucent panel that hugs the text */
+.scrim-tint > .scrim-panel { background: rgba(10,10,12,.48); padding: 20px 24px; border-radius: 12px; }
+/* glass: tint plus blur; blur is GPU-heavy, so turn it off on small screens */
+.scrim-glass > .scrim-panel { background: rgba(10,10,12,.32); backdrop-filter: blur(14px) saturate(1.2); -webkit-backdrop-filter: blur(14px) saturate(1.2); padding: 20px 24px; border-radius: 14px; border: 1px solid rgba(255,255,255,.14); }
+@media (max-width: 900px) { .scrim-glass > .scrim-panel { backdrop-filter: none; -webkit-backdrop-filter: none; background: rgba(10,10,12,.55); } }
+```
+
+`tint` and `glass` need the overlay's children wrapped in a `.scrim-panel` so the panel hugs the text instead of covering the whole image; the jig does that wrap in the browser, you do it in source.
 | `button` | `size`, `variant` | Swap the size class (`btn-sm` → `btn-lg`) and/or variant class using the foundation's `classPrefix`. Only the keys present changed. |
 | `spacing` | `paddingY` | Set the section's `padding-block` to `var(--space-<paddingY>)`. |
 | `grid` | `marginLeft` | Set the element's inline offset to this value. `0` means "sits on the grid again": remove whatever offset was pushing it off, rather than adding `margin-left: 0` on top. |

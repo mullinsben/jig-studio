@@ -248,13 +248,36 @@
       const parent = el.offsetParent || el.parentElement;
       const isAbs = css(el).position === 'absolute';
       const orig = { ml: el.style.marginLeft, mt: el.style.marginTop, mw: el.style.maxWidth, ai: el.style.alignItems, ta: el.style.textAlign, inset: el.style.inset };
-      let cols = 0, rowTok = 0, anchor = null;
+      let cols = 0, rowTok = 0, anchor = null, scrim = 'none', offX = 0, offY = 0;
+      const snapTok = v => { const sp = state.F.spacing; const a = nearest(sp.concat([0]), Math.abs(v)); return a * Math.sign(v); };
+      const SCRIMS = (state.F.protect && state.F.protect.scrims) || ['none', 'gradient', 'tint', 'glass'];
+      // jig-mode only: wrap the overlay's children in a panel so tint/glass hug the text, not the whole image
+      let panel = null;
+      if (isAbs) {
+        panel = document.createElement('div'); panel.className = 'jig-scrim-panel';
+        while (el.firstChild) panel.appendChild(el.firstChild);
+        el.appendChild(panel);
+      }
+      const dirFor = () => { const [v, h] = (anchor || 'center-center').split('-'); return v === 'top' ? 'to bottom' : v === 'bottom' ? 'to top' : h === 'left' ? 'to right' : h === 'right' ? 'to left' : 'to top'; };
+      function applyScrim() {
+        if (!panel) return;
+        el.style.background = ''; panel.style.cssText = '';
+        if (scrim === 'gradient') el.style.background = `linear-gradient(${dirFor()}, rgba(0,0,0,.62), rgba(0,0,0,0) 65%)`;
+        if (scrim === 'tint') panel.style.cssText = 'background: rgba(10,10,12,.48); padding: 20px 24px; border-radius: 12px;';
+        if (scrim === 'glass') panel.style.cssText = 'background: rgba(10,10,12,.32); backdrop-filter: blur(14px) saturate(1.2); -webkit-backdrop-filter: blur(14px) saturate(1.2); padding: 20px 24px; border-radius: 14px; border: 1px solid rgba(255,255,255,.14);';
+        setBadge(el, `scrim ${scrim}`);
+      }
+      const arrows = () => [btn('←', () => el.__jigNudge(-1, 0)), btn('→', () => el.__jigNudge(1, 0)), btn('↑', () => el.__jigNudge(0, -1)), btn('↓', () => el.__jigNudge(0, 1))];
+      el.__jigToolbarText = isAbs
+        ? () => [btn('◐', () => { scrim = SCRIMS[(SCRIMS.indexOf(scrim) + 1) % SCRIMS.length]; applyScrim(); commit(); refreshToolbar(el); scanProtection(); }), chip(() => 'scrim ' + scrim), sep(), ...arrows()]
+        : () => [chip(() => `${cols} col · ${rowTok}px`), ...arrows()];
+      if (!el.__jigToolbar) el.__jigToolbar = el.__jigToolbarText;
       el.style.cursor = 'move';
       let drag = null;
       on(el, 'pointerdown', e => {
         if (e.target.closest('a, button')) return;
         e.preventDefault(); el.setPointerCapture(e.pointerId);
-        drag = { x: e.clientX, y: e.clientY, cols, rowTok };
+        drag = { x: e.clientX, y: e.clientY, cols, rowTok, offX, offY, anchor };
       });
       on(el, 'pointermove', e => {
         if (!drag) return;
@@ -266,11 +289,15 @@
           const fx = (e.clientX - r.left) / r.width, fy = (e.clientY - r.top) / r.height;
           const h = fx < 1 / 3 ? 'left' : fx > 2 / 3 ? 'right' : 'center';
           const v = fy < 1 / 3 ? 'top' : fy > 2 / 3 ? 'bottom' : 'center';
-          anchor = `${v}-${h}`;
+          const next = `${v}-${h}`;
+          if (next !== drag.anchor) { anchor = next; offX = 0; offY = 0; drag.x = e.clientX; drag.y = e.clientY; drag.offX = 0; drag.offY = 0; drag.anchor = next; }
+          else { offX = snapTok(drag.offX + dx); offY = snapTok(drag.offY + dy); }
           el.style.justifyContent = v === 'top' ? 'flex-start' : v === 'bottom' ? 'flex-end' : 'center';
           el.style.alignItems = h === 'left' ? 'flex-start' : h === 'right' ? 'flex-end' : 'center';
           el.style.textAlign = h;
-          setBadge(el, `anchor ${anchor}`);
+          if (panel) panel.style.translate = (offX || offY) ? `${offX}px ${offY}px` : '';
+          if (scrim === 'gradient') applyScrim();
+          setBadge(el, `anchor ${anchor}${offX || offY ? ` · offset ${offX} ${offY}` : ''}`);
         } else {
           cols = clamp(Math.round(drag.cols + dx / colW), 0, state.F.grid.columns - 1);
           const sp = state.F.spacing;
@@ -284,7 +311,7 @@
       const end = () => { if (!drag) return; drag = null; commit(); };
       on(el, 'pointerup', end); on(el, 'pointercancel', end);
       on(el, 'wheel', e => {
-        if (!(e.ctrlKey || e.metaKey)) return; e.preventDefault();
+        if (!(e.ctrlKey || e.metaKey) || el.dataset.jigCtl === 'type') return; e.preventDefault();   // type owns ⌘-wheel on text
         const cur = px(el.style.maxWidth) || el.getBoundingClientRect().width;
         const colW = colWidth(parent);
         const c = clamp(Math.round(cur / colW) + (e.deltaY < 0 ? 1 : -1), 2, state.F.grid.columns);
@@ -294,15 +321,24 @@
       function commit() {
         const data = {}; const bits = [];
         if (anchor) { data.anchor = anchor; bits.push('anchor ' + anchor); }
+        if (offX || offY) { data.offsetX = offX; data.offsetY = offY; bits.push(`offset ${offX} ${offY}`); }
         if (cols) { data.offsetCols = cols; bits.push(`+${cols} col`); }
         if (rowTok) { data.offsetY = rowTok; bits.push(`y ${rowTok}px`); }
         if (el.dataset.jigCols) { data.maxWidthCols = +el.dataset.jigCols; bits.push(`max ${el.dataset.jigCols} cols`); }
+        if (scrim !== 'none') { data.scrim = scrim; bits.push(`scrim ${scrim}`); }
         if (!bits.length) return unrecord(el, 'text');
         record(el, 'text', data, 'moved: ' + bits.join(', '));
       }
-      el.__jigReset = () => {
+      el.__jigResetText = el.__jigReset = () => {
         Object.assign(el.style, { marginLeft: orig.ml, marginTop: orig.mt, maxWidth: orig.mw, alignItems: orig.ai, textAlign: orig.ta, justifyContent: '' });
-        delete el.dataset.jigCols; cols = 0; rowTok = 0; anchor = null; unrecord(el, 'text');
+        delete el.dataset.jigCols; cols = 0; rowTok = 0; anchor = null; offX = 0; offY = 0; if (panel) panel.style.translate = ''; scrim = 'none'; applyScrim(); unrecord(el, 'text');
+      };
+      // arrow keys: overlays nudge by the smallest spacing step; in-flow text by one column / one step
+      el.__jigNudge = (dx, dy) => {
+        if (isAbs) { const st = state.F.spacing[0] || 4; offX = snapTok(offX + dx * st); offY = snapTok(offY + dy * st); if (panel) panel.style.translate = (offX || offY) ? `${offX}px ${offY}px` : ''; }
+        else { cols = clamp(cols + dx, 0, state.F.grid.columns - 1); const sp = state.F.spacing; const i = Math.max(0, sp.indexOf(nearest(sp, Math.abs(rowTok)))); rowTok = dy === 0 ? rowTok : Math.sign(rowTok + dy) * sp[clamp(i + (Math.sign(rowTok) === dy || rowTok === 0 ? 1 : -1), 0, sp.length - 1)];
+          el.style.marginLeft = cols ? `calc(${cols} * (100% + ${state.F.grid.gutter}px) / ${state.F.grid.columns})` : ''; el.style.marginTop = rowTok ? `${rowTok}px` : ''; }
+        commit();
       };
     }
   };
@@ -430,6 +466,14 @@
       if (ctl === 'button' && !state.F.buttons) continue;
       el.classList.add('jig-el'); el.dataset.jigCtl = ctl;
       C.init(el);
+      // every in-flow text element can also be repositioned: compose the text control on top of type
+      if (ctl === 'type' && css(el).position !== 'absolute') {
+        const tb = el.__jigToolbar; const reset = el.__jigReset;
+        Controls.text.init(el);
+        const tbText = el.__jigToolbarText, resetText = el.__jigReset;
+        el.__jigToolbar = () => [...tb(), sep(), ...tbText()];
+        el.__jigReset = () => { reset(); resetText(); };
+      }
       on(el, 'pointerenter', () => hover(el));
       on(el, 'pointerleave', () => hover(null));
       on(el, 'click', e => { if (ctl !== 'crop' && e.target.closest('a, button')) e.preventDefault(); e.stopPropagation(); select(el); });
@@ -440,6 +484,7 @@
   const style = document.createElement('style');
   style.id = 'jig-style';
   style.textContent = `
+    .jig-scrim-panel { display: inline-block; max-width: 100%; }
     .jig-el { outline: 1.5px dashed rgba(63,111,255,.55); outline-offset: 2px; }
     .jig-el:hover, .jig-el.jig-selected { outline: 2px solid #3f6fff; }
     .jig-badge { position: fixed; z-index: 2147483646; pointer-events: none; font: 11px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -591,7 +636,9 @@
         // a scrim (gradient/translucent overlay) or a text-shadow earns some credit; otherwise grade by the WORST patch
         const shadow = css(t).textShadow !== 'none';
         const scrim = scrimBehind(t);
-        const ratios = patches.map(pc => contrast(fg, scrim ? blend(pc, scrim) : pc)).sort((a, b) => a - b);
+        let pool = patches;
+        if (scrim && scrim.blur) { const m = patches.reduce((a, pc) => [a[0] + pc[0] / patches.length, a[1] + pc[1] / patches.length, a[2] + pc[2] / patches.length, 1], [0, 0, 0, 1]); pool = patches.map(() => m); }
+        const ratios = pool.map(pc => contrast(fg, scrim ? blend(pc, scrim) : pc)).sort((a, b) => a - b);
         const worst = ratios[Math.floor(ratios.length * 0.1)];      // 10th percentile: ignores a stray pixel, not a region
         const lums = patches.map(lum); const mean = lums.reduce((a, b) => a + b, 0) / lums.length;
         busy = Math.sqrt(lums.reduce((a, l) => a + (l - mean) ** 2, 0) / lums.length);
@@ -612,7 +659,8 @@
     while (n && n !== document.body) {
       const img = Array.from(n.children).find(c => c.tagName === 'IMG' && c !== t && !c.contains(t));
       if (img && css(n).position !== 'static') return { img, box: n };
-      if (css(n).backgroundImage !== 'none') return { img: n, box: n };
+      const bgi = css(n).backgroundImage;
+      if (bgi !== 'none' && /url\(/.test(bgi)) return { img: n, box: n };
       n = n.parentElement;
     }
     return null;
@@ -622,7 +670,8 @@
     let n = t;
     while (n && n !== document.body) {
       const bgc = parseColor(css(n).backgroundColor); const bgi = css(n).backgroundImage;
-      if (bgc && bgc[3] > 0.05 && bgc[3] < 1) return bgc;
+      const bf = css(n).backdropFilter || css(n).webkitBackdropFilter || '';
+      if (bgc && bgc[3] > 0.05 && bgc[3] < 1) { if (/blur/.test(bf)) bgc.blur = true; return bgc; }
       if (bgi && /gradient/.test(bgi)) { const m = bgi.match(/rgba?\([^)]+\)/g); if (m) { const cs = m.map(parseColor).filter(Boolean); const a = cs.reduce((x, c) => x + c[3], 0) / cs.length; const avg = cs.reduce((x, c) => [x[0] + c[0] / cs.length, x[1] + c[1] / cs.length, x[2] + c[2] / cs.length], [0, 0, 0]); return [avg[0], avg[1], avg[2], Math.min(0.95, a)]; } }
       if (bgc && bgc[3] >= 1) return null; // solid: not "over image" at all
       n = n.parentElement;

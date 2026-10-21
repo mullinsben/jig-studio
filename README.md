@@ -57,7 +57,7 @@ Everything below is found automatically; `data-jig="<control>"` forces one, `dat
 | --- | --- | --- |
 | `crop` | drag to pan; click for −/+ zoom and arrow buttons; ⌘/Ctrl + wheel or pinch to zoom; arrow keys nudge (Shift = 5%) | `objectPosition`, `zoom` |
 | `type` | click any text, then − / +; or ⌘/Ctrl + wheel | ramp step, e.g. `3xl → 2xl`; works on headings, body, captions, eyebrows |
-| `text` | drag to a nine-point anchor (overlays) or along columns (in flow); ⌘/Ctrl + wheel sets max-width in columns | `anchor`, `offsetCols`, `offsetY`, `maxWidthCols` |
+| `text` | drag to a nine-point anchor (overlays) or along columns (in flow); ⌘/Ctrl + wheel sets max-width in columns; click for the scrim picker (gradient / tint / glass) | `anchor`, `offsetCols`, `offsetY`, `maxWidthCols`, `scrim` |
 | `button` | click, then − / + for size, ◐ for variant | `size`, `variant` |
 | `section` | click, then − / + | `paddingY` on the spacing scale |
 | `grid` | click, then − / 0 / + | `marginLeft` |
