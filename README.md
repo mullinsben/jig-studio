@@ -29,9 +29,23 @@ Open <http://localhost:8000/demo/>. Six things are deliberately wrong. Then open
 
 Press **Copy patch**. Paste it to your AI along with [`GIVE-THIS-TO-YOUR-AI.md`](GIVE-THIS-TO-YOUR-AI.md).
 
+## Try it on a site with no design system
+
+`demo/legacy/` is the same sanctuary as Dave built it in 2011: inline styles, fourteen font sizes, paddings chosen by dice, buttons that are links with a background color. Open <http://localhost:8000/demo/legacy/?jig>. The jig finds no foundation, measures the page, and manufactures one: a type ramp, a spacing scale, button sizes and variants, a grid. Every control works against those inferred scales, and **Copy patch** appends a proposed `:root` block and `jig.foundation.json` the site could adopt, with a note on every value it collapsed.
+
+## How the jig decides what it can edit
+
+It looks for a source of truth in this order and stops at the first hit:
+
+1. `jig.foundation.json` (or an inline `#jig-foundation` script)
+2. CSS custom properties on `:root` named like `--space-*`, `--spacing-*`, `--text-*`, `--font-size-*`
+3. Nothing to read: it measures the rendered page, clusters near values, snaps to clean scales, and labels the result `inferred`
+
+Either way, "editable" means "has a scale to move along." The HUD says which source it's using, and inferred changes carry their px in the patch so the approver can tell them apart.
+
 ## Install on your site
 
-1. Copy `jig.js` and write a `jig.foundation.json` (or let your AI generate one from your design system; the handoff file explains how).
+1. Copy `jig.js`. A `jig.foundation.json` is optional: without one the jig reads your CSS variables or infers scales from the page, and the patch proposes a foundation file you can commit.
 2. Optionally name things. The jig finds cover-cropped images, all text, buttons, sections, and image overlays by itself; names just make the patch read better:
 
 ```html
@@ -57,12 +71,12 @@ Everything below is found automatically; `data-jig="<control>"` forces one, `dat
 | --- | --- | --- |
 | `crop` | drag to pan; click for −/+ zoom and arrow buttons; ⌘/Ctrl + wheel or pinch to zoom; arrow keys nudge (Shift = 5%) | `objectPosition`, `zoom` |
 | `type` | click any text, then − / +; or ⌘/Ctrl + wheel | ramp step, e.g. `3xl → 2xl`; works on headings, body, captions, eyebrows |
-| `text` | drag to a nine-point anchor (overlays) or along columns (in flow); ⌘/Ctrl + wheel sets max-width in columns; click for the scrim picker (gradient / tint / glass) | `anchor`, `offsetCols`, `offsetY`, `maxWidthCols`, `scrim` |
+| `text` | drag; it only lands on grid columns (the grid shows itself while you drag). Overlays also pick a top/center/bottom band; ⌘/Ctrl + wheel sets max-width in columns; click for the scrim picker (gradient / tint / glass) | `anchor`, `col`, `offsetCols`, `offsetY`, `maxWidthCols`, `scrim` |
 | `button` | click, then − / + for size, ◐ for variant | `size`, `variant` |
 | `section` | click, then − / + | `paddingY` on the spacing scale |
 | `grid` | click, then − / 0 / + | `marginLeft` |
 
-HUD: **grid** (or press **g**), **rescan** protection, a **device** picker (iPhone 15 Pro, iPhone SE, Pixel 8, Galaxy S24, iPad Mini; opens the page in a true-size frame, and changes made there land in the same patch tagged with the device), **reset all**, **Copy patch**. The HUD drags by its header, minimizes with –, and resizes from its corner. Esc deselects. Click × on any change to undo just that one.
+HUD: **grid** (or press **g**) with a column picker (2 to 16), **foundation** (inspect and edit the scales the jig is using: rename or retune steps, add or remove them, set the grid; apply live, remember for this site, copy as `jig.foundation.json`, or re-infer), **rescan** protection, a **device** picker (iPhone 15 Pro, iPhone SE, Pixel 8, Galaxy S24, iPad Mini; opens the page in a true-size frame, and changes made there land in the same patch tagged with the device), **reset all**, **Copy patch**. The HUD drags by its header, minimizes with –, and resizes from its corner. Esc deselects. Click × on any change to undo just that one.
 
 ## Protection
 

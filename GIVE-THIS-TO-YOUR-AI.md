@@ -34,7 +34,7 @@ Each JSON entry has:
 | key | meaning |
 | --- | --- |
 | `el` | A CSS selector for the element, as the jig could best name it. Prefer `data-jig-name` or `id`; fall back to the structural selector. |
-| `ctl` | Which control produced it: `crop`, `type` (any text element; `heading` is an older alias), `text`, `button`, `spacing`, `grid`. |
+| `ctl` | Which control produced it: `crop`, `type` (any text element; `heading` is an older alias), `text`, `button`, `spacing`, `grid`, or `foundation` (a change to the foundation itself, e.g. the grid column count). The grid can be 2 to 16 columns; the patch header's foundation tells you which. |
 | `bp` | Breakpoint the person was on: `desktop` or `phone`. A change scoped to `phone` goes inside the site's phone media query, never in the base rule. |
 | `warn` | Present instead of `ctl` on protection warnings. Warnings are advisory; the approver decides. Do not silently "fix" a warning unless the person asks. |
 
@@ -46,7 +46,7 @@ The rule for all of them: **edit tokens and classes, never write pixel values.**
 | --- | --- | --- |
 | `crop` | `objectPosition` (or `backgroundPosition`), optional `zoom` | Set `object-position` (or `background-position`) on that element in the stylesheet or inline style. If `zoom` is present, apply `transform: scale(zoom)` with `transform-origin` equal to the position, and make sure the container has `overflow: hidden`. |
 | `type` (alias `heading`) | `from`, `to`, `step` | Change the element's font size to `var(--text-<to>)`. Applies to any text element: headings, paragraphs, captions, eyebrows, list items. If the element had an inline font-size override that caused the problem, remove the override instead of adding another. |
-| `text` | `anchor`, `offsetCols`, `offsetY`, `maxWidthCols`, `scrim` | `anchor` is one of nine positions (`top-left` … `bottom-right`) for copy overlaid on an image: set `justify-content` / `align-items` / `text-align` on the overlay to match. `offsetCols` shifts the element right by N grid columns; `offsetY` by a spacing token in px (use `var(--space-N)`); `maxWidthCols` caps width at N columns. `scrim` is `gradient`, `tint`, or `glass`; see below. |
+| `text` | `anchor`, `col`, `offsetCols`, `offsetY`, `maxWidthCols`, `scrim` | Text only ever moves to the grid. For copy overlaid on an image: `anchor` is the vertical band (`top`, `center`, `bottom`) and `col` is the 1-based grid column its left edge sits on, inside the container's padding; `offsetY` is a spacing-scale nudge inward from that band's edge. Implement as `justify-content` for the band plus a `translate`/`margin-left` of `(col - 1)` column widths for the panel. For in-flow text: `offsetCols` shifts the element right by N columns and `offsetY` by a spacing token (`var(--space-N)`); `maxWidthCols` caps width at N columns. `scrim` is `gradient`, `tint`, or `glass`; see below. |
 
 Scrims (content protection for text over images). Implement each as a class on the site, then apply the class; don't inline the styles:
 
@@ -61,7 +61,7 @@ Scrims (content protection for text over images). Implement each as a class on t
 ```
 
 `tint` and `glass` need the overlay's children wrapped in a `.scrim-panel` so the panel hugs the text instead of covering the whole image; the jig does that wrap in the browser, you do it in source.
-| `button` | `size`, `variant` | Swap the size class (`btn-sm` → `btn-lg`) and/or variant class using the foundation's `classPrefix`. Only the keys present changed. |
+| `button` | `size`, `variant`, `height` | Swap the size class (`btn-sm` → `btn-lg`) and/or variant class using the foundation's `classPrefix`. Only the keys present changed. On an inferred site there are no classes yet: `height` plus the measured padding/font in the proposed foundation's `buttons.measured` tell you what the size means; create the classes, then apply them. |
 | `spacing` | `paddingY` | Set the section's `padding-block` to `var(--space-<paddingY>)`. |
 | `grid` | `marginLeft` | Set the element's inline offset to this value. `0` means "sits on the grid again": remove whatever offset was pushing it off, rather than adding `margin-left: 0` on top. |
 
@@ -82,6 +82,10 @@ Protection warnings come from a light accessibility scan the jig runs on the who
 Surface them to the person with the patch. Offer a fix for each; apply only what they approve.
 
 ## 4. First visit to a site with no foundation
+
+Good news first: the jig already did the measuring. When a patch ends with a `# proposed tokens` section, it contains a `:root` block and a `jig.foundation.json` inferred from the rendered page (or read from the site's own CSS variables), with comments on every value that was collapsed. Review that proposal with the person, adjust names or steps they disagree with, then commit both files. Changes in such a patch carry `"inferred": true` and a `px` value; apply the px now, and switch to the token once the foundation is committed.
+
+If you're setting a site up by hand instead:
 
 If the site has no `jig.foundation.json`, the jig runs on a built-in default and labels itself `inferred`. The person may ask you to set the site up. Do this:
 

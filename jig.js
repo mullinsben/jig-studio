@@ -49,6 +49,8 @@
 
   // ------------------------------------------------------------ foundation
   async function loadFoundation() {
+    const saved = safeGet('jig-foundation:' + location.host);
+    if (saved) { try { state.F = JSON.parse(saved); state.foundationSource = 'edited in the jig (saved for this site)'; state.F.edited = true; return; } catch (e) {} }
     const inline = document.getElementById('jig-foundation');
     if (inline && inline.textContent.trim()) {
       try { state.F = JSON.parse(inline.textContent); state.foundationSource = 'inline'; return; } catch (e) {}
@@ -58,7 +60,162 @@
       const r = await fetch(src, { cache: 'no-store' });
       if (r.ok) { state.F = await r.json(); state.foundationSource = src; return; }
     } catch (e) {}
-    state.F = DEFAULT_FOUNDATION; state.foundationSource = 'default (no foundation file found)';
+    // 2. the site's own CSS custom properties
+    const vars = readRootVars();
+    if (vars) { state.F = vars; state.foundationSource = 'css custom properties on :root'; return; }
+    // 3. nothing to read: measure the page and manufacture the scales
+    state.F = inferFromPage(); state.foundationSource = 'inferred from this page';
+  }
+
+  // Foundation shape used by the controls once resolved:
+  //   F.type.steps   = [{ token, px, var? }]   sorted ascending
+  //   F.spacingSteps = [{ token, px, var? }]   sorted ascending
+  //   F.buttons.mode = 'classes' | 'measured'; measured carries sizes [{ token, h, padX, padY, fs }] and variants [{ token, bg, fg, border }]
+  //   F.mode         = 'file' | 'vars' | 'inferred'
+  const RAMP_NAMES = ['2xs', 'xs', 'sm', 'md', 'lg', 'xl', '2xl', '3xl', '4xl', '5xl', '6xl'];
+  function toPx(v, prop) {
+    if (typeof v === 'number') return v;
+    const m = String(v).trim().match(/^(-?[\d.]+)(px|rem|em)?$/);
+    if (m) return m[2] === 'rem' || m[2] === 'em' ? parseFloat(m[1]) * 16 : parseFloat(m[1]);
+    // clamp()/calc()/var(): let the browser resolve it
+    document.body.appendChild(measureEl); measureEl.style[prop || 'fontSize'] = v; const r = px(css(measureEl)[prop || 'fontSize']); measureEl.remove(); return r;
+  }
+  function readRootVars() {
+    const found = {};
+    for (const sheet of Array.from(document.styleSheets)) {
+      let rules; try { rules = sheet.cssRules; } catch (e) { continue; }   // cross-origin sheets are opaque
+      for (const rule of Array.from(rules)) {
+        if (!rule.style || !/(^|,)\s*(:root|html)\s*(,|$)/.test(rule.selectorText || '')) continue;
+        for (const name of Array.from(rule.style)) if (name.startsWith('--')) found[name] = rule.style.getPropertyValue(name).trim();
+      }
+    }
+    const names = Object.keys(found); if (!names.length) return null;
+    const pick = (re) => names.filter(n => re.test(n)).map(n => ({ var: n, token: n.replace(re, ''), px: toPx(found[n]) })).filter(x => x.px > 0 && x.px < 400).sort((a, b) => a.px - b.px);
+    const type = pick(/^--(?:text|font-size|fs|type|typo|size)-/i);
+    const space = pick(/^--(?:space|spacing|sp|gap)-/i);
+    if (type.length < 3 && space.length < 3) return null;   // vars exist but say nothing about scales
+    const F = JSON.parse(JSON.stringify(DEFAULT_FOUNDATION));
+    F.name = (location.hostname || 'site').replace(/^www\./, ''); F.mode = 'vars';
+    if (type.length >= 3) { F.type = { ramp: type.map(t => t.token), steps: type }; }
+    else F.type = inferType();
+    if (space.length >= 3) { F.spacing = space.map(x => x.px); F.spacingSteps = space; }
+    else { const sp = inferSpacing(); F.spacing = sp.map(x => x.px); F.spacingSteps = sp; }
+    F.buttons = inferButtons(); F.grid = inferGrid();
+    return F;
+  }
+  function inferFromPage() {
+    const F = JSON.parse(JSON.stringify(DEFAULT_FOUNDATION));
+    F.name = (location.hostname || 'site').replace(/^www\./, '') || 'page'; F.mode = 'inferred';
+    F.type = inferType();
+    const sp = inferSpacing(); F.spacing = sp.map(x => x.px); F.spacingSteps = sp;
+    F.buttons = inferButtons(); F.grid = inferGrid();
+    return F;
+  }
+  function visible(el) { if (!el.offsetParent && css(el).position !== 'fixed') return false; const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0; }
+  function cluster(values, tol) {
+    // values: [{v, n}] -> merged clusters within tol (relative), weighted by count
+    const sorted = values.filter(x => x.v > 0).sort((a, b) => a.v - b.v); const out = [];
+    for (const x of sorted) { const last = out[out.length - 1]; if (last && (x.v - last.lo) / last.lo <= tol) { last.n += x.n; last.sum += x.v * x.n; last.hi = x.v; last.members.push(x.v); } else out.push({ lo: x.v, hi: x.v, n: x.n, sum: x.v * x.n, members: [x.v] }); }
+    return out.map(c => ({ px: Math.round(c.sum / c.n), n: c.n, members: Array.from(new Set(c.members)).sort((a, b) => a - b) }));
+  }
+  function inferType() {
+    const counts = new Map();
+    $$('body *').forEach(el => {
+      if (el.closest('#jig-hud, .jig-tb, script, style') || !visible(el)) return;
+      const own = Array.from(el.childNodes).some(n => n.nodeType === 3 && n.textContent.trim().length > 1); if (!own) return;
+      const fs = Math.round(px(css(el).fontSize) * 2) / 2; const w = (el.textContent || '').trim().length;
+      counts.set(fs, (counts.get(fs) || 0) + Math.min(w, 200));
+    });
+    const cl = cluster(Array.from(counts, ([v, n]) => ({ v, n })), 0.09);
+    if (!cl.length) return { ramp: ['md'], steps: [{ token: 'md', px: 16 }], observed: [] };
+    // body = the cluster carrying the most characters; name the rest relative to it
+    const bodyIdx = cl.reduce((bi, c, i) => (c.n > cl[bi].n ? i : bi), 0);
+    const mdPos = RAMP_NAMES.indexOf('md');
+    const steps = cl.map((c, i) => ({ token: RAMP_NAMES[clamp(mdPos + (i - bodyIdx), 0, RAMP_NAMES.length - 1)], px: c.px, observed: c.members, n: c.n }));
+    // de-dupe token names if the page has more clusters than names on one side
+    const seen = new Set(); steps.forEach((st, i) => { while (seen.has(st.token)) st.token = st.token + '+'; seen.add(st.token); });
+    return { ramp: steps.map(x => x.token), steps, observed: Array.from(counts.keys()).sort((a, b) => a - b) };
+  }
+  function inferSpacing() {
+    const counts = new Map();
+    $$('body *').forEach(el => {
+      if (el.closest('#jig-hud, .jig-tb') || !visible(el)) return; const c = css(el);
+      if (!/block|flex|grid|table/.test(c.display)) return;
+      ['paddingTop', 'paddingBottom', 'paddingLeft', 'paddingRight', 'marginTop', 'marginBottom', 'rowGap', 'columnGap'].forEach(k => { const v = Math.round(px(c[k])); if (v >= 2 && v <= 200) counts.set(v, (counts.get(v) || 0) + 1); });
+    });
+    const cl = cluster(Array.from(counts, ([v, n]) => ({ v, n })), 0.2);
+    const LADDER = [2, 4, 6, 8, 12, 16, 20, 24, 32, 40, 48, 64, 80, 96, 128, 160];
+    const snapped = new Map();
+    cl.forEach(c => { const sn = nearest(LADDER, c.px); const cur = snapped.get(sn) || { px: sn, n: 0, observed: [] }; cur.n += c.n; cur.observed.push(...c.members); snapped.set(sn, cur); });
+    let steps = Array.from(snapped.values()).sort((a, b) => a.px - b.px);
+    if (steps.length < 4) steps = LADDER.filter(v => v >= 4 && v <= 96).map(v => ({ px: v, n: 0, observed: [] }));
+    return steps.map(st => ({ token: String(st.px), px: st.px, observed: Array.from(new Set(st.observed)).sort((a, b) => a - b), n: st.n }));
+  }
+  function looksLikeButton(el) {
+    if (!visible(el) || el.closest('#jig-hud, .jig-tb')) return false;
+    if (el.tagName === 'BUTTON' || el.getAttribute('role') === 'button' || (el.tagName === 'INPUT' && /button|submit/.test(el.type))) return true;
+    if (el.tagName !== 'A') return false;
+    const c = css(el); const bg = parseColor(c.backgroundColor); const bw = px(c.borderTopWidth);
+    const padded = px(c.paddingLeft) >= 6 && px(c.paddingTop) >= 3; const r = el.getBoundingClientRect();
+    return padded && r.width < 480 && ((bg && bg[3] > 0.1) || bw >= 1) && /inline-block|flex|block/.test(c.display);
+  }
+  function inferButtons() {
+    const els = $$('a, button, input, [role=button]').filter(looksLikeButton);
+    if (!els.length) return { mode: 'measured', sizes: [{ token: 'md', h: 44, padX: 20, padY: 10, fs: 14 }], variants: [{ token: 'primary', bg: '#3f6fff', fg: '#fff', border: 'transparent' }], classPrefix: '' };
+    const hs = cluster(els.map(e => ({ v: Math.round(e.getBoundingClientRect().height), n: 1 })), 0.12);
+    const names = hs.length === 1 ? ['md'] : hs.length === 2 ? ['sm', 'lg'] : ['sm', 'md', 'lg', 'xl', '2xl'];
+    const sizes = hs.slice(0, 5).map((c, i) => { const ex = els.find(e => Math.abs(e.getBoundingClientRect().height - c.px) <= c.px * 0.12) || els[0]; const cs = css(ex); return { token: names[i], h: c.px, padX: Math.round(px(cs.paddingLeft)), padY: Math.round(px(cs.paddingTop)), fs: Math.round(px(cs.fontSize)), n: c.n }; });
+    const vmap = new Map();
+    els.forEach(e => { const c = css(e); const k = `${c.backgroundColor}|${c.color}|${c.borderTopColor}`; const v = vmap.get(k) || { bg: c.backgroundColor, fg: c.color, border: px(c.borderTopWidth) ? c.borderTopColor : 'transparent', n: 0 }; v.n++; vmap.set(k, v); });
+    const vnames = ['primary', 'secondary', 'tertiary', 'ghost', 'link'];
+    const weight = v => { const bg = parseColor(v.bg) || [255, 255, 255, 0], fg = parseColor(v.fg) || [0, 0, 0, 1]; const mx = Math.max(bg[0], bg[1], bg[2]), mn = Math.min(bg[0], bg[1], bg[2]); const sat = mx ? (mx - mn) / mx : 0; const dark = 1 - lum(bg); return (bg[3] < 0.1 ? 0 : 1) + sat + dark * 0.8 + (lum(fg) > 0.6 ? 0.5 : 0); };
+    const variants = Array.from(vmap.values()).sort((a, b) => weight(b) - weight(a) || b.n - a.n).slice(0, 5).map((v, i) => ({ token: vnames[i], ...v }));
+    return { mode: 'measured', sizes, variants, classPrefix: '' };
+  }
+  function inferGrid() {
+    const vw = document.documentElement.clientWidth;
+    const cands = $$('body *').filter(el => { if (!visible(el)) return false; const c = css(el); const r = el.getBoundingClientRect(); return c.marginLeft === c.marginRight && r.width >= vw * 0.5 && r.width <= vw - 16 && Math.abs(r.left - (vw - r.right)) < 3 && Math.abs(r.left - (vw - r.right)) >= 0; })
+      .map(el => Math.round(el.getBoundingClientRect().width));
+    const cl = cluster(cands.map(v => ({ v, n: 1 })), 0.04).sort((a, b) => b.n - a.n);
+    const maxWidth = cl.length ? cl[0].px : Math.min(1200, vw - 64);
+    const margin = Math.max(16, Math.round((vw - maxWidth) / 2 > 200 ? 32 : (vw - maxWidth) / 2));
+    return { columns: 12, gutter: 24, margin, maxWidth, inferred: true };
+  }
+  function resolveFoundation() {
+    const F = state.F; F.mode = F.mode || 'file';
+    // type steps: explicit sizes in the file, else resolve the site's --text-* vars, else infer
+    if (!F.type) F.type = { ramp: DEFAULT_FOUNDATION.type.ramp };
+    if (!F.type.steps) {
+      if (F.type.sizes) F.type.steps = F.type.ramp.map(t => ({ token: t, px: toPx(F.type.sizes[t]), var: '--text-' + t })).sort((a, b) => a.px - b.px);
+      else {
+        const steps = F.type.ramp.map(t => ({ token: t, px: varPx('--text-' + t), var: '--text-' + t }));
+        if (steps.every(x => x.px > 0)) F.type.steps = steps;
+        else { const inf = inferType(); F.type = { ...F.type, ramp: inf.ramp, steps: inf.steps, observed: inf.observed, inferred: true }; }
+      }
+    }
+    if (!F.spacingSteps) {
+      const steps = (F.spacingEdited || (F.spacing || []).map(v => ({ token: String(v), px: v }))).map(x => ({ token: x.token, px: x.px, var: '--space-' + x.token }));
+      const ok = steps.length && steps.every(x => varPx(x.var, 'paddingTop') > 0);
+      F.spacingSteps = ok ? steps : steps.map(x => ({ token: x.token, px: x.px }));   // px fallback is fine for spacing
+    }
+    if (!F.buttons) F.buttons = inferButtons();
+    if (F.buttons.measured && !F.buttons.mode) F.buttons = { mode: 'measured', sizes: F.buttons.measured.sizes, variants: F.buttons.measured.variants, classPrefix: '' };
+    if (!F.buttons.mode) F.buttons.mode = F.buttons.classPrefix !== undefined && F.buttons.sizes && typeof F.buttons.sizes[0] === 'string' ? 'classes' : 'measured';
+    if (F.buttons.mode === 'classes') {
+      // confirm the classes exist on the page; if nothing uses them, measure instead
+      const P = F.buttons.classPrefix || 'btn-'; const any = F.buttons.sizes.some(sz => document.querySelector('.' + P + sz));
+      if (!any) { F.buttons = inferButtons(); F.buttons.inferred = true; }
+    }
+    if (!F.grid) F.grid = inferGrid();
+    if (!F.protect) F.protect = DEFAULT_FOUNDATION.protect;
+  }
+  function proposedTokens() {
+    // a :root block + a foundation file the site could adopt
+    const F = state.F; const lines = [':root {'];
+    F.type.steps.forEach(st => lines.push(`  --text-${st.token}: ${st.px}px;${st.observed && st.observed.length > 1 ? `   /* collapsed ${st.observed.join(', ')} */` : ''}`));
+    F.spacingSteps.forEach(st => lines.push(`  --space-${st.token}: ${st.px}px;${st.observed && st.observed.length > 1 ? `   /* collapsed ${st.observed.join(', ')} */` : ''}`));
+    lines.push('}');
+    return { css: lines.join('\n'), json: JSON.stringify(exportFoundation(), null, 2) };
   }
 
   // ------------------------------------------------------------ helpers
@@ -100,9 +257,9 @@
     measureEl.remove();
     return v;
   }
-  function rampPx() {
-    return state.F.type.ramp.map(t => ({ token: t, px: varPx('--text-' + t) }));
-  }
+  function rampPx() { return state.F.type.steps.filter(x => x.px > 0); }
+  function typeValue(st) { return st.var ? `var(${st.var}, ${st.px}px)` : `${st.px}px`; }
+  function spaceValue(st) { return st.var ? `var(${st.var}, ${st.px}px)` : `${st.px}px`; }
   function nearest(list, value, get) {
     let best = list[0], d = Infinity;
     for (const it of list) { const dd = Math.abs((get ? get(it) : it) - value); if (dd < d) { d = dd; best = it; } }
@@ -226,12 +383,11 @@
       on(el, 'wheel', e => { if (!(e.ctrlKey || e.metaKey)) return; e.preventDefault(); step(e.deltaY < 0 ? 1 : -1); }, { passive: false });
       function step(d) {
         idx = clamp(idx + d, 0, ramp.length - 1);
-        el.style.fontSize = `var(--text-${ramp[idx].token})`;
-        el.style.fontWeight = '';
-        setBadge(el, `--text-${ramp[idx].token}`);
+        el.style.fontSize = typeValue(ramp[idx]);
+        setBadge(el, `${ramp[idx].var || 'step ' + ramp[idx].token} · ${ramp[idx].px}px`);
         if (idx === origIdx) unrecord(el, 'type');
-        else record(el, 'type', { from: origTok, to: ramp[idx].token, step: idx - origIdx },
-          `ramp ${origTok} → ${ramp[idx].token} (${idx - origIdx > 0 ? '+' : ''}${idx - origIdx})`);
+        else record(el, 'type', { from: origTok, to: ramp[idx].token, step: idx - origIdx, px: ramp[idx].px, ...(ramp[idx].var ? { var: ramp[idx].var } : { inferred: true }) },
+          `ramp ${origTok} → ${ramp[idx].token} (${idx - origIdx > 0 ? '+' : ''}${idx - origIdx}${ramp[idx].var ? '' : ', ' + ramp[idx].px + 'px'})`);
         refreshToolbar(el);
       }
       el.__jigReset = () => { idx = origIdx; el.style.fontSize = ''; unrecord(el, 'type'); refreshToolbar(el); };
@@ -277,27 +433,30 @@
       on(el, 'pointerdown', e => {
         if (e.button !== 0 || e.target.closest('a, button')) return;
         e.preventDefault(); e.stopPropagation(); try { el.setPointerCapture(e.pointerId); } catch (x) {}
-        drag = { x: e.clientX, y: e.clientY, cols, rowTok, offX, offY, anchor, id: e.pointerId };
+        drag = { x: e.clientX, y: e.clientY, cols, rowTok, offX, offY, anchor, id: e.pointerId, gridWas: state.grid };
+        if (!state.grid) toggleGrid(true);
       });
       on(el, 'pointermove', e => {
         if (!drag) return;
         const colW = colWidth(parent);
         const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
         if (isAbs) {
-          // overlay copy (banner): choose a 9-point anchor from pointer position in parent
+          // overlay copy: x snaps to the grid columns inside the container; y is a band (top/center/bottom) plus spacing-scale steps
           const r = parent.getBoundingClientRect();
-          const fx = (e.clientX - r.left) / r.width, fy = (e.clientY - r.top) / r.height;
-          const h = fx < 1 / 3 ? 'left' : fx > 2 / 3 ? 'right' : 'center';
-          const v = fy < 1 / 3 ? 'top' : fy > 2 / 3 ? 'bottom' : 'center';
-          const next = `${v}-${h}`;
-          if (next !== drag.anchor) { anchor = next; offX = 0; offY = 0; drag.x = e.clientX; drag.y = e.clientY; drag.offX = 0; drag.offY = 0; drag.anchor = next; }
-          else { offX = snapTok(drag.offX + dx); offY = snapTok(drag.offY + dy); }
+          const inner = r.width - (padL(el) + padR(el)); const cw = (inner + state.F.grid.gutter) / state.F.grid.columns;
+          const pr = panel ? panel.getBoundingClientRect() : r;
+          const px0 = pr.left - r.left - padL(el) + dx;                       // where the panel's left edge would be
+          const maxCol = Math.max(0, state.F.grid.columns - Math.ceil(pr.width / cw));
+          cols = clamp(Math.round(px0 / cw), 0, maxCol);
+          const fy = (e.clientY - r.top) / r.height; const v = fy < 1 / 3 ? 'top' : fy > 2 / 3 ? 'bottom' : 'center';
+          if (v !== drag.anchor) { anchor = v; offY = 0; drag.y = e.clientY; drag.offY = 0; drag.anchor = v; } else offY = snapTok(drag.offY + dy);
+          offY = boundY(offY, v, r, pr);
+          offX = Math.round(cols * cw);
           el.style.justifyContent = v === 'top' ? 'flex-start' : v === 'bottom' ? 'flex-end' : 'center';
-          el.style.alignItems = h === 'left' ? 'flex-start' : h === 'right' ? 'flex-end' : 'center';
-          el.style.textAlign = h;
-          if (panel) panel.style.translate = (offX || offY) ? `${offX}px ${offY}px` : '';
+          el.style.alignItems = 'flex-start'; el.style.textAlign = 'left';
+          if (panel) panel.style.translate = `${offX}px ${offY}px`;
           if (scrim === 'gradient') applyScrim();
-          setBadge(el, `anchor ${anchor}${offX || offY ? ` · offset ${offX} ${offY}` : ''}`);
+          setBadge(el, `col ${cols + 1} · ${anchor}${offY ? ` ${offY > 0 ? '+' : ''}${offY}px` : ''}`);
         } else {
           cols = clamp(Math.round(drag.cols + dx / colW), 0, state.F.grid.columns - 1);
           const sp = state.F.spacing;
@@ -308,7 +467,7 @@
           setBadge(el, `offset ${cols} col · ${rowTok}px`);
         }
       });
-      const end = () => { if (!drag) return; try { el.releasePointerCapture(drag.id); } catch (x) {} drag = null; commit(); };
+      const end = () => { if (!drag) return; try { el.releasePointerCapture(drag.id); } catch (x) {} const was = drag.gridWas; drag = null; commit(); if (!was) toggleGrid(false); };
       on(el, 'pointerup', end); on(el, 'pointercancel', end); on(window, 'pointerup', end); on(window, 'blur', end);
       on(el, 'wheel', e => {
         if (!(e.ctrlKey || e.metaKey) || el.dataset.jigCtl === 'type') return; e.preventDefault();   // type owns ⌘-wheel on text
@@ -320,10 +479,14 @@
       }, { passive: false });
       function commit() {
         const data = {}; const bits = [];
-        if (anchor) { data.anchor = anchor; bits.push('anchor ' + anchor); }
-        if (offX || offY) { data.offsetX = offX; data.offsetY = offY; bits.push(`offset ${offX} ${offY}`); }
-        if (cols) { data.offsetCols = cols; bits.push(`+${cols} col`); }
-        if (rowTok) { data.offsetY = rowTok; bits.push(`y ${rowTok}px`); }
+        if (isAbs) {
+          if (anchor) { data.anchor = anchor; bits.push(anchor); }
+          if (cols || anchor) { data.col = cols + 1; bits.push(`col ${cols + 1}`); }
+          if (offY) { data.offsetY = offY; bits.push(`${offY > 0 ? '+' : ''}${offY}px`); }
+        } else {
+          if (cols) { data.offsetCols = cols; bits.push(`+${cols} col`); }
+          if (rowTok) { data.offsetY = rowTok; bits.push(`y ${rowTok}px`); }
+        }
         if (el.dataset.jigCols) { data.maxWidthCols = +el.dataset.jigCols; bits.push(`max ${el.dataset.jigCols} cols`); }
         if (scrim !== 'none') { data.scrim = scrim; bits.push(`scrim ${scrim}`); }
         if (!bits.length) return unrecord(el, 'text');
@@ -335,13 +498,32 @@
       };
       // arrow keys: overlays nudge by the smallest spacing step; in-flow text by one column / one step
       el.__jigNudge = (dx, dy) => {
-        if (isAbs) { const st = state.F.spacing[0] || 4; offX = snapTok(offX + dx * st); offY = snapTok(offY + dy * st); if (panel) panel.style.translate = (offX || offY) ? `${offX}px ${offY}px` : ''; }
+        if (isAbs) {
+          const r = parent.getBoundingClientRect(); const inner = r.width - (padL(el) + padR(el)); const cw = (inner + state.F.grid.gutter) / state.F.grid.columns;
+          const maxCol = Math.max(0, state.F.grid.columns - Math.ceil((panel ? panel.getBoundingClientRect().width : 0) / cw));
+          cols = clamp(cols + dx, 0, maxCol); offX = Math.round(cols * cw);
+          const sp = state.F.spacing.filter(v => v > 0); const i = sp.indexOf(nearest(sp, Math.abs(offY)));
+          if (dy) offY = offY === 0 ? dy * sp[0] : Math.sign(offY) * sp[clamp(i + (Math.sign(offY) === dy ? 1 : -1), 0, sp.length - 1)] * (Math.sign(offY) === dy || i > 0 ? 1 : 0);
+          if (!anchor) anchor = 'center';
+          offY = boundY(offY, anchor, r, panel ? panel.getBoundingClientRect() : r);
+          if (panel) panel.style.translate = `${offX}px ${offY}px`;
+        }
         else { cols = clamp(cols + dx, 0, state.F.grid.columns - 1); const sp = state.F.spacing; const i = Math.max(0, sp.indexOf(nearest(sp, Math.abs(rowTok)))); rowTok = dy === 0 ? rowTok : Math.sign(rowTok + dy) * sp[clamp(i + (Math.sign(rowTok) === dy || rowTok === 0 ? 1 : -1), 0, sp.length - 1)];
           el.style.marginLeft = cols ? `calc(${cols} * (100% + ${state.F.grid.gutter}px) / ${state.F.grid.columns})` : ''; el.style.marginTop = rowTok ? `${rowTok}px` : ''; }
         commit();
       };
     }
   };
+  // an overlay block may only move inward from its band's edge, and never past the opposite edge
+  function boundY(v, band, r, pr) {
+    const room = Math.max(0, r.height - pr.height - padTB(r));
+    if (band === 'top') return clamp(v, 0, room);
+    if (band === 'bottom') return clamp(v, -room, 0);
+    return clamp(v, -room / 2, room / 2);
+  }
+  function padTB() { return 0; }
+  function padL(el) { return px(css(el).paddingLeft); }
+  function padR(el) { return px(css(el).paddingRight); }
   function colWidth(parent) {
     const w = parent.getBoundingClientRect().width;
     return (w + state.F.grid.gutter) / state.F.grid.columns;
@@ -352,7 +534,9 @@
     match: el => true,
     label: 'button · size and variant come from the foundation',
     init(el) {
-      const B = state.F.buttons, P = B.classPrefix || 'btn-';
+      const B = state.F.buttons;
+      if (B.mode === 'measured') return initMeasured(el, B);
+      const P = B.classPrefix || 'btn-';
       const origSize = B.sizes.find(s => el.classList.contains(P + s)) || B.sizes[1];
       const origVar = B.variants.find(v => el.classList.contains(P + v)) || B.variants[0];
       let size = origSize, variant = origVar;
@@ -380,21 +564,45 @@
     }
   };
 
+  // measured buttons (no class convention on the site): sizes and variants are observed clusters, applied as px
+  function initMeasured(el, B) {
+    const h0 = el.getBoundingClientRect().height; const c0 = css(el);
+    const sizes = B.sizes, variants = B.variants;
+    let si = sizes.indexOf(nearest(sizes, h0, x => x.h)); const si0 = si;
+    const k0 = `${c0.backgroundColor}|${c0.color}`; let vi = Math.max(0, variants.findIndex(v => `${v.bg}|${v.fg}` === k0)); const vi0 = vi;
+    const orig = { p: el.style.padding, fs: el.style.fontSize, mh: el.style.minHeight, bg: el.style.background, c: el.style.color, bc: el.style.borderColor };
+    el.__jigToolbar = () => [btn('−', () => cyc('size', -1)), chip(() => sizes[si].token), btn('+', () => cyc('size', 1)), sep(), btn('◐', () => cyc('variant', 1)), chip(() => variants[vi].token)];
+    function apply() {
+      const sz = sizes[si], v = variants[vi];
+      if (si !== si0) { el.style.padding = `${sz.padY}px ${sz.padX}px`; el.style.fontSize = `${sz.fs}px`; el.style.minHeight = `${sz.h}px`; } else Object.assign(el.style, { padding: orig.p, fontSize: orig.fs, minHeight: orig.mh });
+      if (vi !== vi0) { el.style.background = v.bg; el.style.color = v.fg; el.style.borderColor = v.border; } else Object.assign(el.style, { background: orig.bg, color: orig.c, borderColor: orig.bc });
+      setBadge(el, `size ${sz.token} (${sz.h}px) · ${v.token}`);
+    }
+    function cyc(what, d) {
+      if (what === 'size') si = (si + d + sizes.length) % sizes.length; else vi = (vi + d + variants.length) % variants.length;
+      apply();
+      if (si === si0 && vi === vi0) unrecord(el, 'button');
+      else { const data = { inferred: true }; const bits = []; if (si !== si0) { data.size = sizes[si].token; data.height = sizes[si].h; bits.push(`size ${sizes[si0].token} → ${sizes[si].token} (${sizes[si].h}px)`); } if (vi !== vi0) { data.variant = variants[vi].token; bits.push(`variant ${variants[vi0].token} → ${variants[vi].token}`); } record(el, 'button', data, bits.join(', ')); }
+      refreshToolbar(el); scanProtection();
+    }
+    el.__jigReset = () => { si = si0; vi = vi0; apply(); unrecord(el, 'button'); refreshToolbar(el); };
+  }
+
   // --- section: padding on the spacing scale --------------------------------
   Controls.section = {
     match: el => true,
     label: 'section · − / + steps vertical padding on the spacing scale',
     init(el) {
-      const sp = state.F.spacing;
+      const steps = state.F.spacingSteps.filter(x => x.px > 0); const sp = steps.map(x => x.px);
       const origTop = px(css(el).paddingTop);
       let idx = sp.indexOf(nearest(sp, origTop)); const origIdx = idx;
       el.__jigToolbar = () => [btn('−', () => step(-1)), chip(() => `pad ${sp[idx]}`), btn('+', () => step(1))];
       function step(d) {
         idx = clamp(idx + d, 0, sp.length - 1);
-        el.style.paddingBlock = `var(--space-${sp[idx]}, ${sp[idx]}px)`;
-        setBadge(el, `padding-block --space-${sp[idx]}`);
+        el.style.paddingBlock = spaceValue(steps[idx]);
+        setBadge(el, `padding-block ${steps[idx].var || sp[idx] + 'px'}`);
         if (idx === origIdx) unrecord(el, 'spacing');
-        else record(el, 'spacing', { paddingY: sp[idx] }, `padding ${sp[origIdx]} → ${sp[idx]}`);
+        else record(el, 'spacing', { paddingY: sp[idx], ...(steps[idx].var ? {} : { inferred: true }) }, `padding ${Math.round(origTop)} → ${sp[idx]}`);
         refreshToolbar(el);
       }
       el.__jigReset = () => { idx = origIdx; el.style.paddingBlock = ''; unrecord(el, 'spacing'); refreshToolbar(el); };
@@ -424,6 +632,12 @@
   // ------------------------------------------------------------ wiring
   const listeners = [];
   function on(el, ev, fn, opt) { el.addEventListener(ev, fn, opt); listeners.push([el, ev, fn, opt]); }
+  function unwire() {
+    for (let i = listeners.length - 1; i >= 0; i--) { const [el, ev, fn, opt] = listeners[i]; if (el instanceof Element && el.classList && el.classList.contains('jig-el')) { el.removeEventListener(ev, fn, opt); listeners.splice(i, 1); } }
+    $$('.jig-el').forEach(el => { el.classList.remove('jig-el', 'jig-selected'); delete el.dataset.jigCtl; delete el.__jigToolbar; delete el.__jigToolbarText; delete el.__jigReset; delete el.__jigResetText; delete el.__jigNudge; const pn = el.querySelector(':scope > .jig-scrim-panel'); if (pn) { while (pn.firstChild) el.appendChild(pn.firstChild); pn.remove(); } });
+    state.selected = null; toolbar.hidden = true;
+  }
+  function rewire() { unwire(); delete state.F.type.steps; delete state.F.spacingSteps; resolveFoundation(); wire(); scanProtection(); renderHUD(); }
 
   // Auto-targeting: the jig finds its own targets. data-jig="<ctl>" forces a control,
   // data-jig="off" excludes an element (and its subtree), data-jig-name names it.
@@ -444,10 +658,20 @@
       add(t, 'type');
     });
     // buttons: anything using the foundation's button classes, plus real buttons
-    const P = (state.F.buttons && state.F.buttons.classPrefix) || 'btn-';
-    $$(`a[class*="${P}"], button, [role="button"], a.btn`).forEach(b => add(b, 'button'));
+    if (state.F.buttons && state.F.buttons.mode === 'measured') $$('a, button, input, [role=button]').filter(looksLikeButton).forEach(b => add(b, 'button'));
+    else { const P = (state.F.buttons && state.F.buttons.classPrefix) || 'btn-'; $$(`a[class*="${P}"], button, [role="button"], a.btn`).forEach(b => add(b, 'button')); }
     // sections: top-level landmarks
     $$('body > section, main > section, body > main > section, section[id]').forEach(sec => add(sec, 'section'));
+    const nSec = () => Array.from(out.values()).filter(v => v === 'section').length;
+    if (!nSec()) $$('body > div, body > main > div, main > div, body > table, body > header, body > footer').forEach(d => { const r = d.getBoundingClientRect(); if (r.height >= 120 && r.width >= 300) add(d, 'section'); });
+    if (nSec() < 3) { // a single wrapper: its big children are the real sections
+      const wraps = Array.from(out.entries()).filter(([, v]) => v === 'section').map(([k]) => k);
+      const bigKids = w => Array.from(w.children).filter(d => { const r = d.getBoundingClientRect(); return r.height >= 48 && r.width >= 300 && /^(DIV|SECTION|HEADER|FOOTER|TABLE|ASIDE|ARTICLE|MAIN|NAV)$/.test(d.tagName); });
+      wraps.forEach(w => { const kids = bigKids(w); if (kids.length > 1) { kids.forEach(d => add(d, 'section')); out.delete(w); } });
+      // a content block holding most of the page: its own big children are sections too (columns, boxes)
+      const docH = document.documentElement.scrollHeight;
+      Array.from(out.entries()).filter(([el, v]) => v === 'section' && el.getBoundingClientRect().height > docH * 0.5).forEach(([el]) => { const kids = bigKids(el); if (kids.length > 1) { kids.forEach(d => add(d, 'section')); out.delete(el); } });
+    }
     // text overlays: absolutely positioned text sitting on an image
     $$('body *').forEach(el => {
       if (css(el).position !== 'absolute' || !(el.textContent || '').trim()) return;
@@ -505,6 +729,19 @@
     #jig-hud header .min { margin-left: 8px; width: 24px; height: 24px; border: 0; border-radius: 6px; background: #262833; color: #fff; cursor: pointer; font: 700 14px/1 ui-sans-serif, system-ui; }
     #jig-hud header .min:hover { background: #3f6fff; }
     #jig-hud .tools select { font: 600 12px ui-sans-serif, system-ui; background: #262833; color: #fff; border: 0; border-radius: 6px; padding: 6px 8px; cursor: pointer; }
+    #jig-found { position: fixed; top: 16px; left: 16px; width: 380px; max-height: calc(100vh - 32px); overflow: auto; z-index: 2147483644; background: #0b0b0d; color: #f3f4f7; border-radius: 12px; box-shadow: 0 12px 40px rgba(0,0,0,.45); font: 13px/1.45 ui-sans-serif, system-ui, sans-serif; padding: 12px 14px 14px; }
+    #jig-found h5 { margin: 0 0 6px; font-size: 14px; } #jig-found h5 i { color: #3f6fff; font-style: normal; }
+    #jig-found h6 { margin: 12px 0 4px; font-size: 11px; letter-spacing: .14em; text-transform: uppercase; opacity: .6; }
+    #jig-found .lead { opacity: .7; font-size: 12px; margin: 0 0 4px; }
+    #jig-found .frow { display: grid; grid-template-columns: 1fr 72px 24px; gap: 6px; align-items: center; margin: 3px 0; }
+    #jig-found .frow.obs { grid-template-columns: 1fr 72px 24px; }
+    #jig-found input { font: 12px ui-monospace, Menlo, monospace; background: #13141a; color: #f3f4f7; border: 1px solid #262833; border-radius: 6px; padding: 5px 7px; min-width: 0; width: 100%; box-sizing: border-box; }
+    #jig-found input:focus { outline: 2px solid #3f6fff; outline-offset: 1px; }
+    #jig-found small.o { grid-column: 1 / -1; opacity: .5; font: 11px ui-monospace, Menlo, monospace; margin: -2px 0 2px; }
+    #jig-found button { font: 600 12px ui-sans-serif, system-ui; background: #262833; color: #fff; border: 0; border-radius: 6px; padding: 5px 9px; cursor: pointer; }
+    #jig-found button:hover { background: #3f6fff; } #jig-found button.x { padding: 4px 0; width: 24px; }
+    #jig-found .grid4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; } #jig-found .grid4 label { font-size: 11px; opacity: .7; display: block; margin-bottom: 2px; }
+    #jig-found .actions { display: flex; gap: 6px; margin-top: 12px; flex-wrap: wrap; } #jig-found .actions .primary { background: #3f6fff; }
     #jig-device { position: fixed; inset: 0; z-index: 2147483645; background: rgba(27,22,18,.82); display: flex; align-items: center; justify-content: center; }
     #jig-device .shell { position: relative; background: #0b0908; border-radius: 44px; padding: 14px; box-shadow: 0 30px 80px rgba(0,0,0,.6), inset 0 0 0 2px #2a2420; transform-origin: center; }
     #jig-device iframe { display: block; border: 0; background: #fff; border-radius: 32px; }
@@ -522,7 +759,7 @@
     #jig-hud h6 { margin: 8px 0 4px; font-size: 11px; letter-spacing: .14em; text-transform: uppercase; opacity: .6; }
     #jig-hud .row { display: flex; gap: 8px; align-items: baseline; padding: 4px 0; border-bottom: 1px dashed #262833; cursor: pointer; }
     #jig-hud .row:hover { color: #dfe6ff; }
-    #jig-hud .row .n { font-weight: 600; min-width: 0; } #jig-hud .row .s { opacity: .8; flex: 1; } #jig-hud .row .x { opacity: .5; }
+    #jig-hud .row .n { font-weight: 600; min-width: 0; flex: 0 1 42%; } #jig-hud .row .s { opacity: .8; flex: 1 1 58%; min-width: 0; } #jig-hud .row .x { opacity: .5; }
     #jig-hud .row.warn .n::before { content: "⚠ "; color: #ffb84d; }
     #jig-hud .empty { opacity: .55; padding: 8px 0; }
     #jig-hud footer { display: flex; gap: 6px; padding: 10px 12px; border-top: 1px solid #262833; background: #13141a; align-items: center; }
@@ -594,7 +831,7 @@
     gridEl.innerHTML = '';
     const cols = document.createElement('div'); cols.className = 'cols';
     cols.style.gridTemplateColumns = `repeat(${G.columns}, 1fr)`; cols.style.gap = `${G.gutter}px`;
-    cols.style.maxWidth = `${G.maxWidth}px`; cols.style.paddingInline = `${G.margin}px`;
+    cols.style.maxWidth = `${G.maxWidth}px`; cols.style.paddingInline = `${Math.min(G.margin, Math.floor(window.innerWidth * 0.06))}px`;
     for (let i = 0; i < G.columns; i++) cols.appendChild(document.createElement('i'));
     gridEl.appendChild(cols);
     gridEl.style.height = `${document.documentElement.scrollHeight}px`;
@@ -602,6 +839,7 @@
   function toggleGrid(force) {
     state.grid = force === undefined ? !state.grid : force;
     gridEl.hidden = !state.grid; if (state.grid) drawGrid();
+    const fr = deviceEl && $('iframe', deviceEl); if (fr && fr.contentWindow) fr.contentWindow.postMessage({ jig: 'grid', on: state.grid, columns: state.F.grid.columns }, '*');
     const gb = $('#jig-grid-btn'); if (gb) gb.classList.toggle('on', state.grid);
   }
 
@@ -714,7 +952,9 @@
     <header><b>jig <i>studio</i></b><small id="jig-bp"></small><button class="min" id="jig-min-btn" title="minimize">–</button></header>
     <div class="tools">
       <button id="jig-grid-btn" title="g">grid</button>
+      <select id="jig-cols-sel" title="grid columns"></select>
       <button id="jig-scan-btn">rescan</button>
+      <button id="jig-found-btn">foundation</button>
       <select id="jig-device-sel" title="device preview"><option value="">desktop</option>${DEVICES.map(d => `<option value="${d.id}">${d.name} · ${d.w}×${d.h}</option>`).join('')}</select>
       <button id="jig-phone-btn" hidden>phone preview</button>
       <button id="jig-reset-btn">reset all</button>
@@ -749,7 +989,8 @@
     const total = state.changes.size + state.frame.changes.length;
     $('#jig-count').textContent = `${total} change${total === 1 ? '' : 's'} · ${state.warnings.length + state.frame.warnings.length} warning${state.warnings.length + state.frame.warnings.length === 1 ? '' : 's'}`;
     $('#jig-bp').textContent = `${state.bp} · ${window.innerWidth}px`;
-    $('#jig-src').textContent = `foundation: ${state.F.name} (${state.foundationSource})`;
+    const F = state.F; const inf = F.mode === 'inferred' || F.type.inferred || F.buttons.inferred;
+    $('#jig-src').textContent = `foundation: ${F.name} · ${state.foundationSource}${inf ? ` · ${F.type.steps.length} type steps, ${F.spacingSteps.length} spacing steps, ${F.buttons.sizes.length} button size${F.buttons.sizes.length === 1 ? '' : 's'} · proposed tokens ride in the patch` : ''}`;
   }
   function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
 
@@ -766,6 +1007,12 @@
     all.forEach(c => { const { name, summary, ...rest } = c; json.push(rest); });
     warns.forEach(w => json.push({ warn: w.kind, el: w.el, msg: w.msg, ...(w.value ? { value: w.value, min: w.min } : {}) }));
     lines.push('', '---', JSON.stringify(json, null, 2));
+    const F = state.F;
+    if (F.mode === 'inferred' || F.type.inferred || F.buttons.inferred || F.mode === 'vars' || F.edited) {
+      const t = proposedTokens();
+      const how = F.edited ? 'edited by hand in the jig' : F.mode === 'vars' ? 'read from this site\'s CSS variables' : 'inferred from the rendered page';
+      lines.push('', '---', `# proposed tokens · ${how}`, '', (F.edited ? 'The person reviewed and adjusted these scales in the jig. ' : 'This site has no jig foundation. The scales below were ' + (F.mode === 'vars' ? 'read from :root' : 'measured, clustered, and snapped') + '. ') + 'Save as jig.foundation.json and add the :root block.', '', '```css', t.css, '```', '', '```json', t.json, '```');
+    }
     return lines.join('\n');
   }
   async function copyPatch() {
@@ -774,6 +1021,51 @@
     catch (e) { const ta = document.createElement('textarea'); ta.value = text; ta.style.cssText = 'position:fixed;inset:16px;z-index:2147483647;width:60vw;height:60vh;font:12px monospace'; document.body.appendChild(ta); ta.select(); flash('Clipboard blocked; select the text manually.'); on(ta, 'blur', () => ta.remove()); }
   }
   function flash(msg) { const b = $('#jig-copy-btn'); const t = b.textContent; b.textContent = msg; setTimeout(() => (b.textContent = t), 1800); }
+
+  // ------------------------------------------------------------ foundation panel (inspect and edit the scales)
+  let foundEl = null;
+  function toggleFoundationPanel() { if (foundEl) { foundEl.remove(); foundEl = null; return; } renderFoundationPanel(); }
+  function renderFoundationPanel() {
+    if (foundEl) foundEl.remove();
+    const F = state.F; foundEl = document.createElement('div'); foundEl.id = 'jig-found';
+    const inf = F.mode === 'inferred' || F.mode === 'vars';
+    const stepRows = (steps, kind) => steps.map((st, i) => `<div class="frow"><input data-k="${kind}" data-i="${i}" data-f="token" value="${esc(st.token)}" title="token name"><input data-k="${kind}" data-i="${i}" data-f="px" type="number" value="${st.px}" title="px"><button class="x" data-del="${kind}:${i}" title="remove">×</button></div>${st.observed && st.observed.length > 1 ? `<small class="o">observed ${st.observed.join(', ')}</small>` : ''}`).join('');
+    foundEl.innerHTML = `
+      <h5>foundation <i>${esc(F.name)}</i></h5>
+      <p class="lead">${esc(state.foundationSource)}. ${inf ? 'These are a reading of the page, not a decision. Rename, retune, add or remove steps; the controls and the patch follow.' : 'Edit here to try a different scale on this page; the patch will carry the change as a proposal.'}</p>
+      <h6>type ramp (px)</h6><div id="jf-type">${stepRows(F.type.steps, 'type')}</div><button data-add="type">+ step</button>
+      <h6>spacing (px)</h6><div id="jf-space">${stepRows(F.spacingSteps, 'space')}</div><button data-add="space">+ step</button>
+      <h6>grid</h6><div class="grid4">${['columns', 'gutter', 'margin', 'maxWidth'].map(k => `<div><label>${k}</label><input data-g="${k}" type="number" value="${F.grid[k]}"></div>`).join('')}</div>
+      <h6>buttons</h6><p class="lead">${F.buttons.mode === 'measured' ? `measured: ${F.buttons.sizes.map(x => `${x.token} ${x.h}px`).join(' · ')}; variants ${F.buttons.variants.map(x => x.token).join(', ')}` : `classes: ${F.buttons.classPrefix}{${F.buttons.sizes.join('|')}} · {${F.buttons.variants.join('|')}}`}</p>
+      <div class="actions"><button class="primary" id="jf-apply">Apply to page</button><button id="jf-remember">Remember for this site</button><button id="jf-forget">Forget</button><button id="jf-copy">Copy foundation.json</button><button id="jf-reinfer">Re-infer</button></div>`;
+    document.body.appendChild(foundEl);
+    const readBack = () => {
+      const steps = kind => { const rows = {}; $$(`input[data-k="${kind}"]`, foundEl).forEach(inp => { (rows[inp.dataset.i] = rows[inp.dataset.i] || {})[inp.dataset.f] = inp.dataset.f === 'px' ? +inp.value : inp.value.trim(); }); return Object.values(rows).filter(r => r.token).sort((a, b) => a.px - b.px); };
+      const t = steps('type'), sp = steps('space');
+      F.type = { ramp: t.map(x => x.token), sizes: Object.fromEntries(t.map(x => [x.token, x.px])), edited: true };
+      F.spacing = sp.map(x => x.px); F.spacingEdited = sp;
+      ['columns', 'gutter', 'margin', 'maxWidth'].forEach(k => { F.grid[k] = +$(`input[data-g="${k}"]`, foundEl).value || F.grid[k]; });
+      F.edited = true; delete F.type.steps; delete F.spacingSteps; resolveFoundation();
+    };
+    foundEl.onclick = e => {
+      const b = e.target.closest('button'); if (!b) return;
+      const syncSpace = () => { F.spacing = F.spacingEdited.map(x => x.px); };
+      if (b.dataset.add) { readBack(); if (b.dataset.add === 'type') { F.type.ramp.push('new'); F.type.sizes.new = 0; } else { F.spacingEdited.push({ token: 'new', px: 0 }); syncSpace(); } delete F.type.steps; delete F.spacingSteps; resolveFoundation(); renderFoundationPanel(); return; }
+      if (b.dataset.del) { const [k, i] = b.dataset.del.split(':'); readBack(); if (k === 'type') { const tok = F.type.ramp.splice(+i, 1)[0]; delete F.type.sizes[tok]; } else { F.spacingEdited.splice(+i, 1); syncSpace(); } delete F.type.steps; delete F.spacingSteps; resolveFoundation(); renderFoundationPanel(); return; }
+      if (b.id === 'jf-apply') { readBack(); rewire(); renderFoundationPanel(); flashBtn(b, 'Applied'); }
+      if (b.id === 'jf-remember') { readBack(); safeSet('jig-foundation:' + location.host, JSON.stringify(exportFoundation())); state.foundationSource = 'edited in the jig (saved for this site)'; renderHUD(); flashBtn(b, 'Saved'); }
+      if (b.id === 'jf-forget') { try { localStorage.removeItem('__jig-foundation:' + location.host); } catch (x) {} flashBtn(b, 'Forgotten; reload to re-infer'); }
+      if (b.id === 'jf-copy') { readBack(); navigator.clipboard.writeText(JSON.stringify(exportFoundation(), null, 2)).then(() => flashBtn(b, 'Copied')).catch(() => flashBtn(b, 'Clipboard blocked')); }
+      if (b.id === 'jf-reinfer') { try { localStorage.removeItem('__jig-foundation:' + location.host); } catch (x) {} state.F = inferFromPage(); state.foundationSource = 'inferred from this page'; rewire(); renderFoundationPanel(); }
+    };
+  }
+  function flashBtn(b, msg) { const t = b.textContent; b.textContent = msg; setTimeout(() => (b.textContent = t), 1600); }
+  function exportFoundation() {
+    const F = state.F; const steps = F.type.steps || [];
+    return { name: F.name, version: 1, grid: { columns: F.grid.columns, gutter: F.grid.gutter, margin: F.grid.margin, maxWidth: F.grid.maxWidth }, breakpoints: F.breakpoints || DEFAULT_FOUNDATION.breakpoints,
+      spacing: (F.spacingSteps || []).map(x => x.px), type: { ramp: steps.map(x => x.token), sizes: Object.fromEntries(steps.map(x => [x.token, x.px])) },
+      buttons: F.buttons.mode === 'measured' ? { sizes: F.buttons.sizes.map(x => x.token), variants: F.buttons.variants.map(x => x.token), classPrefix: 'btn-', measured: { sizes: F.buttons.sizes, variants: F.buttons.variants } } : F.buttons, protect: F.protect };
+  }
 
   // ------------------------------------------------------------ device preview
   let deviceEl = null;
@@ -786,6 +1078,7 @@
     deviceEl.innerHTML = `<button class="close" title="close">×</button><div class="shell"><div class="cap">${d.name} · ${d.w}×${d.h} · changes here are tagged ${d.bp}</div><iframe width="${d.w}" height="${d.h}" title="${d.name} preview"></iframe></div>`;
     document.body.appendChild(deviceEl);
     const fr = $('iframe', deviceEl); fr.src = u.toString();
+    fr.onload = () => { if (state.grid) setTimeout(() => fr.contentWindow && fr.contentWindow.postMessage({ jig: 'grid', on: true, columns: state.F.grid.columns }, '*'), 400); };
     const fit = () => { const sh = $('.shell', deviceEl); const sc = Math.min(1, (window.innerHeight - 90) / (d.h + 28), (window.innerWidth - 400) / (d.w + 28)); sh.style.transform = `scale(${sc})`; };
     fit(); on(window, 'resize', fit);
     $('.close', deviceEl).onclick = closeDevice;
@@ -802,12 +1095,15 @@
   async function boot() {
     await loadFoundation();
     document.head.appendChild(style);
+    document.body.appendChild(measureEl); measureEl.remove();
+    resolveFoundation();
     document.body.append(gridEl, badge, toolbar);
     const dev = DEVICES.find(d => d.id === DEVICE);
     state.bp = dev ? dev.bp : (window.innerWidth <= (state.F.breakpoints && state.F.breakpoints.phone || 480) + 40 ? 'phone' : 'desktop');
     wire();
     if (EMBED) {
-      // inside a device frame: no HUD; the parent page's HUD collects our changes
+      // inside a device frame: no HUD; the parent page's HUD collects our changes and drives the grid
+      on(window, 'message', e => { if (e.data && e.data.jig === 'grid') { if (e.data.columns) state.F.grid.columns = e.data.columns; toggleGrid(!!e.data.on); } });
       const imgs0 = $$('img').filter(i => !i.complete);
       await Promise.all(imgs0.map(i => new Promise(r => { i.onload = i.onerror = r; })));
       scanProtection();
@@ -819,7 +1115,19 @@
     $('#jig-min-btn').onclick = e => { e.stopPropagation(); hud.classList.toggle('collapsed'); $('#jig-min-btn').textContent = hud.classList.contains('collapsed') ? '+' : '–'; };
     $('#jig-device-sel').onchange = e => openDevice(e.target.value);
     $('#jig-grid-btn').onclick = () => toggleGrid();
+    const colSel = $('#jig-cols-sel'); const colOpts = Array.from(new Set([2, 3, 4, 5, 6, 8, 10, 12, 16, state.F.grid.columns])).sort((a, b) => a - b);
+    colSel.innerHTML = colOpts.map(n => `<option value="${n}"${n === state.F.grid.columns ? ' selected' : ''}>${n} col</option>`).join('');
+    const origCols = state.F.grid.columns;
+    colSel.onchange = e => {
+      state.F.grid.columns = +e.target.value; if (state.grid) drawGrid();
+      const fr = deviceEl && $('iframe', deviceEl); if (fr && fr.contentWindow) fr.contentWindow.postMessage({ jig: 'grid', on: state.grid, columns: state.F.grid.columns }, '*');
+      const k = 'foundation::grid';
+      if (state.F.grid.columns === origCols) state.changes.delete(k);
+      else state.changes.set(k, { el: ':root', name: 'Foundation', ctl: 'foundation', bp: state.bp, grid: { columns: state.F.grid.columns }, summary: `grid ${origCols} → ${state.F.grid.columns} columns` });
+      renderHUD();
+    };
     $('#jig-scan-btn').onclick = scanProtection;
+    $('#jig-found-btn').onclick = toggleFoundationPanel;
     $('#jig-reset-btn').onclick = () => { $$('.jig-el').forEach(el => el.__jigReset && el.__jigReset()); state.changes.clear(); state.frame = { changes: [], warnings: [] }; closeDevice(); scanProtection(); };
     $('#jig-copy-btn').onclick = copyPatch;
     $('#jig-phone-btn').onclick = () => openDevice('iphone-15-pro');
