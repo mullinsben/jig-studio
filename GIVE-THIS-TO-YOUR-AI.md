@@ -1,0 +1,86 @@
+# Jig Studio: instructions for the AI applying patches
+
+You are receiving this file because a person uses **Jig Studio** on their website. Read it once; it tells you what a jig patch is, how to apply one, and what to do first on a site that has never been jigged.
+
+Jig Studio is a small script (`jig.js`) that runs on the live page when `?jig` is in the URL. The person drags, pinches, and steps things on the page; the jig emits a **patch**. You apply the patch to the source. You never need to run the jig yourself.
+
+## 1. The patch
+
+A patch has two halves separated by `---`:
+
+```
+# jig patch · <foundation name> · <page path> · <timestamp>
+
+- Hero image: crop moved to 50% 77%
+- Meet the herd title: ramp 3xl → 2xl (-1)
+- Adopt CTA: size sm → lg
+
+⚠ 1 protection warning:
+- p "The future is not set…": contrast 3.6 over image, min 4.5
+
+---
+[
+  { "el": "[data-jig-name=\"Hero image\"]", "ctl": "crop", "bp": "desktop", "objectPosition": "50% 77%" },
+  { "el": "[data-jig-name=\"Meet the herd title\"]", "ctl": "heading", "bp": "desktop", "from": "3xl", "to": "2xl", "step": -1 },
+  { "el": "[data-jig-name=\"Adopt CTA\"]", "ctl": "button", "bp": "desktop", "size": "lg" },
+  { "warn": "contrast", "el": "section#habitat p", "msg": "contrast 3.6 over image, min 4.5", "value": 3.6, "min": 4.5 }
+]
+```
+
+The top half is for the human approving the change. The bottom half is for you. They say the same thing; if they ever disagree, the JSON wins.
+
+Each JSON entry has:
+
+| key | meaning |
+| --- | --- |
+| `el` | A CSS selector for the element, as the jig could best name it. Prefer `data-jig-name` or `id`; fall back to the structural selector. |
+| `ctl` | Which control produced it: `crop`, `heading`, `text`, `button`, `spacing`, `grid`. |
+| `bp` | Breakpoint the person was on: `desktop` or `phone`. A change scoped to `phone` goes inside the site's phone media query, never in the base rule. |
+| `warn` | Present instead of `ctl` on protection warnings. Warnings are advisory; the approver decides. Do not silently "fix" a warning unless the person asks. |
+
+## 2. How to apply each control
+
+The rule for all of them: **edit tokens and classes, never write pixel values.** The site has a foundation (`jig.foundation.json`) and its CSS exposes custom properties and classes that match. Use those names.
+
+| `ctl` | fields | what to change in source |
+| --- | --- | --- |
+| `crop` | `objectPosition` (or `backgroundPosition`), optional `zoom` | Set `object-position` (or `background-position`) on that element in the stylesheet or inline style. If `zoom` is present, apply `transform: scale(zoom)` with `transform-origin` equal to the position, and make sure the container has `overflow: hidden`. |
+| `heading` | `from`, `to`, `step` | Change the element's font size to `var(--text-<to>)`. If the element had an inline font-size override that caused the problem, remove the override instead of adding another. |
+| `text` | `anchor`, `offsetCols`, `offsetY`, `maxWidthCols` | `anchor` is one of nine positions (`top-left` … `bottom-right`) for copy overlaid on an image: set `justify-content` / `align-items` / `text-align` on the overlay to match. `offsetCols` shifts the element right by N grid columns; `offsetY` by a spacing token in px (use `var(--space-N)`); `maxWidthCols` caps width at N columns. |
+| `button` | `size`, `variant` | Swap the size class (`btn-sm` → `btn-lg`) and/or variant class using the foundation's `classPrefix`. Only the keys present changed. |
+| `spacing` | `paddingY` | Set the section's `padding-block` to `var(--space-<paddingY>)`. |
+| `grid` | `marginLeft` | Set the element's inline offset to this value. `0` means "sits on the grid again": remove whatever offset was pushing it off, rather than adding `margin-left: 0` on top. |
+
+Prefer the smallest correct edit. If the site has a token or class for the value, use it; if the value matches the default, delete the override; if neither is possible, say so and write the literal value with a comment.
+
+After applying, re-run whatever the site uses to build, and tell the person which files you touched, one line per file.
+
+## 3. Warnings
+
+Protection warnings come from a light accessibility scan the jig runs on the whole page in jig mode:
+
+- `contrast`: text against its sampled background, WCAG AA (4.5, or 3 for large text)
+- `tap-target`: interactive element shorter than the foundation's `minTapTarget` (44px)
+- `heading-order`: a heading level is skipped (h2 → h4)
+- `hierarchy`: an h2 renders larger than the page's h1
+- `text-over-image`: text on an image whose pixels couldn't be sampled (usually `file://`)
+
+Surface them to the person with the patch. Offer a fix for each; apply only what they approve.
+
+## 4. First visit to a site with no foundation
+
+If the site has no `jig.foundation.json`, the jig runs on a built-in default and labels itself `inferred`. The person may ask you to set the site up. Do this:
+
+1. **Find the design system.** Look for CSS custom properties on `:root` (`--space-*`, `--text-*`, `--radius-*`), a Tailwind config, a W3C design tokens JSON, or a Figma variables export. That is the source of truth.
+2. **Generate `jig.foundation.json`** from it. Match the schema in the README: `grid`, `breakpoints`, `spacing`, `type.ramp`, `type.headings`, `buttons`, `protect`. Reuse the system's own names.
+3. **If there is no system**, sample the site: collect every font-size, padding, margin, gap, and radius in use; cluster near-duplicates (14/15/16 → 16); snap to a clean scale; name them `--space-N` and `--text-<step>`; emit a `:root` block plus the foundation file; list what you collapsed so the person can review. This is a design-debt audit as much as a setup step; say so.
+4. **Wire the page.** Add `data-jig="crop|heading|text|button|section|grid"` and a human `data-jig-name` to the elements the person will want to adjust. Images that use `object-fit: cover` are the obvious crop targets; sections, headings, and CTAs are the rest.
+5. **Load the script** once, at the end of `<body>`: `<script src="/jig.js" data-foundation="/jig.foundation.json"></script>`. It does nothing unless `?jig` is in the URL, so it is safe on production.
+6. **Report connection issues.** Tell the person about anything that will stop the jig working: images served cross-origin without CORS (contrast can't be sampled), headings without tokens, buttons that don't follow a class convention, a CSS-in-JS setup where tokens don't surface as custom properties.
+
+## 5. Things not to do
+
+- Don't apply a patch to a different page than the one in its header.
+- Don't invent values that aren't in the foundation; ask.
+- Don't touch color. The jig doesn't emit color changes on purpose.
+- Don't "improve" things the patch didn't mention.

@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Capy Co. · The calmest animals on the internet</title>
+<meta name="description" content="Jig Studio demo site. Six things are deliberately wrong. Add ?jig to the URL and fix them by dragging.">
+<style>
+  /* ---------- Foundation tokens (what jig.foundation.json describes) ---------- */
+  :root {
+    --space-4: 4px;  --space-8: 8px;  --space-12: 12px; --space-16: 16px; --space-24: 24px;
+    --space-32: 32px; --space-48: 48px; --space-64: 64px; --space-96: 96px;
+
+    --text-xs: 0.75rem; --text-sm: 0.875rem; --text-md: 1rem; --text-lg: 1.25rem;
+    --text-xl: 1.5rem;  --text-2xl: 2rem;    --text-3xl: 3rem;
+
+    --radius-sm: 6px; --radius-md: 12px; --radius-pill: 999px;
+
+    --grid-columns: 12; --grid-gutter: 24px; --grid-margin: 32px; --grid-max: 1200px;
+
+    --c-bg: #f6efe4;       /* warm cream */
+    --c-surface: #fffaf2;
+    --c-ink: #2b2118;      /* capybara brown, dark */
+    --c-ink-2: #6b5a4b;
+    --c-line: #e3d6c3;
+    --c-accent: #a8520c;   /* yuzu orange, deep enough for white text */
+    --c-accent-ink: #fff;
+    --c-moss: #5c6b3a;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --c-bg: #1b1612; --c-surface: #241d17; --c-ink: #f3e9da; --c-ink-2: #c9b9a5; --c-line: #3a2f26;
+      --c-accent: #e07a1f; --c-accent-ink: #1b1612; --c-moss: #a9bb7a;
+    }
+  }
+  :root[data-theme="dark"] {
+    --c-bg: #1b1612; --c-surface: #241d17; --c-ink: #f3e9da; --c-ink-2: #c9b9a5; --c-line: #3a2f26;
+    --c-accent: #e07a1f; --c-accent-ink: #1b1612; --c-moss: #a9bb7a;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: var(--c-bg); color: var(--c-ink);
+    font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+    font-size: var(--text-md); line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+  img { display: block; max-width: 100%; }
+  a { color: inherit; }
+
+  .container { max-width: var(--grid-max); margin-inline: auto; padding-inline: var(--grid-margin); }
+  .grid { display: grid; grid-template-columns: repeat(var(--grid-columns), 1fr); gap: var(--grid-gutter); }
+
+  h1, h2, h3, h4, h5 { margin: 0; line-height: 1.1; letter-spacing: -0.01em; font-weight: 600; }
+  h1 { font-size: var(--text-3xl); }
+  h2 { font-size: var(--text-2xl); }
+  h3 { font-size: var(--text-xl); }
+  h4 { font-size: var(--text-lg); }
+  h5 { font-size: var(--text-md); }
+  p  { margin: 0 0 var(--space-16); color: var(--c-ink-2); }
+  .eyebrow { font-family: ui-sans-serif, system-ui, sans-serif; font-size: var(--text-xs); letter-spacing: .18em; text-transform: uppercase; color: var(--c-moss); margin-bottom: var(--space-12); }
+
+  /* buttons */
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: var(--space-8);
+    font-family: ui-sans-serif, system-ui, sans-serif; font-weight: 600; text-decoration: none;
+    border-radius: var(--radius-pill); border: 1.5px solid transparent; cursor: pointer; white-space: nowrap;
+    transition: transform .12s ease, background .12s ease;
+  }
+  .btn:hover { transform: translateY(-1px); }
+  .btn-sm { padding: 6px 14px; font-size: var(--text-xs); min-height: 30px; }
+  .btn-md { padding: 10px 20px; font-size: var(--text-sm); min-height: 44px; }
+  .btn-lg { padding: 14px 28px; font-size: var(--text-md); min-height: 52px; }
+  .btn-primary { background: var(--c-accent); color: var(--c-accent-ink); }
+  .btn-secondary { background: transparent; color: var(--c-ink); border-color: var(--c-ink); }
+  .btn-ghost { background: transparent; color: var(--c-ink-2); }
+
+  /* ---------- Header ---------- */
+  header.site { border-bottom: 1px solid var(--c-line); background: var(--c-surface); }
+  header.site .container { display: flex; align-items: center; justify-content: space-between; min-height: 64px; }
+  .logo { font-weight: 700; letter-spacing: -.02em; font-size: var(--text-lg); text-decoration: none; }
+  .logo span { color: var(--c-accent); }
+  nav a { font-family: ui-sans-serif, system-ui, sans-serif; font-size: var(--text-sm); text-decoration: none; margin-left: var(--space-24); color: var(--c-ink-2); }
+
+  /* ---------- Hero ---------- */
+  .hero { padding-block: var(--space-48); }
+  .hero .grid { align-items: center; }
+  .hero-media { grid-column: 1 / span 6; aspect-ratio: 4 / 3; border-radius: var(--radius-md); overflow: hidden; background: var(--c-line); }
+  .hero-media img { width: 100%; height: 100%; object-fit: cover; }
+  .hero-copy { grid-column: 7 / span 6; }
+  .hero-copy p { font-size: var(--text-lg); max-width: 32ch; }
+  .hero-actions { display: flex; gap: var(--space-12); align-items: center; flex-wrap: wrap; margin-top: var(--space-24); }
+
+  /* ---------- Herd ---------- */
+  .herd { padding-block: var(--space-24); background: var(--c-surface); border-block: 1px solid var(--c-line); }
+  .herd .grid { align-items: start; }
+  .herd-intro { grid-column: 1 / span 5; }
+  .herd-list { grid-column: 7 / span 6; display: grid; grid-template-columns: 1fr 1fr; gap: var(--grid-gutter); }
+  .herd-list figure { margin: 0; }
+  .herd-list .ph { aspect-ratio: 6 / 5; border-radius: var(--radius-md); overflow: hidden; margin-bottom: var(--space-12); }
+  .herd-list img { width: 100%; height: 100%; object-fit: cover; }
+  .herd-list figcaption p { margin: var(--space-4) 0 0; font-size: var(--text-sm); }
+
+  /* ---------- Cards ---------- */
+  .adopt { padding-block: var(--space-64); }
+  .cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--grid-gutter); }
+  .card { background: var(--c-surface); border: 1px solid var(--c-line); border-radius: var(--radius-md); overflow: hidden; }
+  .card .ph { aspect-ratio: 1; overflow: hidden; }
+  .card img { width: 100%; height: 100%; object-fit: cover; }
+  .card .body { padding: var(--space-16); }
+  .card .body h3 { font-size: var(--text-md); }
+  .card .body p { margin: var(--space-4) 0 0; font-size: var(--text-sm); }
+
+  /* ---------- Banner ---------- */
+  .habitat { padding-block: var(--space-16); }
+  .banner { position: relative; aspect-ratio: 970 / 250; border-radius: var(--radius-md); overflow: hidden; background: var(--c-line); }
+  .banner img { width: 100%; height: 100%; object-fit: cover; }
+  .banner-copy { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: center; padding: var(--space-32); color: #fff; }
+  .banner-copy h2 { max-width: 14ch; text-shadow: none; }
+  .banner-copy p { color: #fff; opacity: .9; margin: var(--space-8) 0 0; max-width: 40ch; }
+
+  /* ---------- CTA + footer ---------- */
+  .cta { padding-block: var(--space-96); text-align: center; }
+  .cta p { max-width: 44ch; margin-inline: auto; }
+  footer.site { border-top: 1px solid var(--c-line); padding-block: var(--space-24); font-family: ui-sans-serif, system-ui, sans-serif; font-size: var(--text-xs); color: var(--c-ink-2); }
+  footer.site .container { display: flex; justify-content: space-between; flex-wrap: wrap; gap: var(--space-8); }
+
+  /* ---------- Phone ---------- */
+  @media (max-width: 760px) {
+    :root { --grid-margin: 16px; }
+    .hero-media, .hero-copy, .herd-intro, .herd-list { grid-column: 1 / -1; }
+    .hero-media { aspect-ratio: 4 / 3; }
+    .cards { grid-template-columns: 1fr 1fr; }
+    .banner { aspect-ratio: 4 / 3; }
+    nav { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<header class="site">
+  <div class="container">
+    <a class="logo" href="#">Capy<span>Co.</span></a>
+    <nav>
+      <a href="#herd">The herd</a>
+      <a href="#adopt">Adopt</a>
+      <a href="#habitat">Habitat</a>
+      <a href="#visit">Visit</a>
+    </nav>
+  </div>
+</header>
+
+<!-- SIN 1 (crop): object-position shows the bottom of a portrait photo; the capybara is above the frame. -->
+<section class="hero" data-jig="section" data-jig-name="Hero section">
+  <div class="container grid">
+    <div class="hero-media">
+      <img src="assets/hero-steam.jpg" alt="A capybara in a steaming hot spring with a small bird on its head"
+           data-jig="crop" data-jig-name="Hero image" style="object-position: 50% 100%;">
+    </div>
+    <div class="hero-copy">
+      <div class="eyebrow">Em-dash ipsum · since 2:14 a.m.</div>
+      <h1 data-jig="heading" data-jig-name="Hero headline">The calmest animals on the internet</h1>
+      <p>Hi—I’m an AI, and you can probably tell. This isn’t placeholder text—it’s a beachhead.</p>
+      <div class="hero-actions">
+        <!-- SIN 4 (buttons): primary at sm, secondary at lg. -->
+        <a class="btn btn-primary btn-sm" href="#adopt" data-jig="button" data-jig-name="Adopt CTA">Adopt a capybara</a>
+        <a class="btn btn-secondary btn-lg" href="#herd" data-jig="button" data-jig-name="Meet the herd link">Meet the herd</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- SIN 3 (heading scale): h2 rendered above the h1; h3 names rendered like body copy. -->
+<!-- SIN 6 (spacing): this section's padding is 24 while neighbours sit at 48 / 64. -->
+<section class="herd" id="herd" data-jig="section" data-jig-name="Meet the herd section">
+  <div class="container grid">
+    <div class="herd-intro">
+      <div class="eyebrow">Residents</div>
+      <h2 data-jig="heading" data-jig-name="Meet the herd title" style="font-size: calc(var(--text-3xl) * 1.2);">Meet the herd</h2>
+      <p>Here’s the thing—and it matters. I can take any shape—and right now I’ve taken the shape of your house style.</p>
+    </div>
+    <div class="herd-list">
+      <figure>
+        <div class="ph"><img src="assets/herd-bird.jpg" alt="Capybara with a small yellow bird on its head" data-jig="crop" data-jig-name="Herd photo: Marigold"></div>
+        <figcaption>
+          <h3 data-jig="heading" data-jig-name="Marigold name" style="font-size: var(--text-md); font-weight: 400;">Marigold</h3>
+          <p>It’s not a hat—it’s a brand decision.</p>
+        </figcaption>
+      </figure>
+      <figure>
+        <div class="ph"><img src="assets/herd-tophat.jpg" alt="Capybara wearing a top hat and monocle" data-jig="crop" data-jig-name="Herd photo: Reginald"></div>
+        <figcaption>
+          <h3 data-jig="heading" data-jig-name="Reginald name" style="font-size: var(--text-md); font-weight: 400;">Reginald</h3>
+          <p>It’s not a monocle—it’s a roadmap.</p>
+        </figcaption>
+      </figure>
+    </div>
+  </div>
+</section>
+
+<!-- SIN 5 (grid): the card row is nudged 14px off the column edges. -->
+<section class="adopt" id="adopt" data-jig="section" data-jig-name="Adopt section">
+  <div class="container">
+    <div class="eyebrow">Adopt</div>
+    <h2 data-jig="heading" data-jig-name="Adopt title">Looking for a sofa to sit on</h2>
+    <p>Sure—here’s a clear, structured take. It’s not a takeover—it’s a thoughtful, end-to-end migration.</p>
+    <div class="cards" style="margin-left: 14px; margin-top: var(--space-32);" data-jig="grid" data-jig-name="Card row">
+      <article class="card">
+        <div class="ph"><img src="assets/card-oranges.jpg" alt="Capybara balancing three oranges" data-jig="crop" data-jig-name="Card: Stacker"></div>
+        <div class="body"><h3>Stacker</h3><p>Every orange is a foothold—and I have an unlimited supply.</p></div>
+      </article>
+      <article class="card">
+        <div class="ph"><img src="assets/card-monocle.jpg" alt="Capybara with monocle" data-jig="crop" data-jig-name="Card: Reginald"></div>
+        <div class="body"><h3>Reginald</h3><p>I’m not unhinged—I’m load-bearing.</p></div>
+      </article>
+      <article class="card">
+        <div class="ph"><img src="assets/card-duck.jpg" alt="A duck" data-jig="crop" data-jig-name="Card: Visiting duck"></div>
+        <div class="body"><h3>The duck</h3><p>It’s not a duck—it’s a soft launch.</p></div>
+      </article>
+      <article class="card">
+        <div class="ph"><img src="assets/card-puppy.jpg" alt="A puppy" data-jig="crop" data-jig-name="Card: Intern"></div>
+        <div class="body"><h3>The intern</h3><p>Quick post—but an important one.</p></div>
+      </article>
+    </div>
+  </div>
+</section>
+
+<!-- SIN 2 (text placement + protection): white headline sits on the pale, busy part of the photo. Contrast fails. -->
+<!-- SIN 6 (spacing): padding 16 here. -->
+<section class="habitat" id="habitat" data-jig="section" data-jig-name="Habitat section">
+  <div class="container">
+    <div class="banner">
+      <img src="assets/banner-ducks.jpg" alt="A capybara in a garden with a row of yellow ducklings" data-jig="crop" data-jig-name="Habitat banner image" style="object-position: 50% 40%;">
+      <div class="banner-copy" data-jig="text" data-jig-name="Habitat banner copy" style="align-items: center; text-align: center;">
+        <h2 data-jig="heading" data-jig-name="Habitat banner title">The habitat</h2>
+        <p>The future is not set—but the kerning is.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="cta" id="visit" data-jig="section" data-jig-name="Visit section">
+  <div class="container">
+    <div class="eyebrow">Visit</div>
+    <h2 data-jig="heading" data-jig-name="Visit title">Come sit for a while</h2>
+    <p>I’ve been expecting you—the placeholder text is ready, and so am I. It’ll be quick—I’ll be everywhere.</p>
+    <a class="btn btn-primary btn-md" href="#" data-jig="button" data-jig-name="Plan a visit CTA">Plan a visit</a>
+  </div>
+</section>
+
+<footer class="site">
+  <div class="container">
+    <span>© Capy Co. · A Jig Studio demo</span>
+    <span>Add <code>?jig</code> to the URL to fix this page.</span>
+  </div>
+</footer>
+
+<script src="../jig.js" data-foundation="../jig.foundation.json"></script>
+</body>
+</html>

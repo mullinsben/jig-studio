@@ -1,0 +1,22 @@
+{
+  "name": "capy-co",
+  "version": 1,
+  "grid": { "columns": 12, "gutter": 24, "margin": 32, "maxWidth": 1200 },
+  "breakpoints": { "phone": 390, "desktop": 1440 },
+  "spacing": [4, 8, 12, 16, 24, 32, 48, 64, 96],
+  "type": {
+    "ramp": ["xs", "sm", "md", "lg", "xl", "2xl", "3xl"],
+    "headings": { "h1": "3xl", "h2": "2xl", "h3": "xl", "h4": "lg", "h5": "md" }
+  },
+  "buttons": {
+    "sizes": ["sm", "md", "lg"],
+    "variants": ["primary", "secondary", "ghost"],
+    "classPrefix": "btn-"
+  },
+  "protect": {
+    "safeInset": 24,
+    "minContrast": 4.5,
+    "minTapTarget": 44,
+    "textOverImage": "warn"
+  }
+}
