@@ -39,7 +39,7 @@
     { id: 'images', label: 'images', ctls: ['crop'] },
     { id: 'text', label: 'type', ctls: ['type', 'heading', 'text'] },
     { id: 'buttons', label: 'buttons', ctls: ['button'] },
-    { id: 'spacing', label: 'spacing', ctls: ['section'] },
+    { id: 'spacing', label: 'spacing', ctls: ['section', 'grid'] },
     { id: 'ax', label: 'ax', ctls: [] }          // paints protection failures pink on the page
   ];
   const groupOf = ctl => (JIGS.find(j => j.ctls.includes(ctl)) || {}).id;
@@ -911,6 +911,7 @@
     if (!el) { if (!state.selected) badge.hidden = true; return; }
     setBadge(el, Controls[el.dataset.jigCtl].label);
   }
+  function deselect() { $$('.jig-selected').forEach(x => x.classList.remove('jig-selected')); state.selected = null; hoverEl = null; toolbar.hidden = true; badge.hidden = true; }
   function select(el) {
     $$('.jig-selected').forEach(e => e.classList.remove('jig-selected'));
     state.selected = el; el.classList.add('jig-selected');
@@ -1407,7 +1408,7 @@
   function openDevice(id) {
     closeDevice();
     const d = DEVICES.find(x => x.id === id); if (!d) return;
-    state.device = d;
+    state.device = d; deselect();
     const u = new URL(location.href); u.searchParams.set('jig', 'embed'); u.searchParams.set('device', d.id); u.searchParams.set('jigs', Array.from(state.jigs).join(','));
     deviceEl = document.createElement('div'); deviceEl.id = 'jig-device';
     deviceEl.innerHTML = `<button class="close" title="close">×</button><div class="shell"><div class="cap">${d.name} · ${d.w}×${d.h} · changes here are tagged ${d.bp}</div><iframe width="${d.w}" height="${d.h}" style="width:${d.w}px !important;height:${d.h}px !important" title="${d.name} preview"></iframe></div>`;
@@ -1454,7 +1455,7 @@
       // inside a device frame: no HUD; the parent page's HUD collects our changes and drives the grid
       (url.searchParams.get('jigs') || '').split(',').filter(Boolean).forEach(id => state.jigs.add(id));
       $$('.jig-el').forEach(el => el.classList.toggle('jig-active', state.jigs.has(groupOf(el.dataset.jigCtl))));
-      on(window, 'message', e => { if (e.data && e.data.jig === 'jigs') { state.jigs = new Set(e.data.jigs); $$('.jig-el').forEach(el => el.classList.toggle('jig-active', state.jigs.has(groupOf(el.dataset.jigCtl)))); paintAX(); } });
+      on(window, 'message', e => { if (e.data && e.data.jig === 'jigs') { state.jigs = new Set(e.data.jigs); $$('.jig-el').forEach(el => el.classList.toggle('jig-active', state.jigs.has(groupOf(el.dataset.jigCtl)))); if (state.selected && !state.selected.classList.contains('jig-active')) deselect(); paintAX(); } });
       on(window, 'message', e => { if (e.data && e.data.jig === 'grid') { if (e.data.columns) { state.F.grid.columns = e.data.columns; if (state.grid) drawGrid(); } toggleGrid(!!e.data.on); } });
       const imgs0 = $$('img').filter(i => !i.complete);
       await Promise.all(imgs0.map(i => new Promise(r => { i.onload = i.onerror = r; })));
