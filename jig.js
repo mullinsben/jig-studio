@@ -10,7 +10,8 @@
   const url = new URL(location.href);
   const wanted = url.searchParams.has('jig') || location.hash === '#jig' || safeGet('jig') === '1' || (document.currentScript && document.currentScript.dataset.jigInjected);
   if (!wanted) return;
-  if (window.__jig) return;
+  if (window.__jig || window.__jigLoading) return;   // one jig per document; boot is async, so claim the slot now
+  window.__jigLoading = true;
   const EMBED = url.searchParams.get('jig') === 'embed' && window.parent !== window;
   const DEVICE = url.searchParams.get('device') || '';
   const DEVICES = [
@@ -286,12 +287,28 @@
 
   // ------------------------------------------------------------ change log
   function record(el, ctl, data, summary) {
+    if (state.replaying) return;   // the frame is catching up with the desktop; those changes are already in the patch
     const k = keyOf(el, ctl);
     const base = { el: selectorOf(el), name: nameOf(el), ctl, bp: state.bp, ...(DEVICE ? { device: DEVICE } : {}) };
     state.changes.set(k, Object.assign(base, data, { summary }));
     renderHUD(); postToParent(); scanSoon();
   }
-  function unrecord(el, ctl) { state.changes.delete(keyOf(el, ctl)); renderHUD(); postToParent(); }
+  function unrecord(el, ctl) { if (state.replaying) return; state.changes.delete(keyOf(el, ctl)); renderHUD(); postToParent(); }
+  // Apply a patch entry to this document with the same controls a person would use. Used when a device frame catches up with the desktop.
+  function applyChange(c) {
+    const el = $(c.el); if (!el) return false;
+    try {
+      switch (c.ctl) {
+        case 'crop': if (el.__jigSetCrop) { const m = /([\d.]+)%\s+([\d.]+)%/.exec(c.objectPosition || c.backgroundPosition || ''); el.__jigSetCrop(m ? +m[1] : undefined, m ? +m[2] : undefined, c.zoom); return true; } break;
+        case 'type': case 'heading': if (c.step && el.__jigStepType) el.__jigStepType(c.step); if (c.contrast) fixContrast(el); return true;
+        case 'text': if (c.scrim && el.__jigSetScrim) el.__jigSetScrim(c.scrim); return true;   // placement is per breakpoint; only the scrim carries over
+        case 'button': if (c.size && el.__jigSetSize) el.__jigSetSize(c.size); if (c.variant && el.__jigSetVariant) el.__jigSetVariant(c.variant); return true;
+        case 'spacing': if (c.paddingY && el.__jigSetPad) el.__jigSetPad(c.paddingY); return true;
+        case 'grid': if (el.__jigSetML && typeof c.marginLeft === 'number') el.__jigSetML(c.marginLeft); return true;
+      }
+    } catch (e) {}
+    return false;
+  }
   function postToParent() {
     if (!EMBED) return;
     try { window.parent.postMessage({ jig: 'frame', changes: Array.from(state.changes.values()), warnings: state.warnings.map(w => ({ kind: w.kind, el: selectorOf(w.el), name: nameOf(w.el), msg: w.msg, value: w.value, min: w.min })), bp: state.bp, device: DEVICE }, '*'); } catch (e) {}
@@ -414,9 +431,14 @@
         const sc = Math.max(W / nw, H / nh) * zoom; const sw = nw * sc, sh = nh * sc;
         const px_ = sw > W + 1 ? clamp((fx * sw - W / 2) / (sw - W), 0, 1) : 0.5;
         const py_ = sh > H + 1 ? clamp((fy * sh - H / 2) / (sh - H), 0, 1) : 0.5;
-        const before = [ox, oy]; ox = Math.round(px_ * 1000) / 10; oy = Math.round(py_ * 1000) / 10; apply(); commit();
-        return Math.abs(before[0] - ox) > 0.5 || Math.abs(before[1] - oy) > 0.5;
+        // where the subject sits inside the window as currently cropped (0..1 across the visible box)
+        const visX = sw > W + 1 ? (fx * sw - (ox / 100) * (sw - W)) / W : 0.5, visY = sh > H + 1 ? (fy * sh - (oy / 100) * (sh - H)) / H : 0.5;
+        const inFrame = visX > 0.22 && visX < 0.78 && visY > 0.22 && visY < 0.78;
+        const nx = Math.round(px_ * 1000) / 10, ny = Math.round(py_ * 1000) / 10;
+        if (inFrame || (Math.abs(nx - ox) < 8 && Math.abs(ny - oy) < 8)) return false;   // already framed, or not worth the churn
+        ox = nx; oy = ny; apply(); commit(); return true;
       };
+      el.__jigSetCrop = (x, y, z) => { if (typeof x === 'number') ox = x; if (typeof y === 'number') oy = y; if (isImg && typeof z === 'number') zoom = clamp(z, 1, 4); apply(); commit(); };
       el.__jigReset = () => {
         ox = parsePos(orig.op)[0]; oy = parsePos(orig.op)[1]; zoom = zoom0; apply(); ['object-position', 'transform-origin', 'transform'].forEach(k => el.style.removeProperty(k)); if (orig.opInline) el.style[isImg ? 'objectPosition' : 'backgroundPosition'] = orig.opInline; if (orig.tr) el.style.transform = orig.tr; if (orig.to) el.style.transformOrigin = orig.to; unrecord(el, 'crop');
         if (wCols != null) { ['width', 'max-width'].forEach(k => box.style.removeProperty(k)); if (origBox.w) box.style.width = origBox.w; if (origBox.mw) box.style.maxWidth = origBox.mw; if (box !== el) el.style.removeProperty('width'); wCols = null; unrecord(el, 'size'); }
@@ -586,7 +608,8 @@
         if (el.dataset.jigCols) { data.maxWidthCols = +el.dataset.jigCols; bits.push(`max ${el.dataset.jigCols} cols`); }
         if (scrim !== 'none') { data.scrim = scrim; bits.push(`scrim ${scrim}`); }
         if (!bits.length) return unrecord(el, 'text');
-        record(el, 'text', data, 'moved: ' + bits.join(', '));
+        const movedBits = bits.filter(b => !/^scrim /.test(b));
+        record(el, 'text', data, (movedBits.length ? 'moved: ' + movedBits.join(', ') : '') + (data.scrim ? (movedBits.length ? ', ' : '') + 'scrim ' + data.scrim : ''));
       }
       el.__jigResetText = el.__jigReset = () => {
         Object.assign(el.style, { marginLeft: orig.ml, marginTop: orig.mt, maxWidth: orig.mw, alignItems: orig.ai, textAlign: orig.ta, justifyContent: '' });
@@ -660,6 +683,8 @@
       el.__jigReset = () => { el.classList.remove(P + size, P + variant); el.classList.add(P + origSize, P + origVar); size = origSize; variant = origVar; unrecord(el, 'button'); refreshToolbar(el); };
       el.__jigStepSize = d => { if ((d > 0 && B.sizes.indexOf(size) < B.sizes.length - 1) || (d < 0 && B.sizes.indexOf(size) > 0)) { cycle('size', d); return true; } return false; };
       el.__jigSizeIndex = () => B.sizes.indexOf(size); el.__jigVariant = () => variant;
+      el.__jigSetSize = tok => { const t = B.sizes.indexOf(tok); let g = 0; while (t >= 0 && B.sizes.indexOf(size) !== t && g++ < 8) cycle('size', B.sizes.indexOf(size) < t ? 1 : -1); };
+      el.__jigSetVariant = tok => { let g = 0; while (B.variants.includes(tok) && variant !== tok && g++ < 8) cycle('variant', 1); };
     }
   };
 
@@ -691,6 +716,8 @@
     el.__jigReset = () => { si = si0; vi = vi0; apply(); unrecord(el, 'button'); refreshToolbar(el); };
     el.__jigStepSize = d => { if ((d > 0 && si < sizes.length - 1) || (d < 0 && si > 0)) { cyc('size', d); return true; } return false; };
     el.__jigSizeIndex = () => si; el.__jigVariant = () => variants[vi].token;
+    el.__jigSetSize = tok => { const t = sizes.findIndex(x => x.token === tok); let g = 0; while (t >= 0 && si !== t && g++ < 8) cyc('size', si < t ? 1 : -1); };
+    el.__jigSetVariant = tok => { let g = 0; while (variants.some(v => v.token === tok) && variants[vi].token !== tok && g++ < 8) cyc('variant', 1); };
   }
 
   // --- section: padding on the spacing scale --------------------------------
@@ -711,6 +738,7 @@
         refreshToolbar(el);
       }
       el.__jigReset = () => { idx = origIdx; el.style.removeProperty('padding-block'); unrecord(el, 'spacing'); refreshToolbar(el); };
+      el.__jigSetPad = pxv => { const i = sp.indexOf(nearest(sp, pxv)); if (i >= 0 && i !== idx) step(i - idx); };
     }
   };
 
@@ -1307,10 +1335,10 @@
     if (!on) {
       (state.normalize || []).forEach(n => { n.el.style.removeProperty(n.prop); if (n.prev) n.el.style.setProperty(n.prop, n.prev); });
       (state.autoFixes || []).forEach(f => { if (f.undo) { f.undo(); unrecord(f.el, f.ctl || 'grid'); } else if (f.el.__jigReset) f.el.__jigReset(); });
-      state.normalize = null; state.autoFixes = []; $('#jig-norm-btn').classList.remove('on'); renderHUD(); scanSoon(); return;
+      state.normalize = null; state.autoFixes = []; { const nb = $('#jig-norm-btn'); if (nb) nb.classList.remove('on'); } renderHUD(); scanSoon(); return;
     }
     const F = state.F; const out = [];
-    const res = ($('#jig-q-res') && $('#jig-q-res').value) || '16';
+    const res = state.autoRes || ($('#jig-q-res') && $('#jig-q-res').value) || '16';
     const { typeSteps, spaceSteps } = quantizeScales(res);
     state.normalizeRes = res;
     // buttons are left to the button control (their padding IS their size); snapping them would shrink tap targets the scan then has to grow back
@@ -1330,12 +1358,11 @@
       ['padding-top', 'padding-bottom', 'padding-left', 'padding-right', 'margin-top', 'margin-bottom'].forEach(prop => snap(el, prop, px(c[prop]), spaceSteps, 2, 160));
       if (/flex|grid/.test(c.display)) ['row-gap', 'column-gap'].forEach(prop => snap(el, prop, px(c[prop]), spaceSteps, 2, 160));
     });
-    state.normalize = out; $('#jig-norm-btn').classList.add('on');
+    state.normalize = out; { const nb = $('#jig-norm-btn'); if (nb) nb.classList.add('on'); }
     autoFixAX();
     autoHarmonizeButtons();
     autoAlignRows();
-    autoFocusImages();
-    renderHUD(); scanSoon();
+    return autoFocusImages().then(() => { renderHUD(); scanSoon(); });
   }
   // Where is the subject? Faces when the browser can find them; otherwise the centroid of the image's high-detail region.
   async function focalPoint(img) {
@@ -1358,7 +1385,11 @@
       cells.sort((a, b) => b[1] - a[1]); const top = cells.slice(0, Math.max(20, Math.floor(cells.length * 0.12)));
       let sx = 0, sy = 0, sw = 0; top.forEach(([i, w]) => { sx += (i % N) * w; sy += Math.floor(i / N) * w; sw += w; });
       if (!sw) return null;
-      return { fx: (sx / sw + 0.5) / N, fy: (sy / sw + 0.5) / N, how: 'detail centroid' };
+      const fx = (sx / sw + 0.5) / N, fy = (sy / sw + 0.5) / N;
+      // how tightly the strong edges cluster around that point: a subject is tight, a busy background is everywhere
+      let spread = 0; top.forEach(([i, w]) => { const dx = (i % N + 0.5) / N - fx, dy = (Math.floor(i / N) + 0.5) / N - fy; spread += w * Math.hypot(dx, dy); }); spread /= sw;
+      if (spread > 0.26) return null;   // detail is all over the frame; leave the crop alone
+      return { fx, fy, how: 'detail centroid', spread };
     } catch (e) { return null; }   // tainted canvas
   }
   // Blocks that sit a few px off a column line get put back on it (the demo's nudged card row, a container with a stray margin).
@@ -1544,9 +1575,12 @@
       // a page that doesn't ship jig.js (bookmarklet use) gets it injected into the frame
       try {
         const w = fr.contentWindow;
-        if (w && !w.__jig && SCRIPT_SRC) { const sc = w.document.createElement('script'); sc.src = SCRIPT_SRC; sc.dataset.jigInjected = '1'; w.document.body.appendChild(sc); }
+        if (w && !w.__jig && !w.__jigLoading && SCRIPT_SRC) { const sc = w.document.createElement('script'); sc.src = SCRIPT_SRC; sc.dataset.jigInjected = '1'; w.document.body.appendChild(sc); }
       } catch (e) {}
       if (state.grid) setTimeout(() => fr.contentWindow && fr.contentWindow.postMessage({ jig: 'grid', on: true }, '*'), 600);
+      // the frame starts where the desktop is: desktop changes replay silently, auto runs at the same strength if it's on
+      let tries = 0; const catchUp = () => { let w; try { w = fr.contentWindow; } catch (x) { return; } if (!w) return; if (w.__jig) { w.postMessage({ jig: 'replay', changes: Array.from(state.changes.values()).filter(c => !c.device), auto: state.normalize ? (state.autoRes || $('#jig-q-res').value) : null }, '*'); } else if (tries++ < 50) setTimeout(catchUp, 150); };
+      setTimeout(catchUp, 150);
     };
     const fit = () => { const sh = $('.shell', deviceEl); const sc = Math.min(1, (window.innerHeight - 90) / (d.h + 28), (window.innerWidth - 400) / (d.w + 28)); sh.style.transform = `scale(${sc})`; };
     fit(); on(window, 'resize', fit);
@@ -1588,6 +1622,15 @@
       (url.searchParams.get('jigs') || '').split(',').filter(Boolean).forEach(id => state.jigs.add(id));
       $$('.jig-el').forEach(el => el.classList.toggle('jig-active', state.jigs.has(groupOf(el.dataset.jigCtl))));
       on(window, 'message', e => { if (e.data && e.data.jig === 'jigs') { state.jigs = new Set(e.data.jigs); $$('.jig-el').forEach(el => el.classList.toggle('jig-active', state.jigs.has(groupOf(el.dataset.jigCtl)))); if (state.selected && !state.selected.classList.contains('jig-active')) deselect(); paintAX(); } });
+      on(window, 'message', async e => {
+        if (!e.data || e.data.jig !== 'replay') return;
+        state.replaying = true;
+        try {
+          (e.data.changes || []).forEach(applyChange);
+          if (e.data.auto) { state.autoRes = e.data.auto; await normalizePage(true); }
+        } finally { state.replaying = false; }
+        scanProtection(); postToParent();
+      });
       on(window, 'message', e => { if (e.data && e.data.jig === 'grid') { if (e.data.columns) { state.F.grid.columns = e.data.columns; if (state.grid) drawGrid(); } toggleGrid(!!e.data.on); } });
       const imgs0 = $$('img').filter(i => !i.complete);
       await Promise.all(imgs0.map(i => new Promise(r => { i.onload = i.onerror = r; })));
@@ -1639,6 +1682,7 @@
     $('#jig-found-btn').onclick = toggleFoundationPanel;
     $('#jig-norm-btn').onclick = () => normalizePage(!state.normalize);
     $('#jig-q-res').onchange = () => { if (state.normalize) { normalizePage(false); normalizePage(true); } };
+    if (state.F.mode && state.F.mode !== 'inferred') $('#jig-q-res').value = '32';   // the site has tokens: light = its own steps; medium/strict stay on offer
     $('#jig-reset-btn').onclick = () => { normalizePage(false); $$('.jig-el').forEach(el => el.__jigReset && el.__jigReset()); state.changes.clear(); state.frame = { changes: [], warnings: [] }; closeDevice(); scanProtection(); };
     $('#jig-copy-btn').onclick = copyPatch;
 
