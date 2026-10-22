@@ -755,6 +755,9 @@
     #jig-hud .tools { display: flex; gap: 6px; padding: 8px 12px; border-bottom: 1px solid #262833; flex-wrap: wrap; }
     #jig-hud .tools button, #jig-hud footer button { font: 600 12px ui-sans-serif, system-ui; background: #262833; color: #fff; border: 0; border-radius: 6px; padding: 6px 10px; cursor: pointer; }
     #jig-hud .tools button.on { background: #2bb673; }
+    #jig-hud .tools button.ghost { background: transparent; color: #9aa3b8; border: 1px solid #262833; }
+    #jig-hud .tools button.ghost.on { background: transparent; color: #fff; border-color: #3f6fff; }
+    #jig-hud:not(.advanced) .adv, #jig-hud:not(.advanced) .src { display: none; }
     #jig-hud .tools button:hover, #jig-hud footer button:hover { background: #3f6fff; }
     #jig-hud .list { overflow: auto; padding: 8px 12px; flex: 1; }
     #jig-hud h6 { margin: 8px 0 4px; font-size: 11px; letter-spacing: .14em; text-transform: uppercase; opacity: .6; }
@@ -953,12 +956,13 @@
     <header><b>jig <i>studio</i></b><small id="jig-bp"></small><button class="min" id="jig-min-btn" title="minimize">–</button></header>
     <div class="tools">
       <button id="jig-grid-btn" title="g">grid</button>
-      <select id="jig-cols-sel" title="grid columns"></select>
-      <button id="jig-scan-btn">rescan</button>
-      <button id="jig-found-btn">foundation</button>
       <select id="jig-device-sel" title="device preview"><option value="">desktop</option>${DEVICES.map(d => `<option value="${d.id}">${d.name} · ${d.w}×${d.h}</option>`).join('')}</select>
+      <button id="jig-adv-btn" class="ghost" title="foundation, columns, rescan, reset">advanced</button>
+      <span class="adv"><select id="jig-cols-sel" title="grid columns"></select></span>
+      <span class="adv"><button id="jig-found-btn">foundation</button></span>
+      <span class="adv"><button id="jig-scan-btn">rescan</button></span>
+      <span class="adv"><button id="jig-reset-btn">reset all</button></span>
       <button id="jig-phone-btn" hidden>phone preview</button>
-      <button id="jig-reset-btn">reset all</button>
     </div>
     <div class="src" id="jig-src"></div>
     <div class="list"><h6>changes</h6><div id="jig-changes"></div><h6>protection</h6><div id="jig-warn"></div></div>
@@ -1122,6 +1126,9 @@
     $('#jig-min-btn').onclick = e => { e.stopPropagation(); hud.classList.toggle('collapsed'); $('#jig-min-btn').textContent = hud.classList.contains('collapsed') ? '+' : '–'; };
     $('#jig-device-sel').onchange = e => openDevice(e.target.value);
     $('#jig-grid-btn').onclick = () => toggleGrid();
+    const setAdv = on => { hud.classList.toggle('advanced', on); $('#jig-adv-btn').classList.toggle('on', on); safeSet('jig-advanced', on ? '1' : '0'); };
+    setAdv(safeGet('jig-advanced') === '1');
+    $('#jig-adv-btn').onclick = () => setAdv(!hud.classList.contains('advanced'));
     const colSel = $('#jig-cols-sel'); const colOpts = Array.from(new Set([2, 3, 4, 5, 6, 8, 10, 12, 16, state.F.grid.columns])).sort((a, b) => a - b);
     colSel.innerHTML = colOpts.map(n => `<option value="${n}"${n === state.F.grid.columns ? ' selected' : ''}>${n} col</option>`).join('');
     const origCols = state.F.grid.columns;
