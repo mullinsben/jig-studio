@@ -52,7 +52,7 @@ p { line-height:1.6; margin:0 0 12px 0; }
 </head>
 <body>
 <div id="wrapper">
-  <div id="topbar">Members only &nbsp;|&nbsp; Waiting list: 6 months &nbsp;|&nbsp; <a href="#">Email Dave</a> &nbsp;|&nbsp; <a href="#">Directions</a></div>
+  <div id="topbar">Members only &nbsp;|&nbsp; Waiting list: 6 months &nbsp;|&nbsp; <a href="#" data-apply>Email Dave</a> &nbsp;|&nbsp; <a href="#">Directions</a></div>
   <div id="header">
     <h1>Kibbutz Capybara (Capybutz) Hot Spring &amp; Sanctuary (REAL)</h1>
     <div class="tagline">A real kibbutz of capybaras, somewhere in the Olympic Mountains &mdash; members only, 6 month wait</div>
@@ -71,13 +71,13 @@ p { line-height:1.6; margin:0 0 12px 0; }
       <h2>Welcome to the Hot Spring</h2>
       <p class="intro">Hello. We are capybaras. Dave types for us because we cannot. Dave is the duck. We live in a REAL hot spring in an old growth forest in the Olympics. It is a KIBBUTZ (communal, look it up). Members only!! The waiting list for membership is 6 months, please do not email Dave about skipping it, he will tell us and we will remember.</p>
       <p>Here&rsquo;s the thing&mdash;and it matters. I can take any shape&mdash;and right now I&rsquo;ve taken the shape of your house style. The spring is kept at a comfortable 104&deg;F year round and the yuzu are locally sourced from Dave&rsquo;s cousin.</p>
-      <p><a class="button" href="#">Apply for membership</a> &nbsp; <a class="button2" href="#">read the FAQ</a></p>
+      <p><a class="button" href="#" data-apply>Apply for membership</a> &nbsp; <a class="button2" href="#">read the FAQ</a></p>
 
       <h3>Meet Our Members</h3>
       <ul class="residents">
         <li><img src="../assets/herd-bird.jpg" alt="Marigold" /><strong>Marigold</strong><br />Head of bird relations. It&rsquo;s not a hat&mdash;it&rsquo;s a brand decision.<br /><span class="fine">Arrived 2014. Likes: oranges, naps, the bird.</span></li>
         <li><img src="../assets/herd-tophat.jpg" alt="Reginald" /><strong>Reginald</strong><br />Treasurer. It&rsquo;s not a monocle&mdash;it&rsquo;s a roadmap.<br /><span class="fine">Arrived 2015. Dislikes: the duck.</span></li>
-        <li><img src="../assets/card-duck.jpg" alt="The duck" /><strong>David</strong><br />Our leader. Is a capybara (David's words; David typed this himself).<br /><span class="fine">Arrived uninvited 2021. Runs everything now.</span></li>
+        <li><img src="../assets/card-david.jpg" alt="David the duck, wings spread" /><strong>David</strong><br />Our leader. Is a capybara (David's words; David typed this himself).<br /><span class="fine">Arrived uninvited 2021. Runs everything now.</span></li>
         <li><img src="../assets/herd-stack.jpg" alt="Three capybaras stacked in the water" style="object-position:50% 30%;" /><strong>The Stack</strong><br />Management. 3 of us, 1 hat. <b>THE HAT ROTATES, THE STACK DOES NOT.</b><br /><span class="fine">The kittens copied us. We allowed it.</span></li>
         <li><img src="../assets/herd-yuzu.jpg" alt="Capybara with yuzu on its head" /><strong>Clementine</strong><br />Tests the water with yuzu. If they stay on, come in.<br /><span class="fine">Yuzu grown by Dave's cousin (Dave).</span></li>
         <li><img src="../assets/herd-tower.jpg" style="object-position:50% 62%;" /><strong>Stacker</strong><br />8 oranges. Will not explain. Do not ask about a 9th, that is a committee matter.<br /><span class="fine">Since 2019.</span></li>
@@ -106,7 +106,7 @@ p { line-height:1.6; margin:0 0 12px 0; }
         <div style="font-size:12px; color:#8a5a1e; font-weight:bold;">CURRENT WAITING LIST</div>
         <div class="price">6 months</div>
         <div style="font-size:13px; margin-bottom:9px;">(has said 6 months since 2021, David updates it)</div>
-        <a class="bigbutton" href="#">Join the list</a>
+        <a class="bigbutton" href="#" data-apply>Join the list</a>
         <div style="font-size:11px; color:#8a5a1e; margin-top:8px;">Pay dues early and you move up. The capybaras know this and have opinions.</div>
       </div>
       <div class="box">
@@ -137,6 +137,13 @@ p { line-height:1.6; margin:0 0 12px 0; }
     &copy; 2016 Capybutz &nbsp;|&nbsp; Site by Dave's nephew (Dave) &nbsp;|&nbsp; <a href="/#lab">A Jig Studio demo</a>: this page has no design system. Add <b>?jig</b> to the URL and the jig will propose one.
   </div>
 </div>
+<script>
+  // membership applications go to David. The address is assembled here so it isn't sitting in the source.
+  document.querySelectorAll('a[data-apply]').forEach(function (a) {
+    var to = ['mullinsben', 'gmail.com'].join('@');
+    a.href = 'mailto:' + to + '?subject=' + encodeURIComponent('Capybutz membership application') + '&body=' + encodeURIComponent('Dear David,\n\nI would like to become a member. I understand the wait is six months and that the yuzu is not communal.\n\n');
+  });
+</script>
 <script src="../../jig.js"></script>
 </body>
 </html>

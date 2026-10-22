@@ -170,7 +170,7 @@
       <p>We are thirty-one capybaras in an old-growth valley in the Olympic Mountains. The water is warm, the trees are older than your country, and there is no road. Membership is by invitation; the wait is six months. Yes, we are real. We do not know why you keep asking.</p>
       <div class="hero-actions">
         <!-- SIN 4 (buttons): primary at sm, secondary at lg. -->
-        <a class="btn btn-primary btn-sm" href="#adopt" data-jig="button" data-jig-name="Membership CTA">Become a member</a>
+        <a class="btn btn-primary btn-sm" href="#" data-apply data-jig="button" data-jig-name="Membership CTA">Become a member</a>
         <a class="btn btn-secondary btn-lg" href="#herd" data-jig="button" data-jig-name="Meet the herd link">Meet the herd</a>
       </div>
     </div>
@@ -235,8 +235,8 @@
         <div class="body"><h3>Reginald</h3><p>I run the invitation lottery for David. It is random. Writing to me goes to David.</p></div>
       </article>
       <article class="card">
-        <div class="ph"><img src="assets/card-duck.jpg" alt="A duck" data-jig="crop" data-jig-name="Card: Visiting duck"></div>
-        <div class="body"><h3>David</h3><p>The duck. Runs the valley, the list, the lottery, and us. Identifies as a capybara; we have stopped correcting him. Arrived uninvited in 2021. We work for David now.</p></div>
+        <div class="ph"><img src="assets/card-david.jpg" alt="David, a mallard, rising from the water with both wings spread" data-jig="crop" data-jig-name="Card: David" style="object-position: 50% 50%;"></div>
+        <div class="body"><h3>David</h3><p>The duck. Runs the valley, the list, the lottery, and us. Identifies as a capybara; we have stopped correcting him. Arrived uninvited in 2021, like this. We work for David now.</p></div>
       </article>
       <article class="card">
         <div class="ph"><img src="assets/card-puppy.jpg" alt="A puppy" data-jig="crop" data-jig-name="Card: Intern"></div>
@@ -309,7 +309,7 @@
     <div class="eyebrow">Visit</div>
     <h2 data-jig="heading" data-jig-name="Visit title">Apply for membership</h2>
     <p>Apply, and in about six months David will write back; he signs as a capybara. Directions come as a map drawn by the one who can hold a pencil; the trailhead moves because David moves it. Bring a towel. Leave the phone. Do not bring David a friend. He has asked.</p>
-    <a class="btn btn-primary btn-md" href="#" data-jig="button" data-jig-name="Plan a visit CTA">Join the waiting list</a>
+    <a class="btn btn-primary btn-md" href="#" data-apply data-jig="button" data-jig-name="Plan a visit CTA">Join the waiting list</a>
   </div>
 </section>
 
@@ -320,6 +320,13 @@
   </div>
 </footer>
 
+<script>
+  // membership applications go to David. The address is assembled here so it isn't sitting in the source.
+  document.querySelectorAll('a[data-apply]').forEach(function (a) {
+    var to = ['mullinsben', 'gmail.com'].join('@');
+    a.href = 'mailto:' + to + '?subject=' + encodeURIComponent('Capybutz membership application') + '&body=' + encodeURIComponent('Dear David,\n\nI would like to become a member. I understand the wait is six months and that the yuzu is not communal.\n\n');
+  });
+</script>
 <script src="../jig.js" data-foundation="../jig.foundation.json"></script>
 </body>
 </html>
