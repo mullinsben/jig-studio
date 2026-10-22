@@ -119,7 +119,7 @@
   }
   function inferFromPage() {
     const F = JSON.parse(JSON.stringify(DEFAULT_FOUNDATION));
-    F.name = (location.hostname || 'site').replace(/^www\./, '') || 'page'; F.mode = 'inferred';
+    F.name = ((document.title || '').split(/\s+[-·|–]\s+/)[0].trim() || (location.hostname || 'site').replace(/^www\./, '') || 'page').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40); F.mode = 'inferred';
     F.type = inferType();
     const sp = inferSpacing(); F.spacing = sp.map(x => x.px); F.spacingSteps = sp;
     F.buttons = inferButtons(); F.grid = inferGrid();
@@ -293,14 +293,14 @@
   }
 
   // ------------------------------------------------------------ change log
-  function record(el, ctl, data, summary) {
+  function record(el, ctl, data, summary, sub) {
     if (state.replaying) return;   // the frame is catching up with the desktop; those changes are already in the patch
-    const k = keyOf(el, ctl);
+    const k = keyOf(el, ctl) + (sub ? '::' + sub : '');
     const base = { el: selectorOf(el), name: nameOf(el), ctl, bp: state.bp, ...(DEVICE ? { device: DEVICE } : {}) };
     state.changes.set(k, Object.assign(base, data, { summary }));
     renderHUD(); postToParent(); scanSoon();
   }
-  function unrecord(el, ctl) { if (state.replaying) return; state.changes.delete(keyOf(el, ctl)); renderHUD(); postToParent(); }
+  function unrecord(el, ctl, sub) { if (state.replaying) return; state.changes.delete(keyOf(el, ctl) + (sub ? '::' + sub : '')); renderHUD(); postToParent(); }
   // Apply a patch entry to this document with the same controls a person would use. Used when a device frame catches up with the desktop.
   function applyChange(c) {
     const el = $(c.el); if (!el) return false;
@@ -1147,8 +1147,10 @@
     const h1s = hs.filter(h => h.tagName === 'H1'); if (h1s.length > 1) h1s.slice(1).forEach(h => W.push({ kind: 'heading-order', el: h, msg: `${h1s.length} h1s on the page; one is the convention` }));
     // 2d. body copy too small to read, and measures too long or short to read comfortably
     const phone = state.bp === 'phone'; const minBody = 14;
-    $$('p, li, dd, td, blockquote, figcaption').forEach(t => {
-      if (!t.offsetParent || t.closest('#jig-hud, .jig-tb, #jig-found, #jig-device, #jig-axtags, nav, footer, small')) return; const txt = (t.textContent || '').trim(); if (txt.length < 40) return;
+    $$('body *').forEach(t => {
+      if (/^(SCRIPT|STYLE|NOSCRIPT|TEMPLATE|SVG|H[1-6]|BUTTON|A|LABEL|OPTION)$/.test(t.tagName) || !t.offsetParent || t.closest('#jig-hud, .jig-tb, #jig-found, #jig-device, #jig-axtags, nav, footer, small, .jig-badge')) return;
+      const ownTxt = Array.from(t.childNodes).filter(n => n.nodeType === 3).map(n => n.textContent).join(' ').trim(); if (ownTxt.length < 40) return; const txt = ownTxt;
+      if (css(t).textTransform === 'uppercase' || /footer|copyright|legal|colophon|credit/i.test((t.id || '') + ' ' + (t.className || '') + ' ' + ((t.closest('[id*="footer"],[class*="footer"]') || {}).tagName || ''))) return;   // labels and fine print aren't body copy
       const c = css(t); const f = px(c.fontSize);
       if (f < minBody - 0.5) W.push({ kind: 'small-text', el: t, msg: `body copy at ${r1(f)}px; ${minBody}px is the floor${phone ? ' on a phone' : ''}`, min: minBody });
       // measure: characters per line, from the box width and an average glyph width
@@ -1173,8 +1175,8 @@
     });
     // 3. contrast: every element with its own text, sampled under its own box
     const seen = new Set();
-    $$('h1,h2,h3,h4,h5,h6,p,a,li,span,small,figcaption,label,button').forEach(t => {
-      if (!t.offsetParent || t.closest('#jig-hud, .jig-tb')) return;
+    $$('body *').forEach(t => {   // any element that carries its own words: old sites put text straight into divs, tds, fonts
+      if (/^(SCRIPT|STYLE|NOSCRIPT|TEMPLATE|SVG|OPTION)$/.test(t.tagName) || !t.offsetParent || t.closest('#jig-hud, .jig-tb, #jig-found, #jig-device, #jig-axtags, .jig-badge, #jig-grid')) return;
       const own = Array.from(t.childNodes).some(n => n.nodeType === 3 && n.textContent.trim());
       if (!own) return;
       const fg = parseColor(css(t).color); if (!fg || fg[3] === 0) return;
@@ -1203,7 +1205,8 @@
       const need = large ? Math.min(3, P.minContrast || 4.5) : (P.minContrast || 4.5);
       if (ratio < need) W.push({ kind: 'contrast', el: t, msg: `contrast ${ratio.toFixed(1)} ${how}${over ? ' (worst patch)' : ''}, min ${need}${large ? ' (large text)' : ''}`, value: +ratio.toFixed(1), min: need });
     });
-    state.warnings = W; renderHUD(); postToParent(); paintAX();
+    W.forEach(w => { if (w.el && w.el.classList && w.el.classList.contains('jig-scrim-panel') && w.el.parentElement) w.el = w.el.parentElement; });
+    state.warnings = W.filter((w, i) => W.findIndex(x => x.el === w.el && x.kind === w.kind) === i); renderHUD(); postToParent(); paintAX();
   }
   // ax jig: every element with a protection warning gets a pink outline and a chip saying why
   let axTags = null;
@@ -1212,7 +1215,8 @@
     $$('.jig-ax').forEach(el => el.classList.remove('jig-ax'));
     if (!axTags) { axTags = document.createElement('div'); axTags.id = 'jig-axtags'; document.body.appendChild(axTags); on(window, 'scroll', placeAXTags, { passive: true }); on(window, 'resize', placeAXTags); }
     axTags.innerHTML = '';
-    if (!axOn) return;
+    const frameOpen = !!(deviceEl && $('iframe', deviceEl));
+    if (!axOn || frameOpen) { $$('.jig-ax').forEach(el => el.classList.remove('jig-ax')); return; }
     const byEl = new Map();
     state.warnings.forEach(w => { if (!w.el || !w.el.isConnected) return; w.el.classList.add('jig-ax'); byEl.set(w.el, (byEl.get(w.el) || []).concat(w)); });
     byEl.forEach((ws, el) => {
@@ -1306,8 +1310,8 @@
     el.style.setProperty(prop, hex(to), 'important');
     const after = hasOwnBg ? contrast(fg, to) : contrast(to, bg);
     const from = hex(hasOwnBg ? own : fg);
-    record(el, 'type', { contrast: { prop, from, to: hex(to), before: +before.toFixed(1), after: +after.toFixed(1), min: need } }, `${prop === 'color' ? 'colour' : 'background'} ${from} → ${hex(to)} (contrast ${before.toFixed(1)} → ${after.toFixed(1)})`);
-    return { prop, from, to: hex(to), before, after, undo: () => { el.style.removeProperty(prop); if (prev) el.style.setProperty(prop, prev); unrecord(el, 'type'); } };
+    record(el, 'type', { contrast: { prop, from, to: hex(to), before: +before.toFixed(1), after: +after.toFixed(1), min: need } }, `${prop === 'color' ? 'colour' : 'background'} ${from} → ${hex(to)} (contrast ${before.toFixed(1)} → ${after.toFixed(1)})`, 'contrast');
+    return { prop, from, to: hex(to), before, after, undo: () => { el.style.removeProperty(prop); if (prev) el.style.setProperty(prop, prev); unrecord(el, 'type', 'contrast'); } };
   }
 
   // ------------------------------------------------------------ HUD
@@ -1346,7 +1350,7 @@
       ch.appendChild(row);
     }
     if (state.normalize) {
-      const g = normalizeGroups(); const h = document.createElement('h6'); h.textContent = `auto ${resName(state.normalizeRes)} · ${state.normalize.length} snaps · ${(state.autoFixes || []).length} fixes`; ch.appendChild(h);
+      const g = normalizeGroups(); const h = document.createElement('h6'); h.textContent = `auto ${resName(state.normalizeRes)} · ${g.reduce((a, x) => a + x.els.length, 0)} snaps · ${(state.autoFixes || []).length} fixes`; ch.appendChild(h);
       (state.autoFixes || []).forEach(f => { const row = document.createElement('div'); row.className = 'row'; row.innerHTML = `<span class="n">${esc(nameOf(f.el))}</span><span class="s">${esc(f.what)}</span>`; ch.appendChild(row); });
       g.slice(0, 12).forEach(x => { const row = document.createElement('div'); row.className = 'row'; row.innerHTML = `<span class="n">${esc(x.prop)}</span><span class="s">${x.from}px → ${x.to}px · ${x.els.length} element${x.els.length === 1 ? '' : 's'}</span>`; ch.appendChild(row); });
       if (g.length > 12) { const m = document.createElement('div'); m.className = 'empty'; m.textContent = `+ ${g.length - 12} more groups in the patch`; ch.appendChild(m); }
@@ -1355,15 +1359,24 @@
       const h = document.createElement('h6'); h.textContent = (state.frame.device || 'device') + ' changes'; ch.appendChild(h);
       state.frame.changes.forEach(c => { const row = document.createElement('div'); row.className = 'row'; row.innerHTML = `<span class="n">${esc(c.name)}</span><span class="s">${esc(c.summary)}</span>`; ch.appendChild(row); });
     }
-    if (!state.warnings.length) wn.innerHTML = '<div class="empty">No notes. The page passes.</div>';
-    state.warnings.forEach(w => {
-      const row = document.createElement('div'); row.className = 'row warn';
-      row.innerHTML = `<span class="n">${esc(nameOf(w.el))}</span><span class="s">${esc(w.msg)}</span>`;
-      row.onclick = () => { w.el.scrollIntoView({ block: 'center', behavior: 'smooth' }); if (w.el.classList.contains('jig-el')) select(w.el); };
-      wn.appendChild(row);
-    });
+    const inFrame = !!(state.device && deviceEl);
+    if (inFrame) {
+      // a device frame is open: its notes are the ones that matter; the desktop's come back when the frame closes
+      const fw = state.frame.warnings || [];
+      if (!fw.length) wn.innerHTML = `<div class="empty">No notes on ${esc(state.device.name)}.</div>`;
+      fw.forEach(w => { const row = document.createElement('div'); row.className = 'row warn'; row.innerHTML = `<span class="n">${esc(w.name || w.kind)}</span><span class="s">${esc(w.msg)}</span>`;
+        row.onclick = () => { const fr = $('iframe', deviceEl); if (fr && fr.contentWindow) fr.contentWindow.postMessage({ jig: 'reveal', el: w.el }, '*'); }; wn.appendChild(row); });
+    } else {
+      if (!state.warnings.length) wn.innerHTML = '<div class="empty">No notes. The page passes.</div>';
+      state.warnings.forEach(w => {
+        const row = document.createElement('div'); row.className = 'row warn';
+        row.innerHTML = `<span class="n">${esc(nameOf(w.el))}</span><span class="s">${esc(w.msg)}</span>`;
+        row.onclick = () => { w.el.scrollIntoView({ block: 'center', behavior: 'smooth' }); if (w.el.classList.contains('jig-el')) select(w.el); };
+        wn.appendChild(row);
+      });
+    }
     const total = state.changes.size + state.frame.changes.length + (state.normalize ? state.normalize.length : 0);
-    const nW = state.warnings.length + state.frame.warnings.length;
+    const nW = inFrame ? (state.frame.warnings || []).length : state.warnings.length;
     $('#jig-count').textContent = `${total} change${total === 1 ? '' : 's'} · ${nW} note${nW === 1 ? '' : 's'}`;
     const chN = $('#jig-ch-n'), wnN = $('#jig-wn-n'); if (chN) chN.textContent = total; if (wnN) { wnN.textContent = nW; wnN.classList.toggle('warn', nW > 0); }
     if (!state.device) $('#jig-bp').textContent = `${state.bp} · ${window.innerWidth}px`;
@@ -1388,7 +1401,7 @@
       const g = normalizeGroups();
       const qs = quantizeScales(state.normalizeRes || '16');
       if ((state.autoFixes || []).length) { lines.push('', `# auto fixes · ${state.autoFixes.length}`, '', 'Protection failures fixed with the same controls a person would use; each is also listed under changes above with its values.', ''); state.autoFixes.forEach(f => lines.push(`- ${nameOf(f.el)}: ${f.what}`)); }
-      lines.push('', `# auto · ${resName(state.normalizeRes || '16')} · ${state.normalize.length} snap${state.normalize.length === 1 ? "" : "s"} in ${g.length} group${g.length === 1 ? "" : "s"}`, '', `Every font-size, padding, margin, and gap on the page snapped to the nearest step, like notes to a grid. Type steps: ${qs.typeSteps.join(', ')}px. Spacing steps: ${qs.spaceSteps.join(', ')}px. Apply as rule changes, not inline styles: find the rule that sets each value and change it; where several elements share a group they almost certainly share a rule.`, '');
+      lines.push('', `# auto · ${resName(state.normalizeRes || '16')} · ${g.reduce((a, x) => a + x.els.length, 0)} snap${g.reduce((a, x) => a + x.els.length, 0) === 1 ? "" : "s"} in ${g.length} group${g.length === 1 ? "" : "s"}`, '', `Every font-size, padding, margin, and gap on the page snapped to the nearest step, like notes to a grid. Type steps: ${qs.typeSteps.join(', ')}px. Spacing steps: ${qs.spaceSteps.join(', ')}px. Apply as rule changes, not inline styles: find the rule that sets each value and change it; where several elements share a group they almost certainly share a rule.`, '');
       g.forEach(x => lines.push(`- ${x.prop}: ${x.from}px → ${x.to}px on ${x.els.length} element${x.els.length === 1 ? '' : 's'}`));
       g.forEach(x => json.push({ op: 'quantize', prop: x.prop, from: x.from, to: x.to, count: x.els.length, els: x.els.slice(0, 20), ...(x.els.length > 20 ? { more: x.els.length - 20 } : {}) }));
     }
@@ -1412,7 +1425,7 @@
   function normalizePage(on) {
     if (!on) {
       (state.normalize || []).forEach(n => { n.el.style.removeProperty(n.prop); if (n.prev) n.el.style.setProperty(n.prop, n.prev); });
-      (state.autoFixes || []).forEach(f => { if (f.undo) { f.undo(); unrecord(f.el, f.ctl || 'grid'); } else if (f.el.__jigReset) f.el.__jigReset(); });
+      (state.autoFixes || []).forEach(f => { if (f.undo) { f.undo(); unrecord(f.el, f.ctl || 'grid', f.sub); } else if (f.el.__jigReset) f.el.__jigReset(); });
       state.normalize = null; state.autoFixes = []; { const nb = $('#jig-norm-btn'); if (nb) nb.classList.remove('on'); } renderHUD(); scanSoon(); return;
     }
     const F = state.F; const out = [];
@@ -1478,21 +1491,26 @@
   }
   // Blocks that sit a few px off a column line get put back on it (the demo's nudged card row, a container with a stray margin).
   function autoAlignRows() {
-    const G = state.F.grid; const anchor = (gridAnchor && gridAnchor.isConnected) ? gridAnchor : null;
-    const ar = anchor ? anchor.getBoundingClientRect() : { left: Math.max(0, (window.innerWidth - G.maxWidth) / 2) + G.margin, width: Math.min(G.maxWidth, window.innerWidth) - 2 * G.margin };
-    const cw = (ar.width + G.gutter) / G.columns;
-    const lines = Array.from({ length: G.columns + 1 }, (_, i) => ar.left + i * cw);
-    const cands = new Set($$('.jig-el[data-jig-ctl="grid"]'));
-    $$('body *').forEach(el => { if (el.closest('#jig-hud, .jig-tb, #jig-found, #jig-device') || !visible(el)) return; const c = css(el); if (!/block|flex|grid/.test(c.display) || c.position === 'fixed' || c.position === 'absolute') return; const r = el.getBoundingClientRect(); if (r.width >= ar.width * 0.4 && r.height >= 60 && r.width < ar.width - 1) cands.add(el); });
-    cands.forEach(el => {
-      const r = el.getBoundingClientRect(); const near = nearest(lines, r.left); const delta = r.left - near;   // +: sits right of the line
-      if (Math.abs(delta) < 1 || Math.abs(delta) > 16) return;
-      const cur = px(css(el).marginLeft);
-      const before = el.style.getPropertyValue('margin-left');
-      el.style.setProperty('margin-left', `${Math.round(cur - delta)}px`, 'important');
-      if (Math.abs(el.getBoundingClientRect().left - near) > 1) { el.style.removeProperty('margin-left'); if (before) el.style.setProperty('margin-left', before); return; }   // layout didn't take it; leave it
-      state.autoFixes.push({ el, what: `on grid (was ${Math.round(delta)}px off the column line)`, undo: () => { el.style.removeProperty('margin-left'); if (before) el.style.setProperty('margin-left', before); } });
-      record(el, 'grid', { marginLeft: Math.round(cur - delta), wasOffBy: Math.round(delta) }, `inline offset ${Math.round(cur)}px → ${Math.round(cur - delta)}px (on grid)`);
+    // "Off grid" means off from its neighbours: a block that sits a few px left or right of the edge its siblings share.
+    // That's what a nudged card row looks like on any site, with or without a declared grid.
+    const done = new Set();
+    const blocks = $$('body *').filter(el => { if (el.closest('#jig-hud, .jig-tb, #jig-found, #jig-device, #jig-axtags, .jig-crop-box, .jig-scrim-panel') || !visible(el)) return false; const c = css(el); return /block|flex|grid|table/.test(c.display) && c.position !== 'fixed' && c.position !== 'absolute' && c.float === 'none'; });
+    const byParent = new Map(); blocks.forEach(el => { const p0 = el.parentElement; if (!byParent.has(p0)) byParent.set(p0, []); byParent.get(p0).push(el); });
+    byParent.forEach(kids => {
+      if (kids.length < 3) return;
+      const lefts = kids.map(k => Math.round(k.getBoundingClientRect().left));
+      const counts = {}; lefts.forEach(l => counts[l] = (counts[l] || 0) + 1);
+      const [edge, n] = Object.entries(counts).sort((a, b) => b[1] - a[1])[0]; if (n < 2 || n < kids.length / 2) return;   // no clear shared edge
+      kids.forEach((el, i) => {
+        const delta = lefts[i] - +edge; if (Math.abs(delta) < 1 || Math.abs(delta) > 16 || done.has(el)) return;
+        if (el.getBoundingClientRect().width < 60) return;
+        const cur = px(css(el).marginLeft); const before = el.style.getPropertyValue('margin-left');
+        el.style.setProperty('margin-left', `${Math.round(cur - delta)}px`, 'important');
+        if (Math.abs(el.getBoundingClientRect().left - +edge) > 1) { el.style.removeProperty('margin-left'); if (before) el.style.setProperty('margin-left', before); return; }
+        done.add(el);
+        state.autoFixes.push({ el, ctl: 'grid', what: `back in line (was ${Math.round(delta)}px off the edge its neighbours share)`, undo: () => { el.style.removeProperty('margin-left'); if (before) el.style.setProperty('margin-left', before); } });
+        record(el, 'grid', { marginLeft: Math.round(cur - delta), wasOffBy: Math.round(delta) }, `inline offset ${Math.round(cur)}px → ${Math.round(cur - delta)}px (in line with its neighbours)`);
+      });
     });
   }
   // Buttons that sit together share a size. The group's size is the primary's (or the most common); the others step to it.
@@ -1546,7 +1564,24 @@
         }
         if (plain && !seen.has(key(w.el, w.kind))) {
           seen.add(key(w.el, w.kind)); const r = fixContrast(w.el);
-          if (r && !r.already) { state.autoFixes.push({ el: w.el, ctl: 'type', what: `${r.prop === 'color' ? 'colour' : 'background'} ${r.from} → ${r.to} (contrast ${r.before.toFixed(1)} → ${r.after.toFixed(1)})`, undo: r.undo }); did = true; }
+          if (r && !r.already) { state.autoFixes.push({ el: w.el, ctl: 'type', sub: 'contrast', what: `${r.prop === 'color' ? 'colour' : 'background'} ${r.from} → ${r.to} (contrast ${r.before.toFixed(1)} → ${r.after.toFixed(1)})`, undo: r.undo }); did = true; }
+        }
+        if (w.kind === 'small-text' && !w.el.__jigStepType && !seen.has(key(w.el, w.kind))) {
+          // not wired as a type target (a span, an inline-styled div): set it straight to the first ramp step that clears the floor
+          seen.add(key(w.el, w.kind)); const steps = ((state.F.type && state.F.type.steps) || []).map(x => x.px).filter(v => v >= w.min).sort((a, b) => a - b);
+          const to = steps[0] || w.min; const el = w.el; const prev = el.style.getPropertyValue('font-size'); const from = px(css(el).fontSize);
+          el.style.setProperty('font-size', to + 'px', 'important');
+          const stepTok = ((state.F.type && state.F.type.steps) || []).find(x => x.px === to);
+          record(el, 'type', { from: Math.round(from), to: stepTok ? stepTok.token : to + 'px', px: to, ...(stepTok && stepTok.var ? { var: stepTok.var } : { inferred: true }) }, `font-size ${r1(from)}px → ${to}px (body copy floor)`);
+          state.autoFixes.push({ el, ctl: 'type', what: `font-size ${r1(from)} → ${to}px (body copy floor)`, undo: () => { el.style.removeProperty('font-size'); if (prev) el.style.setProperty('font-size', prev); } }); did = true;
+        }
+        if (w.kind === 'small-text' && !w.el.__jigStepType && !seen.has(key(w.el, w.kind))) {
+          seen.add(key(w.el, w.kind)); const steps = ((state.F.type && state.F.type.steps) || []).map(x => x.px).filter(v => v >= w.min).sort((a, b) => a - b);
+          const to = steps[0] || w.min; const el = w.el; const prev = el.style.getPropertyValue('font-size'); const from = px(css(el).fontSize);
+          el.style.setProperty('font-size', to + 'px', 'important');
+          const stepTok = ((state.F.type && state.F.type.steps) || []).find(x => x.px === to);
+          record(el, 'type', { from: Math.round(from), to: stepTok ? stepTok.token : to + 'px', px: to, ...(stepTok && stepTok.var ? { var: stepTok.var } : { inferred: true }) }, `font-size ${r1(from)}px → ${to}px (body copy floor)`);
+          state.autoFixes.push({ el, ctl: 'type', what: `font-size ${r1(from)} → ${to}px (body copy floor)`, undo: () => { el.style.removeProperty('font-size'); if (prev) el.style.setProperty('font-size', prev); } }); did = true;
         }
         if (w.kind === 'small-text' && w.el.__jigStepType && !seen.has(key(w.el, w.kind))) {
           seen.add(key(w.el, w.kind)); let steps = 0; while (steps < 3 && px(css(w.el).fontSize) < w.min - 0.5) { const b0 = px(css(w.el).fontSize); w.el.__jigStepType(1); if (px(css(w.el).fontSize) <= b0 + 0.1) break; steps++; }
@@ -1605,7 +1640,8 @@
   function resName(r) { return r === '32' ? 'light (page\'s own steps)' : r === '8' ? 'strict (4 sizes, 4 spaces)' : 'medium (8 sizes, 9 spaces)'; }
   function normalizeGroups() {
     const g = new Map();
-    (state.normalize || []).forEach(n => { const k = `${n.prop}|${n.from}|${n.to}`; const e = g.get(k) || { prop: n.prop, from: n.from, to: n.to, els: [] }; e.els.push(selectorOf(n.el)); g.set(k, e); });
+    // a snap a later fix replaced (a heading stepped up, a button resized) is no longer what the page shows; leave it out of the patch
+    (state.normalize || []).filter(n => n.el.isConnected && Math.abs(px(css(n.el).getPropertyValue(n.prop)) - n.to) < 0.6).forEach(n => { const k = `${n.prop}|${n.from}|${n.to}`; const e = g.get(k) || { prop: n.prop, from: n.from, to: n.to, els: [] }; e.els.push(selectorOf(n.el)); g.set(k, e); });
     return Array.from(g.values()).sort((a, b) => b.els.length - a.els.length);
   }
 
@@ -1697,7 +1733,7 @@
     };
     const fit = () => { const sh = $('.shell', deviceEl); const sc = Math.min(1, (window.innerHeight - 90) / (d.h + 28), (window.innerWidth - 400) / (d.w + 28)); sh.style.transform = `scale(${sc})`; };
     fit(); on(window, 'resize', fit);
-    gridEl.hidden = true; $('#jig-bp').textContent = `${d.name} · ${d.w}px`; syncDeviceBtn();
+    gridEl.hidden = true; $('#jig-bp').textContent = `${d.name} · ${d.w}px`; syncDeviceBtn(); paintAX(); renderHUD();
     $('.close', deviceEl).onclick = closeDevice;
     on(deviceEl, 'click', e => { if (e.target === deviceEl) closeDevice(); });
   }
@@ -1709,7 +1745,7 @@
   }
   function closeDevice() {
     if (deviceEl) { deviceEl.remove(); deviceEl = null; }
-    state.device = null; syncDeviceBtn();
+    state.device = null; syncDeviceBtn(); state.frame.warnings = []; paintAX();
     if (state.grid) { gridEl.hidden = false; drawGrid(); }
     // keep frame changes in the patch until reset; they were real
     renderHUD();
@@ -1735,6 +1771,7 @@
       (url.searchParams.get('jigs') || '').split(',').filter(Boolean).forEach(id => state.jigs.add(id));
       $$('.jig-el').forEach(el => el.classList.toggle('jig-active', state.jigs.has(groupOf(el.dataset.jigCtl))));
       on(window, 'message', e => { if (e.data && e.data.jig === 'jigs') { state.jigs = new Set(e.data.jigs); $$('.jig-el').forEach(el => el.classList.toggle('jig-active', state.jigs.has(groupOf(el.dataset.jigCtl)))); if (state.selected && !state.selected.classList.contains('jig-active')) deselect(); paintAX(); } });
+      on(window, 'message', e => { if (e.data && e.data.jig === 'reveal') { const el = $(e.data.el); if (el) { el.scrollIntoView({ block: 'center', behavior: 'smooth' }); if (el.classList.contains('jig-el') && el.classList.contains('jig-active')) select(el); } } });
       on(window, 'message', async e => {
         if (!e.data || e.data.jig !== 'replay') return;
         state.replaying = true;
