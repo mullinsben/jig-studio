@@ -39,8 +39,7 @@
     { id: 'images', label: 'images', ctls: ['crop'] },
     { id: 'text', label: 'text', ctls: ['type', 'heading', 'text'] },
     { id: 'buttons', label: 'buttons', ctls: ['button'] },
-    { id: 'spacing', label: 'spacing', ctls: ['section'] },
-    { id: 'rows', label: 'rows', ctls: ['grid'] }
+    { id: 'spacing', label: 'spacing', ctls: ['section'] }
   ];
   const groupOf = ctl => (JIGS.find(j => j.ctls.includes(ctl)) || {}).id;
   const state = {
@@ -392,6 +391,16 @@
         const data = isImg ? { objectPosition: `${r1(ox)}% ${r1(oy)}%`, ...(zoom !== 1 ? { zoom: r2(zoom) } : {}), ...(upgraded ? { objectFit: 'cover' } : {}) } : { backgroundPosition: `${r1(ox)}% ${r1(oy)}%` };
         record(el, 'crop', data, `crop moved to ${r1(ox)}% ${r1(oy)}%${zoom !== 1 ? ', zoom ' + r2(zoom) + '×' : ''}${upgraded ? ' (as object-fit: cover)' : ''}`);
       }
+      // place a focal point (fx, fy as fractions of the natural image) in the centre of the visible window
+      el.__jigSetFocal = (fx, fy) => {
+        if (!isImg) return false;
+        const W = el.offsetWidth, H = el.offsetHeight, nw = el.naturalWidth || W, nh = el.naturalHeight || H;
+        const sc = Math.max(W / nw, H / nh) * zoom; const sw = nw * sc, sh = nh * sc;
+        const px_ = sw > W + 1 ? clamp((fx * sw - W / 2) / (sw - W), 0, 1) : 0.5;
+        const py_ = sh > H + 1 ? clamp((fy * sh - H / 2) / (sh - H), 0, 1) : 0.5;
+        const before = [ox, oy]; ox = Math.round(px_ * 1000) / 10; oy = Math.round(py_ * 1000) / 10; apply(); commit();
+        return Math.abs(before[0] - ox) > 0.5 || Math.abs(before[1] - oy) > 0.5;
+      };
       el.__jigReset = () => {
         ox = parsePos(orig.op)[0]; oy = parsePos(orig.op)[1]; zoom = 1; apply(); ['object-position', 'transform-origin', 'transform'].forEach(k => el.style.removeProperty(k)); unrecord(el, 'crop');
         if (wCols != null) { ['width', 'max-width'].forEach(k => box.style.removeProperty(k)); if (origBox.w) box.style.width = origBox.w; if (origBox.mw) box.style.maxWidth = origBox.mw; if (box !== el) el.style.removeProperty('width'); wCols = null; unrecord(el, 'size'); }
@@ -697,6 +706,7 @@
         refreshToolbar(el);
       }
       el.__jigReset = () => { set(origML); };
+      el.__jigSetML = set; el.__jigOrigML = origML;
     }
   };
 
@@ -835,7 +845,7 @@
     #jig-device .shell { position: relative; background: #0b0908; border-radius: 44px; padding: 14px; box-shadow: 0 30px 80px rgba(0,0,0,.6), inset 0 0 0 2px #2a2420; transform-origin: center; }
     #jig-device iframe { display: block; border: 0; background: #fff; border-radius: 32px; width: attr(width px); height: attr(height px); }
     #jig-device .cap { position: absolute; top: -34px; left: 0; right: 0; text-align: center; color: #dfe6ff; font: 12px ui-monospace, Menlo, monospace; }
-    #jig-device .close { position: absolute; top: 16px; right: 16px; width: 36px; height: 36px; border: 0; border-radius: 50%; background: #262833; color: #fff; font: 700 16px/1 ui-sans-serif, system-ui; cursor: pointer; }
+    #jig-device .close { position: absolute; top: 16px; left: 16px; width: 36px; height: 36px; border: 0; border-radius: 50%; background: #262833; color: #fff; font: 700 16px/1 ui-sans-serif, system-ui; cursor: pointer; }
     #jig-device .close:hover { background: #3f6fff; }
     #jig-hud header { display: flex; align-items: center; gap: 8px; padding: 10px 12px; background: #13141a; cursor: move; user-select: none; }
     #jig-hud header b { font-size: 14px; letter-spacing: .02em; } #jig-hud header b i { color: #3f6fff; font-style: normal; }
@@ -950,7 +960,8 @@
   }
   function toggleGrid(force) {
     state.grid = force === undefined ? !state.grid : force;
-    gridEl.hidden = !state.grid; if (state.grid) drawGrid();
+    const frameOpen = !!(deviceEl && $('iframe', deviceEl));
+    gridEl.hidden = !state.grid || frameOpen; if (state.grid && !frameOpen) drawGrid();
     const fr = deviceEl && $('iframe', deviceEl); if (fr && fr.contentWindow) fr.contentWindow.postMessage({ jig: 'grid', on: state.grid }, '*');
     const gb = $('#jig-grid-btn'); if (gb) gb.classList.toggle('on', state.grid);
   }
@@ -1119,7 +1130,7 @@
     });
     const total = state.changes.size + state.frame.changes.length + (state.normalize ? state.normalize.length : 0);
     $('#jig-count').textContent = `${total} change${total === 1 ? '' : 's'} · ${state.warnings.length + state.frame.warnings.length} warning${state.warnings.length + state.frame.warnings.length === 1 ? '' : 's'}`;
-    $('#jig-bp').textContent = `${state.bp} · ${window.innerWidth}px`;
+    if (!state.device) $('#jig-bp').textContent = `${state.bp} · ${window.innerWidth}px`;
     const F = state.F; const inf = F.mode === 'inferred' || F.type.inferred || F.buttons.inferred;
     $('#jig-src').textContent = `${INJECTED ? 'injected by bookmarklet · ' : ''}foundation: ${F.name} · ${state.foundationSource}${inf ? ` · ${F.type.steps.length} type steps, ${F.spacingSteps.length} spacing steps, ${F.buttons.sizes.length} button size${F.buttons.sizes.length === 1 ? '' : 's'} · proposed tokens ride in the patch` : ''}`;
   }
@@ -1165,7 +1176,7 @@
   function normalizePage(on) {
     if (!on) {
       (state.normalize || []).forEach(n => { n.el.style.removeProperty(n.prop); if (n.prev) n.el.style.setProperty(n.prop, n.prev); });
-      (state.autoFixes || []).forEach(f => f.el.__jigReset && f.el.__jigReset());
+      (state.autoFixes || []).forEach(f => { if (f.undo) { f.undo(); unrecord(f.el, 'grid'); } else if (f.el.__jigReset) f.el.__jigReset(); });
       state.normalize = null; state.autoFixes = []; $('#jig-norm-btn').classList.remove('on'); renderHUD(); scanSoon(); return;
     }
     const F = state.F; const out = [];
@@ -1190,8 +1201,62 @@
     });
     state.normalize = out; $('#jig-norm-btn').classList.add('on');
     autoFixAX();
+    autoAlignRows();
+    autoFocusImages();
     renderHUD(); scanSoon();
   }
+  // Where is the subject? Faces when the browser can find them; otherwise the centroid of the image's high-detail region.
+  async function focalPoint(img) {
+    if (!img.complete || !img.naturalWidth) return null;
+    try {
+      if ('FaceDetector' in window) {
+        const faces = await new window.FaceDetector({ fastMode: true, maxDetectedFaces: 5 }).detect(img);
+        if (faces && faces.length) {
+          const b = faces.reduce((a, f) => ({ x: a.x + f.boundingBox.x + f.boundingBox.width / 2, y: a.y + f.boundingBox.y + f.boundingBox.height / 2 }), { x: 0, y: 0 });
+          return { fx: b.x / faces.length / img.naturalWidth, fy: b.y / faces.length / img.naturalHeight, how: `${faces.length} face${faces.length === 1 ? '' : 's'}` };
+        }
+      }
+    } catch (e) {}
+    try {
+      const N = 64, c = document.createElement('canvas'); c.width = N; c.height = N; const ctx = c.getContext('2d');
+      ctx.drawImage(img, 0, 0, N, N); const d = ctx.getImageData(0, 0, N, N).data;
+      const lum = new Float32Array(N * N); for (let i = 0; i < N * N; i++) lum[i] = 0.299 * d[i * 4] + 0.587 * d[i * 4 + 1] + 0.114 * d[i * 4 + 2];
+      const e = new Float32Array(N * N); let cells = [];
+      for (let y = 1; y < N - 1; y++) for (let x = 1; x < N - 1; x++) { const i = y * N + x; const gx = lum[i + 1] - lum[i - 1], gy = lum[i + N] - lum[i - N]; e[i] = Math.hypot(gx, gy); cells.push([i, e[i]]); }
+      cells.sort((a, b) => b[1] - a[1]); const top = cells.slice(0, Math.max(20, Math.floor(cells.length * 0.12)));
+      let sx = 0, sy = 0, sw = 0; top.forEach(([i, w]) => { sx += (i % N) * w; sy += Math.floor(i / N) * w; sw += w; });
+      if (!sw) return null;
+      return { fx: (sx / sw + 0.5) / N, fy: (sy / sw + 0.5) / N, how: 'detail centroid' };
+    } catch (e) { return null; }   // tainted canvas
+  }
+  // Blocks that sit a few px off a column line get put back on it (the demo's nudged card row, a container with a stray margin).
+  function autoAlignRows() {
+    const G = state.F.grid; const anchor = (gridAnchor && gridAnchor.isConnected) ? gridAnchor : null;
+    const ar = anchor ? anchor.getBoundingClientRect() : { left: Math.max(0, (window.innerWidth - G.maxWidth) / 2) + G.margin, width: Math.min(G.maxWidth, window.innerWidth) - 2 * G.margin };
+    const cw = (ar.width + G.gutter) / G.columns;
+    const lines = Array.from({ length: G.columns + 1 }, (_, i) => ar.left + i * cw);
+    const cands = new Set($$('.jig-el[data-jig-ctl="grid"]'));
+    $$('body *').forEach(el => { if (el.closest('#jig-hud, .jig-tb, #jig-found, #jig-device') || !visible(el)) return; const c = css(el); if (!/block|flex|grid/.test(c.display) || c.position === 'fixed' || c.position === 'absolute') return; const r = el.getBoundingClientRect(); if (r.width >= ar.width * 0.4 && r.height >= 60 && r.width < ar.width - 1) cands.add(el); });
+    cands.forEach(el => {
+      const r = el.getBoundingClientRect(); const near = nearest(lines, r.left); const delta = r.left - near;   // +: sits right of the line
+      if (Math.abs(delta) < 1 || Math.abs(delta) > 16) return;
+      const cur = px(css(el).marginLeft);
+      const before = el.style.getPropertyValue('margin-left');
+      el.style.setProperty('margin-left', `${Math.round(cur - delta)}px`, 'important');
+      if (Math.abs(el.getBoundingClientRect().left - near) > 1) { el.style.removeProperty('margin-left'); if (before) el.style.setProperty('margin-left', before); return; }   // layout didn't take it; leave it
+      state.autoFixes.push({ el, what: `on grid (was ${Math.round(delta)}px off the column line)`, undo: () => { el.style.removeProperty('margin-left'); if (before) el.style.setProperty('margin-left', before); } });
+      record(el, 'grid', { marginLeft: Math.round(cur - delta), wasOffBy: Math.round(delta) }, `inline offset ${Math.round(cur)}px → ${Math.round(cur - delta)}px (on grid)`);
+    });
+  }
+  async function autoFocusImages() {
+    const imgs = $$('img.jig-el[data-jig-ctl="crop"]').filter(i => i.__jigSetFocal);
+    for (const img of imgs) {
+      const f = await focalPoint(img); if (!f) continue;
+      if (img.__jigSetFocal(f.fx, f.fy)) state.autoFixes.push({ el: img, what: `crop re-centred on subject (${f.how})` });
+    }
+    renderHUD();
+  }
+
   // Fix what protection flagged, using the same controls a person would: scrims for text over images,
   // a size step for short tap targets, a ramp step down for an h2 that outgrew the h1. Colour stays a warning.
   function autoFixAX() {
@@ -1327,12 +1392,14 @@
     };
     const fit = () => { const sh = $('.shell', deviceEl); const sc = Math.min(1, (window.innerHeight - 90) / (d.h + 28), (window.innerWidth - 400) / (d.w + 28)); sh.style.transform = `scale(${sc})`; };
     fit(); on(window, 'resize', fit);
+    gridEl.hidden = true; $('#jig-bp').textContent = `${d.name} · ${d.w}px`;
     $('.close', deviceEl).onclick = closeDevice;
     on(deviceEl, 'click', e => { if (e.target === deviceEl) closeDevice(); });
   }
   function closeDevice() {
     if (deviceEl) { deviceEl.remove(); deviceEl = null; }
     state.device = null; $('#jig-device-sel').value = '';
+    if (state.grid) { gridEl.hidden = false; drawGrid(); }
     // keep frame changes in the patch until reset; they were real
     renderHUD();
   }
@@ -1357,7 +1424,7 @@
       (url.searchParams.get('jigs') || '').split(',').filter(Boolean).forEach(id => state.jigs.add(id));
       $$('.jig-el').forEach(el => el.classList.toggle('jig-active', state.jigs.has(groupOf(el.dataset.jigCtl))));
       on(window, 'message', e => { if (e.data && e.data.jig === 'jigs') { state.jigs = new Set(e.data.jigs); $$('.jig-el').forEach(el => el.classList.toggle('jig-active', state.jigs.has(groupOf(el.dataset.jigCtl)))); } });
-      on(window, 'message', e => { if (e.data && e.data.jig === 'grid') { if (e.data.columns) state.F.grid.columns = e.data.columns; toggleGrid(!!e.data.on); } });
+      on(window, 'message', e => { if (e.data && e.data.jig === 'grid') { if (e.data.columns) { state.F.grid.columns = e.data.columns; if (state.grid) drawGrid(); } toggleGrid(!!e.data.on); } });
       const imgs0 = $$('img').filter(i => !i.complete);
       await Promise.all(imgs0.map(i => new Promise(r => { i.onload = i.onerror = r; })));
       scanProtection();
@@ -1386,8 +1453,9 @@
     colSel.innerHTML = colOpts.map(n => `<option value="${n}"${n === state.F.grid.columns ? ' selected' : ''}>${n} col</option>`).join('');
     const origCols = state.F.grid.columns;
     colSel.onchange = e => {
+      const fr = deviceEl && $('iframe', deviceEl);
+      if (fr && fr.contentWindow) { fr.contentWindow.postMessage({ jig: 'grid', on: state.grid, columns: +e.target.value }, '*'); return; }   // frame open: columns belong to the frame
       state.F.grid.columns = +e.target.value; if (state.grid) drawGrid();
-      const fr = deviceEl && $('iframe', deviceEl); if (fr && fr.contentWindow) fr.contentWindow.postMessage({ jig: 'grid', on: state.grid }, '*');
       const k = 'foundation::grid';
       if (state.F.grid.columns === origCols) state.changes.delete(k);
       else state.changes.set(k, { el: ':root', name: 'Foundation', ctl: 'foundation', bp: state.bp, grid: { columns: state.F.grid.columns }, summary: `grid ${origCols} → ${state.F.grid.columns} columns` });
