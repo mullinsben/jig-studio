@@ -74,7 +74,7 @@
   //   F.spacingSteps = [{ token, px, var? }]   sorted ascending
   //   F.buttons.mode = 'classes' | 'measured'; measured carries sizes [{ token, h, padX, padY, fs }] and variants [{ token, bg, fg, border }]
   //   F.mode         = 'file' | 'vars' | 'inferred'
-  const RAMP_NAMES = ['2xs', 'xs', 'sm', 'md', 'lg', 'xl', '2xl', '3xl', '4xl', '5xl', '6xl'];
+  const RAMP_NAMES = ['5xs', '4xs', '3xs', '2xs', 'xs', 'sm', 'md', 'lg', 'xl', '2xl', '3xl', '4xl', '5xl', '6xl'];
   function toPx(v, prop) {
     if (typeof v === 'number') return v;
     const m = String(v).trim().match(/^(-?[\d.]+)(px|rem|em)?$/);
@@ -121,17 +121,19 @@
     return out.map(c => ({ px: Math.round(c.sum / c.n), n: c.n, members: Array.from(new Set(c.members)).sort((a, b) => a - b) }));
   }
   function inferType() {
-    const counts = new Map();
+    const counts = new Map(), pCounts = new Map();
     $$('body *').forEach(el => {
       if (el.closest('#jig-hud, .jig-tb, script, style') || !visible(el)) return;
       const own = Array.from(el.childNodes).some(n => n.nodeType === 3 && n.textContent.trim().length > 1); if (!own) return;
       const fs = Math.round(px(css(el).fontSize) * 2) / 2; const w = (el.textContent || '').trim().length;
       counts.set(fs, (counts.get(fs) || 0) + Math.min(w, 200));
+      if (/^(P|LI|DD|TD|BLOCKQUOTE)$/.test(el.tagName) && w >= 40) pCounts.set(fs, (pCounts.get(fs) || 0) + Math.min(w, 400));
     });
     const cl = cluster(Array.from(counts, ([v, n]) => ({ v, n })), 0.09);
     if (!cl.length) return { ramp: ['md'], steps: [{ token: 'md', px: 16 }], observed: [] };
-    // body = the cluster carrying the most characters; name the rest relative to it
-    const bodyIdx = cl.reduce((bi, c, i) => (c.n > cl[bi].n ? i : bi), 0);
+    // body = the size real paragraphs are set in (when a page has them); otherwise the cluster carrying the most characters
+    let bodyIdx = cl.reduce((bi, c, i) => (c.n > cl[bi].n ? i : bi), 0);
+    if (pCounts.size) { const bodyPx = Array.from(pCounts.entries()).sort((a, b) => b[1] - a[1])[0][0]; const i = cl.findIndex(c => c.members.includes(bodyPx) || Math.abs(c.px - bodyPx) <= c.px * 0.09); if (i >= 0) bodyIdx = i; }
     const mdPos = RAMP_NAMES.indexOf('md');
     const steps = cl.map((c, i) => ({ token: RAMP_NAMES[clamp(mdPos + (i - bodyIdx), 0, RAMP_NAMES.length - 1)], px: c.px, observed: c.members, n: c.n }));
     // de-dupe token names if the page has more clusters than names on one side
@@ -292,10 +294,14 @@
       const isImg = el.tagName === 'IMG';
       const orig = {
         op: isImg ? css(el).objectPosition : css(el).backgroundPosition,
-        tr: el.style.transform || '', to: el.style.transformOrigin || ''
+        tr: el.style.transform || '', to: el.style.transformOrigin || '',
+        fit: isImg ? css(el).objectFit : ''
       };
       const parent = el.parentElement;
       if (isImg && css(parent).overflow === 'visible') parent.style.overflow = 'hidden';
+      // a plain <img> (fill / scale-down) has nothing to pan; in jig mode it becomes a cover crop
+      const upgraded = isImg && !/cover|none/.test(orig.fit);
+      if (upgraded) el.style.setProperty('object-fit', 'cover', 'important');
       let [ox, oy] = parsePos(orig.op);
       let zoom = 1;
       el.__jigOrig = orig;
@@ -307,6 +313,7 @@
         if (e.altKey) return;
         if (e.target.closest('.jig-el') !== el) return;
         e.preventDefault(); e.stopPropagation(); try { el.setPointerCapture(e.pointerId); } catch (x) {}
+        if (isImg) { const f = naturalFit(el, zoom); if (f.ovx < 2 && f.ovy < 2) { zoom = Math.max(zoom, 1.2); apply(); } }
         drag = { x: e.clientX, y: e.clientY, ox, oy, id: e.pointerId }; el.style.cursor = 'grabbing';
       });
       on(el, 'pointermove', e => {
@@ -343,19 +350,19 @@
       function apply() {
         const pos = `${r1(ox)}% ${r1(oy)}%`;
         if (isImg) {
-          el.style.objectPosition = pos;
-          el.style.transformOrigin = pos;
-          el.style.transform = zoom !== 1 ? `scale(${r2(zoom)})` : '';
-        } else el.style.backgroundPosition = pos;
+          el.style.setProperty('object-position', pos, 'important');
+          el.style.setProperty('transform-origin', pos, 'important');
+          if (zoom !== 1) el.style.setProperty('transform', `scale(${r2(zoom)})`, 'important'); else el.style.removeProperty('transform');
+        } else el.style.setProperty('background-position', pos, 'important');
         setBadge(el, `${isImg ? 'object' : 'background'}-position ${pos}${zoom !== 1 ? ' · zoom ' + r2(zoom) : ''}`);
       }
       function commit() {
         const same = parsePos(orig.op).join() === [r1(ox), r1(oy)].join() && zoom === 1;
         if (same) return unrecord(el, 'crop');
-        const data = isImg ? { objectPosition: `${r1(ox)}% ${r1(oy)}%`, ...(zoom !== 1 ? { zoom: r2(zoom) } : {}) } : { backgroundPosition: `${r1(ox)}% ${r1(oy)}%` };
-        record(el, 'crop', data, `crop moved to ${r1(ox)}% ${r1(oy)}%${zoom !== 1 ? ', zoom ' + r2(zoom) + '×' : ''}`);
+        const data = isImg ? { objectPosition: `${r1(ox)}% ${r1(oy)}%`, ...(zoom !== 1 ? { zoom: r2(zoom) } : {}), ...(upgraded ? { objectFit: 'cover' } : {}) } : { backgroundPosition: `${r1(ox)}% ${r1(oy)}%` };
+        record(el, 'crop', data, `crop moved to ${r1(ox)}% ${r1(oy)}%${zoom !== 1 ? ', zoom ' + r2(zoom) + '×' : ''}${upgraded ? ' (as object-fit: cover)' : ''}`);
       }
-      el.__jigReset = () => { ox = parsePos(orig.op)[0]; oy = parsePos(orig.op)[1]; zoom = 1; apply(); unrecord(el, 'crop'); };
+      el.__jigReset = () => { ox = parsePos(orig.op)[0]; oy = parsePos(orig.op)[1]; zoom = 1; apply(); ['object-position', 'transform-origin', 'transform'].forEach(k => el.style.removeProperty(k)); unrecord(el, 'crop'); };
     }
   };
   function parsePos(s) {
@@ -367,6 +374,7 @@
     const z = zoom || 1;
     const W = img.offsetWidth, H = img.offsetHeight;
     const nw = img.naturalWidth || W, nh = img.naturalHeight || H;
+    if (!W || !H) return { ovx: 0, ovy: 0 };
     const s = Math.max(W / nw, H / nh) * z;
     return { ovx: nw * s - W, ovy: nh * s - H };
   }
@@ -658,7 +666,7 @@
     // explicit first
     $$('[data-jig]').forEach(el => { let c = el.dataset.jig; if (c === 'heading') c = 'type'; if (c && c !== 'off') add(el, c); });
     // crop: cover-fit images and background images of a useful size
-    $$('img').forEach(img => { const r = img.getBoundingClientRect(); if (r.width >= 80 && r.height >= 80 && /cover|none/.test(css(img).objectFit)) add(img, 'crop'); });
+    $$('img').forEach(img => { const r = img.getBoundingClientRect(); if (r.width >= 80 && r.height >= 80) add(img, 'crop'); });
     $$('body *').forEach(el => { if (el.tagName === 'IMG') return; const bg = css(el).backgroundImage; if (bg && bg !== 'none' && /url\(/.test(bg)) { const r = el.getBoundingClientRect(); if (r.width >= 80 && r.height >= 80) add(el, 'crop'); } });
     // type: headings first, then any text block that has its own words and no block children
     $$('h1,h2,h3,h4,h5,h6').forEach(h => add(h, 'type'));
