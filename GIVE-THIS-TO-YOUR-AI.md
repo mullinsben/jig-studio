@@ -78,7 +78,14 @@ Protection warnings come from a light accessibility scan the jig runs on the who
 - `contrast`: text against its sampled background, WCAG AA (4.5, or 3 for large text)
 - `tap-target`: interactive element shorter than the foundation's `minTapTarget` (44px)
 - `heading-order`: a heading level is skipped (h2 → h4)
-- `hierarchy`: an h2 renders larger than the page's h1
+- `hierarchy`: an h2 renders larger than the page's h1, or a heading renders no larger (or barely larger and not bold) than the body copy beside it
+- `small-text`: body copy under 14px
+- `measure`: a paragraph running past ~90 characters a line; cap its width (the jig proposes `maxWidthCols`)
+- `overflow`: text spilling out of, or clipped by, its box
+- `button-wrap`: a button label wrapping to two lines
+- `no-name`: a link or button with no text, alt, or aria-label
+- `soft`: an image rendered larger than its native pixels; serve a larger asset or shrink the box
+- `face`: a detected face outside the crop
 - `text-over-image`: text on an image whose pixels couldn't be sampled (usually `file://`)
 
 Surface them to the person with the patch. Offer a fix for each; apply only what they approve.

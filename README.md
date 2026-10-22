@@ -93,7 +93,12 @@ Every time jig mode opens, and after every change, the whole page is scanned:
 - contrast against the sampled background (WCAG AA; large text gets the 3:1 rule)
 - tap targets under the foundation's `minTapTarget`
 - skipped heading levels
-- an h2 that renders larger than the h1
+- an h2 that renders larger than the h1, and any heading that doesn't read as one next to its own body copy (no larger, or barely larger and not bold)
+- body copy under 14px, and paragraphs running past ~90 characters a line
+- text spilling out of or clipped by its box
+- button labels that wrap, tap targets too narrow, links and buttons with no accessible name
+- more than one h1
+- images rendered past their native pixels (soft), and a detected face the crop leaves out
 - text over an image that couldn't be sampled
 
 They're listed in the HUD under **notes** and included in the patch. They never block a change; the approver decides.

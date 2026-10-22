@@ -438,6 +438,13 @@
         if (inFrame || (Math.abs(nx - ox) < 8 && Math.abs(ny - oy) < 8)) return false;   // already framed, or not worth the churn
         ox = nx; oy = ny; apply(); commit(); return true;
       };
+      el.__jigZoom = () => zoom;
+      el.__jigInFrame = (fx, fy) => {   // is this natural-image point inside the comfortable middle of the current window?
+        if (!isImg) return true; const W = el.offsetWidth, H = el.offsetHeight, nw = el.naturalWidth || W, nh = el.naturalHeight || H;
+        const sc = Math.max(W / nw, H / nh) * zoom; const sw = nw * sc, sh = nh * sc;
+        const vx = sw > W + 1 ? (fx * sw - (ox / 100) * (sw - W)) / W : 0.5, vy = sh > H + 1 ? (fy * sh - (oy / 100) * (sh - H)) / H : 0.5;
+        return vx > 0.1 && vx < 0.9 && vy > 0.1 && vy < 0.9;
+      };
       el.__jigSetCrop = (x, y, z) => { if (typeof x === 'number') ox = x; if (typeof y === 'number') oy = y; if (isImg && typeof z === 'number') zoom = clamp(z, 1, 4); apply(); commit(); };
       el.__jigReset = () => {
         ox = parsePos(orig.op)[0]; oy = parsePos(orig.op)[1]; zoom = zoom0; apply(); ['object-position', 'transform-origin', 'transform'].forEach(k => el.style.removeProperty(k)); if (orig.opInline) el.style[isImg ? 'objectPosition' : 'backgroundPosition'] = orig.opInline; if (orig.tr) el.style.transform = orig.tr; if (orig.to) el.style.transformOrigin = orig.to; unrecord(el, 'crop');
@@ -595,6 +602,7 @@
         el.style.maxWidth = `calc(${c} * (100% + ${state.F.grid.gutter}px) / ${state.F.grid.columns} - ${state.F.grid.gutter}px)`;
         el.dataset.jigCols = c; setBadge(el, `max-width ${c} cols`); commit();
       }, { passive: false });
+      el.__jigSetMaxCols = c => { c = clamp(c, 2, state.F.grid.columns); el.style.maxWidth = `calc(${c} * (100% + ${state.F.grid.gutter}px) / ${state.F.grid.columns} - ${state.F.grid.gutter}px)`; el.dataset.jigCols = c; commit(); };
       function commit() {
         const data = {}; const bits = [];
         if (isAbs) {
@@ -1064,8 +1072,21 @@
   // ------------------------------------------------------------ protection scan (AX)
   let scanTimer = null;
   function scanSoon() { clearTimeout(scanTimer); scanTimer = setTimeout(scanProtection, 250); }
+  // faces: detected once per image (where the browser can), then checked against the current crop on every scan
+  const faceCache = new Map(); let faceRun = null;
+  function checkFaces() {
+    if (!('FaceDetector' in window) || faceRun) return;
+    const imgs = $$('img.jig-el[data-jig-ctl="crop"]').filter(i => i.complete && i.naturalWidth && i.__jigInFrame);
+    const todo = imgs.filter(i => !faceCache.has(i.currentSrc || i.src)); if (!todo.length) { applyFaces(imgs); return; }
+    faceRun = (async () => { const fd = new window.FaceDetector({ fastMode: true, maxDetectedFaces: 3 }); for (const i of todo) { try { const f = await fd.detect(i); faceCache.set(i.currentSrc || i.src, f.length ? { fx: (f[0].boundingBox.x + f[0].boundingBox.width / 2) / i.naturalWidth, fy: (f[0].boundingBox.y + f[0].boundingBox.height / 2) / i.naturalHeight } : null); } catch (e) { faceCache.set(i.currentSrc || i.src, null); } } })().then(() => { faceRun = null; if (applyFaces(imgs)) scanSoon(); });
+  }
+  function applyFaces(imgs) {
+    let changed = false;
+    imgs.forEach(i => { const f = faceCache.get(i.currentSrc || i.src); const out = !!(f && !i.__jigInFrame(f.fx, f.fy)); if (out !== !!i.__jigFaceOut) changed = true; i.__jigFaceOut = out; i.__jigFace = f || null; });
+    return changed;
+  }
   function scanProtection() {
-    clearTimeout(scanTimer);
+    clearTimeout(scanTimer); checkFaces();
     document.documentElement.classList.add('jig-scanning');   // transitions off: read settled values, not a frame of an animation
     try { scanNow(); } finally { document.documentElement.classList.remove('jig-scanning'); }
   }
@@ -1085,6 +1106,19 @@
     // 1b. visual hierarchy: an h2 rendered larger than the page h1
     const h1 = hs.find(h => h.tagName === 'H1');
     if (h1) { const h1px = px(css(h1).fontSize); hs.filter(h => h.tagName === 'H2' && px(css(h).fontSize) > h1px).forEach(h => W.push({ kind: 'hierarchy', el: h, msg: `h2 renders at ${r1(px(css(h).fontSize))}px, larger than the h1 (${r1(h1px)}px)` })); }
+    // 1c. a heading that renders no larger than body copy isn't reading as a heading
+    const bodyPx = (() => { const ps = $$('p, li, dd, td').filter(t => t.offsetParent && (t.textContent || '').trim().length >= 40 && !t.closest('#jig-hud, #jig-found')); if (!ps.length) return 16; const v = ps.map(t => px(css(t).fontSize)).sort((a, b) => a - b); return v[Math.floor(v.length / 2)]; })();
+    const localBody = h => {   // the body text this heading sits with: a following sibling text block, else one inside the same parent, else the page's
+      const ok = t => t && t !== h && !h.contains(t) && /^(P|LI|DD|TD|FIGCAPTION|SMALL|SPAN|DIV)$/.test(t.tagName) && (t.textContent || '').trim().length >= 20 && !/^H[1-6]$/.test(t.tagName);
+      let n = h.nextElementSibling; while (n && !ok(n)) n = n.nextElementSibling; if (n) return px(css(n).fontSize);
+      const inPar = h.parentElement && Array.from(h.parentElement.querySelectorAll('p, li, dd, figcaption')).find(ok); if (inPar) return px(css(inPar).fontSize);
+      return bodyPx;
+    };
+    hs.forEach(h => {
+      const f = px(css(h).fontSize); const bold = px(css(h).fontWeight) >= 600; const lb = localBody(h);
+      const distinct = f > lb + 0.5 && (f >= lb * 1.15 - 0.01 || bold);
+      if (!distinct) W.push({ kind: 'hierarchy', el: h, msg: `${h.tagName.toLowerCase()} renders at ${r1(f)}px${bold ? '' : ', regular weight'}, next to body copy at ${r1(lb)}px; it doesn't read as a heading`, small: true, bodyPx: lb });
+    });
     // 2. tap targets
     const min = P.minTapTarget || 44;
     const taps = new Set($$('button, [role=button], [data-jig=button], .jig-el[data-jig-ctl="button"], input[type=submit], input[type=button]'));
@@ -1092,6 +1126,43 @@
     taps.forEach(b => {
       if (!b.offsetParent || b.closest('#jig-hud, .jig-tb, #jig-found, #jig-device')) return; const r = b.getBoundingClientRect();
       if (r.height < min - 0.5) W.push({ kind: 'tap-target', el: b, msg: `tap target ${Math.round(r.width)}×${Math.round(r.height)}px, min ${min}px tall` });
+      else if (r.width < min - 0.5) W.push({ kind: 'tap-target', el: b, narrow: true, msg: `tap target ${Math.round(r.width)}×${Math.round(r.height)}px, min ${min}px wide` });
+      // a label that wraps inside a button reads as two buttons
+      if (b.getClientRects().length === 1 && (b.textContent || '').trim()) { const lh = px(css(b).lineHeight) || px(css(b).fontSize) * 1.3; const inner = r.height - px(css(b).paddingTop) - px(css(b).paddingBottom); if (inner > lh * 1.6 && (b.textContent || '').trim().split(/\s+/).length > 1) W.push({ kind: 'button-wrap', el: b, msg: `button label wraps to ${Math.round(inner / lh)} lines` }); }
+    });
+    // 2b. buttons and links with nothing a screen reader can say
+    $$('a, button, [role=button]').forEach(b => {
+      if (!b.offsetParent || b.closest('#jig-hud, .jig-tb, #jig-found, #jig-device, #jig-axtags')) return;
+      const name = (b.getAttribute('aria-label') || b.getAttribute('title') || b.textContent || '').trim() || Array.from(b.querySelectorAll('img[alt]')).map(i => i.alt.trim()).join(' ').trim() || (b.getAttribute('aria-labelledby') ? 'x' : '');
+      if (!name) W.push({ kind: 'no-name', el: b, msg: `${b.tagName === 'A' ? 'link' : 'button'} has no accessible name (no text, alt, or aria-label)` });
+    });
+    // 2c. more than one h1
+    const h1s = hs.filter(h => h.tagName === 'H1'); if (h1s.length > 1) h1s.slice(1).forEach(h => W.push({ kind: 'heading-order', el: h, msg: `${h1s.length} h1s on the page; one is the convention` }));
+    // 2d. body copy too small to read, and measures too long or short to read comfortably
+    const phone = state.bp === 'phone'; const minBody = 14;
+    $$('p, li, dd, td, blockquote, figcaption').forEach(t => {
+      if (!t.offsetParent || t.closest('#jig-hud, .jig-tb, #jig-found, #jig-device, #jig-axtags, nav, footer, small')) return; const txt = (t.textContent || '').trim(); if (txt.length < 40) return;
+      const c = css(t); const f = px(c.fontSize);
+      if (f < minBody - 0.5) W.push({ kind: 'small-text', el: t, msg: `body copy at ${r1(f)}px; ${minBody}px is the floor${phone ? ' on a phone' : ''}`, min: minBody });
+      // measure: characters per line, from the box width and an average glyph width
+      const r = t.getBoundingClientRect(); if (r.width < 40) return; const cpl = r.width / (f * 0.5);
+      const lines = Math.round(r.height / (px(c.lineHeight) || f * 1.4));
+      if (lines >= 3 && cpl > 90) W.push({ kind: 'measure', el: t, msg: `about ${Math.round(cpl)} characters per line; 45 to 85 reads best`, cpl, long: true });
+    });
+    // 2e. text spilling out of its box
+    $$('h1, h2, h3, h4, h5, h6, p, li, a, button, span, div').forEach(t => {
+      if (!t.offsetParent || t.closest('#jig-hud, .jig-tb, #jig-found, #jig-device, #jig-axtags, .jig-crop-box') || t.tagName === 'DIV' && !Array.from(t.childNodes).some(n => n.nodeType === 3 && n.textContent.trim())) return;
+      const c = css(t); if (c.overflow !== 'visible' && c.overflow !== '') return;
+      if (t.scrollWidth > t.clientWidth + 4 && c.whiteSpace !== 'nowrap' && t.clientWidth > 0) W.push({ kind: 'overflow', el: t, msg: `text runs ${Math.round(t.scrollWidth - t.clientWidth)}px past its box` });
+      const par = t.parentElement; if (par && /hidden|clip/.test(css(par).overflow + css(par).overflowY)) { const pr = par.getBoundingClientRect(), tr = t.getBoundingClientRect(); if (tr.bottom > pr.bottom + 2 || tr.right > pr.right + 2) W.push({ kind: 'overflow', el: t, msg: 'text is clipped by its container' }); }
+    });
+    // 2f. images rendering past their native resolution (soft), and faces the crop leaves out
+    $$('img').forEach(img => {
+      if (!img.offsetParent || !img.naturalWidth || img.closest('#jig-hud, #jig-device')) return;
+      const r = img.getBoundingClientRect(); const z = (img.__jigZoom ? img.__jigZoom() : 1);
+      const scale = Math.max(r.width / img.naturalWidth, r.height / img.naturalHeight) * z;
+      if (scale > 1.5) W.push({ kind: 'soft', el: img, msg: `image rendered at ${scale.toFixed(1)}× its native pixels${z > 1 ? ` (zoom ${z.toFixed(2)})` : ''}; it will look soft` });
+      if (img.__jigFaceOut) W.push({ kind: 'face', el: img, msg: 'a detected face sits outside the crop' });
     });
     // 3. contrast: every element with its own text, sampled under its own box
     const seen = new Set();
@@ -1139,7 +1210,7 @@
     state.warnings.forEach(w => { if (!w.el || !w.el.isConnected) return; w.el.classList.add('jig-ax'); byEl.set(w.el, (byEl.get(w.el) || []).concat(w)); });
     byEl.forEach((ws, el) => {
       const tag = document.createElement('div'); tag.className = 'tag'; tag.__el = el;
-      tag.textContent = ws.map(w => w.kind === 'contrast' ? `contrast ${w.value} / ${w.min}` : w.kind === 'tap-target' ? `tap ${w.msg.replace(/.*×(\d+)px.*/, '$1')}px tall` : w.kind === 'alt' ? 'no alt' : w.kind).join(' · ');
+      tag.textContent = ws.map(w => w.kind === 'contrast' ? `contrast ${w.value} / ${w.min}` : w.kind === 'tap-target' ? `tap ${w.msg.replace(/.*×(\d+)px.*/, '$1')}px tall` : w.kind === 'alt' ? 'no alt' : w.kind === 'small-text' ? 'small text' : w.kind === 'measure' ? `${Math.round(w.cpl)} cpl` : w.kind === 'button-wrap' ? 'label wraps' : w.kind === 'no-name' ? 'no name' : w.kind === 'overflow' ? 'overflows' : w.kind === 'soft' ? 'soft' : w.kind === 'face' ? 'face cropped' : w.kind).join(' · ');
       tag.title = ws.map(w => w.msg).join('\n');
       axTags.appendChild(tag);
     });
@@ -1446,33 +1517,62 @@
   function autoFixAX() {
     state.autoFixes = [];
     scanProtection();
-    const seen = new Set();
+    const seen = new Set(); const ids = new WeakMap(); let nid = 0; const key = (el, k) => { if (!ids.has(el)) ids.set(el, ++nid); return k + ':' + ids.get(el); };
     for (let pass = 0; pass < 4; pass++) {
       let did = false;
       for (const w of state.warnings.slice()) {
         const plain = w.kind === 'contrast' && /on background/.test(w.msg);
         if (!plain && (w.kind === 'contrast' || w.kind === 'busy-background' || w.kind === 'text-over-image')) {
-          const ov = w.el.closest('.jig-el[data-jig-ctl="text"]'); if (!ov || !ov.__jigSetScrim || seen.has(ov)) continue;
-          seen.add(ov);
+          const ov = w.el.closest('.jig-el[data-jig-ctl="text"]'); if (!ov || !ov.__jigSetScrim || seen.has(key(ov, 'scrim'))) continue;
+          seen.add(key(ov, 'scrim'));
           for (const sc of ['gradient', 'tint', 'glass']) {
             ov.__jigSetScrim(sc); scanProtection();
             if (!state.warnings.some(x => ov.contains(x.el) && /contrast|busy|text-over/.test(x.kind))) { state.autoFixes.push({ el: ov, what: `scrim ${sc} (text over image now passes)` }); did = true; break; }
             if (sc === 'glass') state.autoFixes.push({ el: ov, what: 'scrim glass (best effort; still short of AA)' });
           }
         }
-        if (plain && !seen.has(w.el)) {
-          seen.add(w.el); const r = fixContrast(w.el);
+        if (plain && !seen.has(key(w.el, w.kind))) {
+          seen.add(key(w.el, w.kind)); const r = fixContrast(w.el);
           if (r && !r.already) { state.autoFixes.push({ el: w.el, ctl: 'type', what: `${r.prop === 'color' ? 'colour' : 'background'} ${r.from} → ${r.to} (contrast ${r.before.toFixed(1)} → ${r.after.toFixed(1)})`, undo: r.undo }); did = true; }
         }
-        if (w.kind === 'tap-target' && w.el.__jigStepSize && !seen.has(w.el)) {
-          seen.add(w.el); let steps = 0;
+        if (w.kind === 'small-text' && w.el.__jigStepType && !seen.has(key(w.el, w.kind))) {
+          seen.add(key(w.el, w.kind)); let steps = 0; while (steps < 3 && px(css(w.el).fontSize) < w.min - 0.5) { const b0 = px(css(w.el).fontSize); w.el.__jigStepType(1); if (px(css(w.el).fontSize) <= b0 + 0.1) break; steps++; }
+          if (steps) { state.autoFixes.push({ el: w.el, what: `ramp +${steps} (body copy now ${r1(px(css(w.el).fontSize))}px)` }); did = true; }
+        }
+        if (w.kind === 'measure' && w.long && w.el.__jigSetMaxCols && !seen.has(key(w.el, w.kind))) {
+          seen.add(key(w.el, w.kind)); const G = state.F.grid; const colW = w.el.getBoundingClientRect().width / Math.max(1, Math.round(w.el.getBoundingClientRect().width / colWidth(w.el.parentElement || document.body)));
+          const want = clamp(Math.round((70 * px(css(w.el).fontSize) * 0.5 + G.gutter) / (colWidth(w.el.parentElement || document.body))), 2, G.columns);
+          w.el.__jigSetMaxCols(want); state.autoFixes.push({ el: w.el, what: `max-width ${want} cols (measure was ~${Math.round(w.cpl)} characters)` }); did = true;
+        }
+        if (w.kind === 'tap-target' && w.narrow && w.el.__jigStepSize && !seen.has(key(w.el, w.kind))) {
+          seen.add(key(w.el, w.kind)); let steps = 0; const min = (state.F.protect || {}).minTapTarget || 44;
+          while (steps < 2 && w.el.getBoundingClientRect().width < min - 0.5 && w.el.__jigStepSize(1)) steps++;
+          if (steps) { state.autoFixes.push({ el: w.el, what: `size +${steps} (tap target now ${Math.round(w.el.getBoundingClientRect().width)}px wide)` }); did = true; }
+        }
+        if (w.kind === 'button-wrap' && w.el.__jigStepSize && !seen.has(key(w.el, w.kind))) {
+          seen.add(key(w.el, w.kind)); const lines = () => { const lh = px(css(w.el).lineHeight) || px(css(w.el).fontSize) * 1.3; const r = w.el.getBoundingClientRect(); return (r.height - px(css(w.el).paddingTop) - px(css(w.el).paddingBottom)) / lh; };
+          let steps = 0; while (steps < 2 && lines() > 1.6 && w.el.__jigStepSize(-1)) steps++;
+          if (lines() <= 1.6 && steps) { state.autoFixes.push({ el: w.el, what: `size −${steps} (label on one line)` }); did = true; } else while (steps-- > 0) w.el.__jigStepSize(1);
+        }
+        if (w.kind === 'face' && w.el.__jigSetFocal && w.el.__jigFace && !seen.has(key(w.el, w.kind))) {
+          seen.add(key(w.el, w.kind)); if (w.el.__jigSetFocal(w.el.__jigFace.fx, w.el.__jigFace.fy)) { state.autoFixes.push({ el: w.el, what: 'crop re-centred on the face' }); did = true; }
+        }
+        if (w.kind === 'tap-target' && !w.narrow && w.el.__jigStepSize && !seen.has(key(w.el, w.kind))) {
+          seen.add(key(w.el, w.kind)); let steps = 0;
           while (steps < 2 && w.el.getBoundingClientRect().height < ((state.F.protect || {}).minTapTarget || 44) - 0.5 && w.el.__jigStepSize(1)) steps++;
           if (steps) { state.autoFixes.push({ el: w.el, what: `size +${steps} (tap target now ${Math.round(w.el.getBoundingClientRect().height)}px)` }); did = true; }
         }
-        if (w.kind === 'hierarchy' && w.el.__jigStepType && !seen.has(w.el)) {
-          seen.add(w.el); const h1 = $$('h1').find(h => h.offsetParent); const h1px = h1 ? px(css(h1).fontSize) : 0; let steps = 0;
-          while (steps < 3 && px(css(w.el).fontSize) > h1px + 0.5) { w.el.__jigStepType(-1); steps++; }
-          if (steps) { state.autoFixes.push({ el: w.el, what: `ramp -${steps} (now ≤ h1)` }); did = true; }
+        if (w.kind === 'hierarchy' && w.el.__jigStepType && !seen.has(key(w.el, w.kind))) {
+          seen.add(key(w.el, w.kind)); let steps = 0;
+          if (w.small) {
+            const reads = () => { const f = px(css(w.el).fontSize), bold = px(css(w.el).fontWeight) >= 600; return f > w.bodyPx + 0.5 && (f >= w.bodyPx * 1.15 - 0.01 || bold); };
+            while (steps < 3 && !reads()) { const before = px(css(w.el).fontSize); w.el.__jigStepType(1); if (px(css(w.el).fontSize) <= before + 0.1) break; steps++; }
+            if (steps) { state.autoFixes.push({ el: w.el, what: `ramp +${steps} (now larger than body copy)` }); did = true; }
+          } else {
+            const h1 = $$('h1').find(h => h.offsetParent); const h1px = h1 ? px(css(h1).fontSize) : 0;
+            while (steps < 3 && px(css(w.el).fontSize) > h1px + 0.5) { w.el.__jigStepType(-1); steps++; }
+            if (steps) { state.autoFixes.push({ el: w.el, what: `ramp -${steps} (now ≤ h1)` }); did = true; }
+          }
         }
       }
       scanProtection();
