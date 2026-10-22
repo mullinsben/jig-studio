@@ -175,7 +175,7 @@
     return padded && r.width < 480 && ((bg && bg[3] > 0.1) || bw >= 1) && /inline-block|flex|block/.test(c.display);
   }
   function inferButtons() {
-    const els = $$('a, button, input, [role=button]').filter(looksLikeButton);
+    const els = $$('a, button, input, [role=button]').filter(looksLikeButton).filter(e => { const r = e.getBoundingClientRect(); return r.height >= 20 && r.height <= 72 && r.width <= 420; });
     if (!els.length) return { mode: 'measured', sizes: [{ token: 'md', h: 44, padX: 20, padY: 10, fs: 14 }], variants: [{ token: 'primary', bg: '#3f6fff', fg: '#fff', border: 'transparent' }], classPrefix: '' };
     const hs = cluster(els.map(e => ({ v: Math.round(e.getBoundingClientRect().height), n: 1 })), 0.12);
     const names = hs.length === 1 ? ['md'] : hs.length === 2 ? ['sm', 'lg'] : ['sm', 'md', 'lg', 'xl', '2xl'];
@@ -638,8 +638,11 @@
     el.__jigToolbar = () => [btn('−', () => cyc('size', -1)), chip(() => sizes[si].token), btn('+', () => cyc('size', 1)), sep(), btn('◐', () => cyc('variant', 1)), chip(() => variants[vi].token)];
     function apply() {
       const sz = sizes[si], v = variants[vi];
-      if (si !== si0) { el.style.setProperty('padding', `${sz.padY}px ${sz.padX}px`, 'important'); el.style.setProperty('font-size', `${sz.fs}px`, 'important'); el.style.setProperty('min-height', `${sz.h}px`, 'important'); el.style.setProperty('line-height', `${Math.max(1, Math.round(sz.h - 2 * sz.padY))}px`, 'important'); }
-      else { ['padding', 'font-size', 'min-height', 'line-height'].forEach(k => el.style.removeProperty(k)); Object.assign(el.style, { padding: orig.p, fontSize: orig.fs, minHeight: orig.mh }); }
+      if (si !== si0) {
+        el.style.setProperty('padding', `${sz.padY}px ${sz.padX}px`, 'important'); el.style.setProperty('font-size', `${sz.fs}px`, 'important'); el.style.setProperty('line-height', '1.2', 'important');
+        const d = css(el).display; if (!/flex|grid/.test(d)) el.style.setProperty('display', d === 'block' ? 'flex' : 'inline-flex', 'important');
+        el.style.setProperty('align-items', 'center', 'important'); el.style.setProperty('justify-content', 'center', 'important'); el.style.setProperty('box-sizing', 'border-box', 'important');
+      } else { ['padding', 'font-size', 'line-height', 'display', 'align-items', 'justify-content', 'box-sizing', 'min-height'].forEach(k => el.style.removeProperty(k)); Object.assign(el.style, { padding: orig.p, fontSize: orig.fs }); }
       if (vi !== vi0) { el.style.background = v.bg; el.style.color = v.fg; el.style.borderColor = v.border; } else Object.assign(el.style, { background: orig.bg, color: orig.c, borderColor: orig.bc });
       setBadge(el, `size ${sz.token} (${sz.h}px) · ${v.token}`);
     }
@@ -789,8 +792,8 @@
     .jig-el.jig-active:hover, .jig-el.jig-active.jig-selected { outline: 2px solid #3f6fff; }
     .jig-el.jig-el:not(.jig-active) { pointer-events: none; cursor: auto !important; }
     .jig-el:not(.jig-active) * { pointer-events: auto; }
-    #jig-hud .jigs { display: flex; gap: 6px; padding: 10px 12px 2px; flex-wrap: wrap; }
-    #jig-hud .jigs button { font: 600 12px ui-sans-serif, system-ui; background: transparent; color: #9aa3b8; border: 1px solid #262833; border-radius: 999px; padding: 6px 12px; cursor: pointer; }
+    #jig-hud .jigs { display: flex; gap: 5px; padding: 10px 12px 8px; border-bottom: 1px solid #262833; }
+    #jig-hud .jigs button { flex: 1; font: 600 12px ui-sans-serif, system-ui; background: transparent; color: #9aa3b8; border: 1px solid #262833; border-radius: 999px; padding: 6px 4px; cursor: pointer; text-align: center; }
     #jig-hud .jigs button:hover { border-color: #3f6fff; color: #fff; }
     #jig-hud .jigs button.on { background: #3f6fff; border-color: #3f6fff; color: #fff; }
     #jig-hud .jigs .lbl { font: 11px ui-sans-serif, system-ui; letter-spacing: .14em; text-transform: uppercase; opacity: .6; align-self: center; margin-right: 2px; }
@@ -808,10 +811,10 @@
     #jig-hud { position: fixed; top: 16px; right: 16px; width: 372px; height: auto; max-height: calc(100vh - 32px); min-width: 280px; min-height: 92px; display: flex; flex-direction: column; z-index: 2147483647;
       background: #0b0b0d; color: #f3f4f7; border-radius: 12px; box-shadow: 0 12px 40px rgba(0,0,0,.45); font: 13px/1.45 ui-sans-serif, system-ui, sans-serif; overflow: hidden; resize: both; }
     #jig-hud.collapsed { resize: none; height: auto !important; }
-    #jig-hud.collapsed .tools, #jig-hud.collapsed .src, #jig-hud.collapsed .list, #jig-hud.collapsed .jigs { display: none; }
+    #jig-hud.collapsed .tools, #jig-hud.collapsed .advpanel, #jig-hud.collapsed .list, #jig-hud.collapsed .jigs, #jig-hud.collapsed .hint { display: none; }
     #jig-hud header .min { margin-left: 8px; width: 24px; height: 24px; border: 0; border-radius: 6px; background: #262833; color: #fff; cursor: pointer; font: 700 14px/1 ui-sans-serif, system-ui; }
     #jig-hud header .min:hover { background: #3f6fff; }
-    #jig-hud .tools select { font: 600 12px ui-sans-serif, system-ui; background: #262833; color: #fff; border: 0; border-radius: 6px; padding: 6px 8px; cursor: pointer; }
+    #jig-hud select { font: 600 12px ui-sans-serif, system-ui; background: #262833; color: #fff; border: 0; border-radius: 6px; padding: 6px 8px; cursor: pointer; }
     #jig-found { position: fixed; top: 16px; left: 16px; width: 380px; padding-right: 40px; max-height: calc(100vh - 32px); overflow: auto; z-index: 2147483644; background: #0b0b0d; color: #f3f4f7; border-radius: 12px; box-shadow: 0 12px 40px rgba(0,0,0,.45); font: 13px/1.45 ui-sans-serif, system-ui, sans-serif; padding: 12px 14px 14px; }
     #jig-found h5 { margin: 0 0 6px; font-size: 14px; } #jig-found h5 i { color: #3f6fff; font-style: normal; }
     #jig-found h6 { margin: 12px 0 4px; font-size: 11px; letter-spacing: .14em; text-transform: uppercase; opacity: .6; }
@@ -834,12 +837,20 @@
     #jig-hud header { display: flex; align-items: center; gap: 8px; padding: 10px 12px; background: #13141a; cursor: move; user-select: none; }
     #jig-hud header b { font-size: 14px; letter-spacing: .02em; } #jig-hud header b i { color: #3f6fff; font-style: normal; }
     #jig-hud header small { opacity: .6; margin-left: auto; font-family: ui-monospace, Menlo, monospace; font-size: 11px; }
-    #jig-hud .tools { display: flex; gap: 6px; padding: 8px 12px; border-bottom: 1px solid #262833; flex-wrap: wrap; }
+    #jig-hud .tools { display: flex; gap: 6px; padding: 8px 12px; border-bottom: 1px solid #262833; align-items: center; }
+    #jig-hud .tools .spacer { flex: 1; }
+    #jig-hud .advpanel { border-bottom: 1px solid #262833; padding: 6px 12px 8px; }
+    #jig-hud:not(.advanced) .advpanel { display: none; }
+    #jig-hud .arow { display: grid; grid-template-columns: 64px 1fr; align-items: center; gap: 8px; padding: 4px 0; }
+    #jig-hud .arow label { font: 11px ui-sans-serif, system-ui; letter-spacing: .12em; text-transform: uppercase; opacity: .55; }
+    #jig-hud .arow > div { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+    #jig-hud .arow button, #jig-hud .arow select { font: 600 12px ui-sans-serif, system-ui; background: #262833; color: #fff; border: 0; border-radius: 6px; padding: 6px 10px; cursor: pointer; }
+    #jig-hud .arow button:hover { background: #3f6fff; } #jig-hud .arow button.on { background: #3f6fff; }
+    #jig-hud .hint { padding: 6px 12px 8px; font: 11px ui-monospace, Menlo, monospace; opacity: .4; background: #13141a; }
     #jig-hud .tools button, #jig-hud footer button { font: 600 12px ui-sans-serif, system-ui; background: #262833; color: #fff; border: 0; border-radius: 6px; padding: 6px 10px; cursor: pointer; }
     #jig-hud .tools button.on { background: #2bb673; }
     #jig-hud .tools button.ghost { background: transparent; color: #9aa3b8; border: 1px solid #262833; }
     #jig-hud .tools button.ghost.on { background: transparent; color: #fff; border-color: #3f6fff; }
-    #jig-hud:not(.advanced) .adv, #jig-hud:not(.advanced) .src { display: none; }
     #jig-hud .tools button:hover, #jig-hud footer button:hover { background: #3f6fff; }
     #jig-hud .list { overflow: auto; padding: 8px 12px; flex: 1; }
     #jig-hud h6 { margin: 8px 0 4px; font-size: 11px; letter-spacing: .14em; text-transform: uppercase; opacity: .6; }
@@ -851,7 +862,7 @@
     #jig-hud footer { display: flex; gap: 6px; padding: 10px 12px; border-top: 1px solid #262833; background: #13141a; align-items: center; }
     #jig-hud footer button.primary { background: #3f6fff; flex: 1; }
     #jig-hud footer small { opacity: .6; }
-    #jig-hud .src { padding: 0 12px 8px; font: 11px ui-monospace, Menlo, monospace; opacity: .55; }
+    #jig-hud .src { padding: 6px 0 0; font: 11px ui-monospace, Menlo, monospace; opacity: .55; }
     @media (max-width: 640px) {
       #jig-hud { top: auto; bottom: 0; left: 0; right: 0; width: auto; max-height: 50vh; border-radius: 12px 12px 0 0; }
       #jig-hud header { cursor: pointer; }
@@ -1057,21 +1068,22 @@
   const hud = document.createElement('div'); hud.id = 'jig-hud';
   hud.innerHTML = `
     <header><b>jig <i>studio</i></b><small id="jig-bp"></small><button class="min" id="jig-min-btn" title="minimize">–</button></header>
-    <div class="jigs"><span class="lbl">jigs</span>${JIGS.map(j => `<button data-jig-toggle="${j.id}" aria-pressed="false">${j.label}</button>`).join('')}</div>
+    <div class="jigs">${JIGS.map(j => `<button data-jig-toggle="${j.id}" aria-pressed="false">${j.label}</button>`).join('')}</div>
     <div class="tools">
       <button id="jig-grid-btn" title="g">grid</button>
-      <select id="jig-device-sel" title="device preview"><option value="">desktop</option>${DEVICES.map(d => `<option value="${d.id}">${d.name} · ${d.w}×${d.h}</option>`).join('')}</select>
-      <button id="jig-adv-btn" class="ghost" title="foundation, columns, rescan, reset">advanced</button>
-      <span class="adv"><select id="jig-cols-sel" title="grid columns"></select></span>
-      <span class="adv"><button id="jig-found-btn">foundation</button></span>
-      <span class="adv"><button id="jig-norm-btn" title="snap every size and space to the scales, and fix what protection flagged">auto</button><select id="jig-q-res" title="how many steps to snap to"><option value="32">light · page's own steps</option><option value="16" selected>medium · 8 sizes, 9 spaces</option><option value="8">strict · 4 sizes, 4 spaces</option></select></span>
-      <span class="adv"><button id="jig-scan-btn">rescan</button></span>
-      <span class="adv"><button id="jig-reset-btn">reset all</button></span>
+      <select id="jig-device-sel" title="device preview"><option value="">desktop</option>${DEVICES.map(d => `<option value="${d.id}">${d.name}</option>`).join('')}</select>
+      <span class="spacer"></span>
+      <button id="jig-adv-btn" class="ghost" title="foundation, columns, auto, rescan, reset">advanced</button>
     </div>
-    <div class="src" style="opacity:.45">page is inert while the jig is on · hold Alt to click through</div>
-    <div class="src" id="jig-src"></div>
+    <div class="advpanel">
+      <div class="arow"><label>columns</label><div><select id="jig-cols-sel" title="grid columns"></select></div></div>
+      <div class="arow"><label>auto</label><div><button id="jig-norm-btn" title="snap every size and space to the scales, and fix what protection flagged">auto</button><select id="jig-q-res" title="how many steps to snap to"><option value="32">light</option><option value="16" selected>medium</option><option value="8">strict</option></select></div></div>
+      <div class="arow"><label>scales</label><div><button id="jig-found-btn">foundation</button><button id="jig-scan-btn">rescan</button><button id="jig-reset-btn">reset all</button></div></div>
+      <div class="src" id="jig-src"></div>
+    </div>
     <div class="list"><h6>changes</h6><div id="jig-changes"></div><h6>protection</h6><div id="jig-warn"></div></div>
-    <footer><button class="primary" id="jig-copy-btn">Copy patch</button><small id="jig-count"></small></footer>`;
+    <footer><button class="primary" id="jig-copy-btn">Copy patch</button><small id="jig-count"></small></footer>
+    <div class="hint">page is inert while the jig is on · hold Alt to click through · Esc deselects</div>`;
 
   function renderHUD() {
     if (EMBED || !hud.isConnected) return;
