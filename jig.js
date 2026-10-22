@@ -311,8 +311,21 @@
         tr: el.style.transform || '', to: el.style.transformOrigin || '', opInline: isImg ? (el.style.objectPosition || '') : (el.style.backgroundPosition || ''),
         fit: isImg ? css(el).objectFit : ''
       };
-      const parent = el.parentElement;
-      if (isImg && css(parent).overflow === 'visible') parent.style.overflow = 'hidden';
+      let parent = el.parentElement;
+      if (isImg) {
+        // the image needs a box of its own to be clipped in. If its parent holds other things too (a caption, a paragraph), a scaled image would
+        // paint over them, so the jig wraps the image in a tight block that clips. The wrapper is removed on unwire.
+        const siblings = Array.from(parent.children).filter(c => c !== el && css(c).position !== 'absolute');
+        const loose = parent.getBoundingClientRect().height > el.getBoundingClientRect().height + 6;
+        if ((siblings.length || loose) && !/^(PICTURE|A)$/.test(parent.tagName)) {
+          const w = document.createElement('div'); w.className = 'jig-crop-box';
+          const d = css(el).display; w.style.cssText = `display:${d === 'inline' || d === 'inline-block' ? 'inline-block' : 'block'};overflow:hidden;position:relative;line-height:0;width:${d === 'inline' || d === 'inline-block' ? 'auto' : '100%'};`;
+          ['margin', 'float', 'border-radius'].forEach(k => { const v = el.style.getPropertyValue(k); if (v) w.style.setProperty(k, v); });
+          const cm = css(el); if (cm.float !== 'none') { w.style.float = cm.float; w.style.width = cm.width; w.style.marginRight = cm.marginRight; w.style.marginLeft = cm.marginLeft; }
+          parent.insertBefore(w, el); w.appendChild(el); el.__jigWrap = w; parent = w;
+        }
+        if (css(parent).overflow === 'visible') parent.style.overflow = 'hidden';
+      }
       // a plain <img> (fill / scale-down) has nothing to pan; in jig mode it becomes a cover crop
       const upgraded = isImg && !/cover|none/.test(orig.fit);
       if (upgraded) el.style.setProperty('object-fit', 'cover', 'important');
@@ -502,6 +515,7 @@
       }
       const arrows = () => [btn('←', () => el.__jigNudge(-1, 0)), btn('→', () => el.__jigNudge(1, 0)), btn('↑', () => el.__jigNudge(0, -1)), btn('↓', () => el.__jigNudge(0, 1))];
       el.__jigSetScrim = isAbs ? (name => { scrim = SCRIMS.includes(name) ? name : 'none'; applyScrim(); commit(); refreshToolbar(el); }) : null;
+      el.__jigScrim = () => scrim; el.__jigScrims = SCRIMS;
       el.__jigToolbarText = isAbs
         ? () => [btn('◐', () => { scrim = SCRIMS[(SCRIMS.indexOf(scrim) + 1) % SCRIMS.length]; applyScrim(); commit(); refreshToolbar(el); scanSoon(); }), chip(() => 'scrim ' + scrim), sep(), ...arrows()]
         : () => [chip(() => `${cols} col · ${rowTok}px`), ...arrows()];
@@ -725,6 +739,7 @@
   const listeners = [];
   function on(el, ev, fn, opt) { el.addEventListener(ev, fn, opt); listeners.push([el, ev, fn, opt]); }
   function unwire() {
+    $$('.jig-crop-box').forEach(w => { const img = w.firstElementChild; if (img) w.parentNode.insertBefore(img, w); w.remove(); if (img) delete img.__jigWrap; });
     for (let i = listeners.length - 1; i >= 0; i--) { const [el, ev, fn, opt] = listeners[i]; if (el instanceof Element && el.classList && el.classList.contains('jig-el')) { el.removeEventListener(ev, fn, opt); listeners.splice(i, 1); } }
     $$('.jig-el').forEach(el => { el.classList.remove('jig-el', 'jig-selected'); delete el.dataset.jigCtl; delete el.dataset.jigDrag; delete el.__jigToolbar; delete el.__jigToolbarText; delete el.__jigReset; delete el.__jigResetText; delete el.__jigNudge; const pn = el.querySelector(':scope > .jig-scrim-panel'); if (pn) { while (pn.firstChild) el.appendChild(pn.firstChild); pn.remove(); } });
     state.selected = null; toolbar.hidden = true;
@@ -735,13 +750,20 @@
   // data-jig="off" excludes an element (and its subtree), data-jig-name names it.
   function autoTargets() {
     const out = new Map(); // el -> ctl
-    const skip = el => !el.offsetParent && css(el).position !== 'fixed' || el.closest('#jig-hud, .jig-tb, [data-jig="off"]');
+    const skip = el => !el.offsetParent && css(el).position !== 'fixed' || el.closest('#jig-hud, .jig-tb, .jig-badge, #jig-grid, #jig-found, #jig-device, #jig-axtags, [data-jig="off"]') || el.classList.contains('jig-crop-box') || el.classList.contains('jig-scrim-panel');
     const add = (el, ctl) => { if (!out.has(el) && !skip(el) && Controls[ctl]) out.set(el, ctl); };
     // explicit first
     $$('[data-jig]').forEach(el => { let c = el.dataset.jig; if (c === 'heading') c = 'type'; if (c && c !== 'off') add(el, c); });
     // crop: cover-fit images and background images of a useful size
     $$('img').forEach(img => { const r = img.getBoundingClientRect(); if (r.width >= 80 && r.height >= 80) add(img, 'crop'); });
     $$('body *').forEach(el => { if (el.tagName === 'IMG') return; const bg = css(el).backgroundImage; if (bg && bg !== 'none' && /url\(/.test(bg)) { const r = el.getBoundingClientRect(); if (r.width >= 80 && r.height >= 80) add(el, 'crop'); } });
+    // text overlays: absolutely positioned text sitting on an image
+    $$('body *').forEach(el => {
+      if (css(el).position !== 'absolute' || !(el.textContent || '').trim()) return;
+      const par = el.parentElement; if (!par) return;
+      const hasImg = Array.from(par.children).some(c => c !== el && (c.tagName === 'IMG' || css(c).backgroundImage !== 'none'));
+      if (hasImg) add(el, 'text');
+    });
     // type: headings first, then any text block that has its own words and no block children
     $$('h1,h2,h3,h4,h5,h6').forEach(h => add(h, 'type'));
     $$('p, li, figcaption, blockquote, small, label, dt, dd, summary, [class*="eyebrow"], [class*="caption"], [class*="lede"], [class*="subtitle"]').forEach(t => {
@@ -764,13 +786,6 @@
       const docH = document.documentElement.scrollHeight;
       Array.from(out.entries()).filter(([el, v]) => v === 'section' && el.getBoundingClientRect().height > docH * 0.5).forEach(([el]) => { const kids = bigKids(el); if (kids.length > 1) { kids.forEach(d => add(d, 'section')); out.delete(el); } });
     }
-    // text overlays: absolutely positioned text sitting on an image
-    $$('body *').forEach(el => {
-      if (css(el).position !== 'absolute' || !(el.textContent || '').trim()) return;
-      const par = el.parentElement; if (!par) return;
-      const hasImg = Array.from(par.children).some(c => c !== el && (c.tagName === 'IMG' || css(c).backgroundImage !== 'none'));
-      if (hasImg) add(el, 'text');
-    });
     return out;
   }
 
@@ -783,8 +798,23 @@
       el.classList.add('jig-el'); el.dataset.jigCtl = ctl;
       el.classList.toggle('jig-active', state.jigs.has(groupOf(ctl)));
       C.init(el);
+      // an overlay that carries its own words (a caption div) also gets the ramp
+      if (ctl === 'text' && state.F.type && Array.from(el.childNodes).some(n => n.nodeType === 3 && n.textContent.trim().length > 1)) {
+        const tbText = el.__jigToolbar, resetText = el.__jigReset;
+        Controls.type.init(el);
+        const tbType = el.__jigToolbar, resetType = el.__jigReset;
+        el.__jigToolbar = () => [...tbType(), sep(), ...tbText()];
+        el.__jigReset = () => { resetType(); resetText(); };
+      }
       // every in-flow text element can also be repositioned: compose the text control on top of type
       const inOverlay = (() => { let n = el.parentElement; while (n && n !== document.body) { if (css(n).position === 'absolute' || n.dataset.jig === 'text') return true; n = n.parentElement; } return false; })();
+      if (ctl === 'type' && inOverlay) {
+        const ov = el.parentElement && el.parentElement.closest('.jig-el[data-jig-ctl="text"]');
+        if (ov && ov.__jigSetScrim) {
+          const tb = el.__jigToolbar;
+          el.__jigToolbar = () => [...tb(), sep(), btn('◐', () => { const L = ov.__jigScrims; ov.__jigSetScrim(L[(L.indexOf(ov.__jigScrim()) + 1) % L.length]); scanSoon(); refreshToolbar(el); }), chip(() => 'scrim ' + ov.__jigScrim())];
+        }
+      }
       if (ctl === 'type' && css(el).position !== 'absolute' && !inOverlay) {
         const tb = el.__jigToolbar; const reset = el.__jigReset;
         Controls.text.init(el);
@@ -826,7 +856,7 @@
     #jig-hud .jigs button[data-jig-toggle="ax"].on { background: #ff2d9b; border-color: #ff2d9b; color: #fff; }
     .jig-ax.jig-ax { outline: 2px solid #ff2d9b !important; outline-offset: 2px !important; box-shadow: 0 0 0 5px rgba(255,45,155,.22) !important; }
     #jig-axtags { all: revert; position: fixed; inset: 0; z-index: 2147483645; pointer-events: none; }
-    #jig-axtags .tag { all: revert; position: fixed; pointer-events: auto; cursor: pointer; background: #ff2d9b; color: #fff; font: 700 10px/1 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .02em; padding: 4px 6px; border-radius: 4px; white-space: nowrap; box-shadow: 0 2px 8px rgba(0,0,0,.35); }
+    #jig-axtags .tag { all: revert; position: fixed; pointer-events: none; background: #ff2d9b; color: #fff; font: 700 10px/1 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .02em; padding: 4px 6px; border-radius: 4px; white-space: nowrap; box-shadow: 0 2px 8px rgba(0,0,0,.35); }
     #jig-axtags .tag[hidden] { display: none !important; }
     #jig-hud .welcome { margin: 10px 12px 2px; padding: 10px 12px; background: #13141a; border: 1px solid #262833; border-left: 3px solid #3f6fff; border-radius: 8px; font: 12px/1.5 ui-sans-serif, system-ui; color: #c9d1e6; }
     #jig-hud .welcome b { color: #fff; font-weight: 600; } #jig-hud .welcome i { font-style: normal; color: #fff; border: 1px solid #3a3d4a; border-radius: 999px; padding: 0 6px; font-size: 11px; }
@@ -1083,7 +1113,6 @@
       const tag = document.createElement('div'); tag.className = 'tag'; tag.__el = el;
       tag.textContent = ws.map(w => w.kind === 'contrast' ? `contrast ${w.value} / ${w.min}` : w.kind === 'tap-target' ? `tap ${w.msg.replace(/.*×(\d+)px.*/, '$1')}px tall` : w.kind === 'alt' ? 'no alt' : w.kind).join(' · ');
       tag.title = ws.map(w => w.msg).join('\n');
-      tag.onclick = () => { el.scrollIntoView({ block: 'center', behavior: 'smooth' }); if (el.classList.contains('jig-el') && el.classList.contains('jig-active')) select(el); };
       axTags.appendChild(tag);
     });
     placeAXTags();
