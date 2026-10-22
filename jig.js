@@ -644,6 +644,7 @@
       }
       el.__jigReset = () => { el.classList.remove(P + size, P + variant); el.classList.add(P + origSize, P + origVar); size = origSize; variant = origVar; unrecord(el, 'button'); refreshToolbar(el); };
       el.__jigStepSize = d => { if ((d > 0 && B.sizes.indexOf(size) < B.sizes.length - 1) || (d < 0 && B.sizes.indexOf(size) > 0)) { cycle('size', d); return true; } return false; };
+      el.__jigSizeIndex = () => B.sizes.indexOf(size); el.__jigVariant = () => variant;
     }
   };
 
@@ -674,6 +675,7 @@
     }
     el.__jigReset = () => { si = si0; vi = vi0; apply(); unrecord(el, 'button'); refreshToolbar(el); };
     el.__jigStepSize = d => { if ((d > 0 && si < sizes.length - 1) || (d < 0 && si > 0)) { cyc('size', d); return true; } return false; };
+    el.__jigSizeIndex = () => si; el.__jigVariant = () => variants[vi].token;
   }
 
   // --- section: padding on the spacing scale --------------------------------
@@ -1300,6 +1302,7 @@
     });
     state.normalize = out; $('#jig-norm-btn').classList.add('on');
     autoFixAX();
+    autoHarmonizeButtons();
     autoAlignRows();
     autoFocusImages();
     renderHUD(); scanSoon();
@@ -1345,6 +1348,27 @@
       if (Math.abs(el.getBoundingClientRect().left - near) > 1) { el.style.removeProperty('margin-left'); if (before) el.style.setProperty('margin-left', before); return; }   // layout didn't take it; leave it
       state.autoFixes.push({ el, what: `on grid (was ${Math.round(delta)}px off the column line)`, undo: () => { el.style.removeProperty('margin-left'); if (before) el.style.setProperty('margin-left', before); } });
       record(el, 'grid', { marginLeft: Math.round(cur - delta), wasOffBy: Math.round(delta) }, `inline offset ${Math.round(cur)}px → ${Math.round(cur - delta)}px (on grid)`);
+    });
+  }
+  // Buttons that sit together share a size. The group's size is the primary's (or the most common); the others step to it.
+  function autoHarmonizeButtons() {
+    const groups = new Map();
+    $$('.jig-el[data-jig-ctl="button"]').forEach(b => { if (!b.offsetParent || !b.__jigSizeIndex) return; const k = b.parentElement; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(b); });
+    const min = (state.F.protect || {}).minTapTarget || 44;
+    groups.forEach(list => {
+      if (list.length < 2) return;
+      const idx = list.map(b => b.__jigSizeIndex()); if (new Set(idx).size === 1) return;
+      const primary = list.find(b => /primary/.test(b.__jigVariant()));
+      let target;
+      if (primary) target = primary.__jigSizeIndex();
+      else { const counts = {}; idx.forEach(i => counts[i] = (counts[i] || 0) + 1); target = +Object.keys(counts).sort((a, b) => counts[b] - counts[a] || a - b)[0]; }
+      const tok = state.F.buttons.sizes[target].token || state.F.buttons.sizes[target];
+      list.forEach(b => {
+        const was = b.__jigSizeIndex(); let guard = 0;
+        while (b.__jigSizeIndex() !== target && guard++ < 6) { if (!b.__jigStepSize(b.__jigSizeIndex() < target ? 1 : -1)) break; }
+        while (b.getBoundingClientRect().height < min - 0.5 && b.__jigStepSize(1)) {}   // never below the tap target
+        if (b.__jigSizeIndex() !== was) state.autoFixes.push({ el: b, what: `size ${was > target ? '−' : '+'}${Math.abs(target - was)} to ${tok} (matches the buttons beside it)` });
+      });
     });
   }
   async function autoFocusImages() {
