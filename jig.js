@@ -34,6 +34,15 @@
     protect: { safeInset: 24, minContrast: 4.5, minTapTarget: 44, textOverImage: 'warn' }
   };
 
+  // jig toggles: nothing is live until the person switches a jig on
+  const JIGS = [
+    { id: 'images', label: 'images', ctls: ['crop'] },
+    { id: 'text', label: 'text', ctls: ['type', 'heading', 'text'] },
+    { id: 'buttons', label: 'buttons', ctls: ['button'] },
+    { id: 'spacing', label: 'spacing', ctls: ['section'] },
+    { id: 'rows', label: 'rows', ctls: ['grid'] }
+  ];
+  const groupOf = ctl => (JIGS.find(j => j.ctls.includes(ctl)) || {}).id;
   const state = {
     F: null,                 // foundation
     foundationSource: '',
@@ -44,7 +53,8 @@
     bp: 'desktop',
     device: null,          // active device preview
     frame: { changes: [], warnings: [] },   // changes reported by an embedded device frame
-    normalize: null                         // [{el, prop, from, to}] while normalize mode is on
+    normalize: null,                        // [{el, prop, from, to}] while normalize mode is on
+    jigs: new Set()                         // active jig ids
   };
 
   function safeGet(k) { try { return localStorage.getItem('__' + k); } catch (e) { return null; } }
@@ -741,6 +751,7 @@
       if ((ctl === 'type' || ctl === 'heading') && !state.F.type) continue;
       if (ctl === 'button' && !state.F.buttons) continue;
       el.classList.add('jig-el'); el.dataset.jigCtl = ctl;
+      el.classList.toggle('jig-active', state.jigs.has(groupOf(ctl)));
       C.init(el);
       // every in-flow text element can also be repositioned: compose the text control on top of type
       const inOverlay = (() => { let n = el.parentElement; while (n && n !== document.body) { if (css(n).position === 'absolute' || n.dataset.jig === 'text') return true; n = n.parentElement; } return false; })();
@@ -770,8 +781,15 @@
     #jig-hud button:focus-visible, .jig-tb button:focus-visible, #jig-found button:focus-visible { outline: 2px solid #3f6fff; outline-offset: 2px; }
     .jig-scrim-panel { display: inline-block; max-width: 100%; }
     html.jig-scanning *, html.jig-scanning *::before, html.jig-scanning *::after { transition: none !important; animation: none !important; }
-    .jig-el { outline: 1.5px dashed rgba(63,111,255,.55); outline-offset: 2px; }
-    .jig-el:hover, .jig-el.jig-selected { outline: 2px solid #3f6fff; }
+    .jig-el.jig-active { outline: 1.5px dashed rgba(63,111,255,.55); outline-offset: 2px; }
+    .jig-el.jig-active:hover, .jig-el.jig-active.jig-selected { outline: 2px solid #3f6fff; }
+    .jig-el.jig-el:not(.jig-active) { pointer-events: none; cursor: auto !important; }
+    .jig-el:not(.jig-active) * { pointer-events: auto; }
+    #jig-hud .jigs { display: flex; gap: 6px; padding: 10px 12px 2px; flex-wrap: wrap; }
+    #jig-hud .jigs button { font: 600 12px ui-sans-serif, system-ui; background: transparent; color: #9aa3b8; border: 1px solid #262833; border-radius: 999px; padding: 6px 12px; cursor: pointer; }
+    #jig-hud .jigs button:hover { border-color: #3f6fff; color: #fff; }
+    #jig-hud .jigs button.on { background: #3f6fff; border-color: #3f6fff; color: #fff; }
+    #jig-hud .jigs .lbl { font: 11px ui-sans-serif, system-ui; letter-spacing: .14em; text-transform: uppercase; opacity: .6; align-self: center; margin-right: 2px; }
     .jig-badge { position: fixed; z-index: 2147483646; pointer-events: none; font: 11px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
       background: #0b0b0d; color: #dfe6ff; padding: 3px 7px; border-radius: 4px; white-space: nowrap; transform: translate(0,-110%); box-shadow: 0 2px 8px rgba(0,0,0,.3); }
     .jig-tb { position: fixed; z-index: 2147483646; display: flex; gap: 4px; align-items: center; background: #0b0b0d; border-radius: 8px; padding: 4px; box-shadow: 0 4px 16px rgba(0,0,0,.35); }
@@ -783,10 +801,10 @@
     #jig-grid .cols { position: sticky; top: 0; height: 100vh; margin: 0 auto; display: grid; }
     #jig-grid .cols i { background: rgba(63,111,255,.08); border-inline: 1px solid rgba(63,111,255,.35); }
     @media (max-width: 640px) { #jig-grid .cols i { background: rgba(63,111,255,.12); border-inline: 1px solid rgba(63,111,255,.5); } }
-    #jig-hud { position: fixed; top: 16px; right: 16px; width: 340px; height: auto; max-height: calc(100vh - 32px); min-width: 280px; min-height: 92px; display: flex; flex-direction: column; z-index: 2147483647;
+    #jig-hud { position: fixed; top: 16px; right: 16px; width: 372px; height: auto; max-height: calc(100vh - 32px); min-width: 280px; min-height: 92px; display: flex; flex-direction: column; z-index: 2147483647;
       background: #0b0b0d; color: #f3f4f7; border-radius: 12px; box-shadow: 0 12px 40px rgba(0,0,0,.45); font: 13px/1.45 ui-sans-serif, system-ui, sans-serif; overflow: hidden; resize: both; }
     #jig-hud.collapsed { resize: none; height: auto !important; }
-    #jig-hud.collapsed .tools, #jig-hud.collapsed .src, #jig-hud.collapsed .list { display: none; }
+    #jig-hud.collapsed .tools, #jig-hud.collapsed .src, #jig-hud.collapsed .list, #jig-hud.collapsed .jigs { display: none; }
     #jig-hud header .min { margin-left: 8px; width: 24px; height: 24px; border: 0; border-radius: 6px; background: #262833; color: #fff; cursor: pointer; font: 700 14px/1 ui-sans-serif, system-ui; }
     #jig-hud header .min:hover { background: #3f6fff; }
     #jig-hud .tools select { font: 600 12px ui-sans-serif, system-ui; background: #262833; color: #fff; border: 0; border-radius: 6px; padding: 6px 8px; cursor: pointer; }
@@ -1035,6 +1053,7 @@
   const hud = document.createElement('div'); hud.id = 'jig-hud';
   hud.innerHTML = `
     <header><b>jig <i>studio</i></b><small id="jig-bp"></small><button class="min" id="jig-min-btn" title="minimize">–</button></header>
+    <div class="jigs"><span class="lbl">jigs</span>${JIGS.map(j => `<button data-jig-toggle="${j.id}" aria-pressed="false">${j.label}</button>`).join('')}</div>
     <div class="tools">
       <button id="jig-grid-btn" title="g">grid</button>
       <select id="jig-device-sel" title="device preview"><option value="">desktop</option>${DEVICES.map(d => `<option value="${d.id}">${d.name} · ${d.w}×${d.h}</option>`).join('')}</select>
@@ -1054,7 +1073,7 @@
     if (EMBED || !hud.isConnected) return;
     const ch = $('#jig-changes'), wn = $('#jig-warn');
     ch.innerHTML = ''; wn.innerHTML = '';
-    if (!state.changes.size) ch.innerHTML = '<div class="empty">Nothing changed yet. Hover anything outlined; drag, pinch, or click it.</div>';
+    if (!state.changes.size) ch.innerHTML = state.jigs.size ? '<div class="empty">Nothing changed yet. Hover anything outlined; drag, pinch, or click it.</div>' : '<div class="empty">Switch on a jig above. Only that kind of thing becomes adjustable, so the page stays readable.</div>';
     for (const [k, c] of state.changes) {
       const row = document.createElement('div'); row.className = 'row';
       row.innerHTML = `<span class="n">${esc(c.name)}</span><span class="s">${esc(c.summary)}</span><span class="x" title="reset">×</span>`;
@@ -1236,7 +1255,7 @@
     closeDevice();
     const d = DEVICES.find(x => x.id === id); if (!d) return;
     state.device = d;
-    const u = new URL(location.href); u.searchParams.set('jig', 'embed'); u.searchParams.set('device', d.id);
+    const u = new URL(location.href); u.searchParams.set('jig', 'embed'); u.searchParams.set('device', d.id); u.searchParams.set('jigs', Array.from(state.jigs).join(','));
     deviceEl = document.createElement('div'); deviceEl.id = 'jig-device';
     deviceEl.innerHTML = `<button class="close" title="close">×</button><div class="shell"><div class="cap">${d.name} · ${d.w}×${d.h} · changes here are tagged ${d.bp}</div><iframe width="${d.w}" height="${d.h}" style="width:${d.w}px !important;height:${d.h}px !important" title="${d.name} preview"></iframe></div>`;
     document.body.appendChild(deviceEl);
@@ -1278,6 +1297,9 @@
     wire();
     if (EMBED) {
       // inside a device frame: no HUD; the parent page's HUD collects our changes and drives the grid
+      (url.searchParams.get('jigs') || '').split(',').filter(Boolean).forEach(id => state.jigs.add(id));
+      $$('.jig-el').forEach(el => el.classList.toggle('jig-active', state.jigs.has(groupOf(el.dataset.jigCtl))));
+      on(window, 'message', e => { if (e.data && e.data.jig === 'jigs') { state.jigs = new Set(e.data.jigs); $$('.jig-el').forEach(el => el.classList.toggle('jig-active', state.jigs.has(groupOf(el.dataset.jigCtl)))); } });
       on(window, 'message', e => { if (e.data && e.data.jig === 'grid') { if (e.data.columns) state.F.grid.columns = e.data.columns; toggleGrid(!!e.data.on); } });
       const imgs0 = $$('img').filter(i => !i.complete);
       await Promise.all(imgs0.map(i => new Promise(r => { i.onload = i.onerror = r; })));
@@ -1289,6 +1311,16 @@
     on(window, 'message', e => { if (e.data && e.data.jig === 'frame') { state.frame = { changes: e.data.changes || [], warnings: e.data.warnings || [], device: e.data.device, bp: e.data.bp }; renderHUD(); } });
     $('#jig-min-btn').onclick = e => { e.stopPropagation(); hud.classList.toggle('collapsed'); $('#jig-min-btn').textContent = hud.classList.contains('collapsed') ? '+' : '–'; };
     $('#jig-device-sel').onchange = e => openDevice(e.target.value);
+    try { JSON.parse(safeGet('jig-jigs:' + location.host) || '[]').forEach(id => state.jigs.add(id)); } catch (e) {}
+    const applyJigs = () => {
+      $$('[data-jig-toggle]', hud).forEach(b => { const on = state.jigs.has(b.dataset.jigToggle); b.classList.toggle('on', on); b.setAttribute('aria-pressed', on ? 'true' : 'false'); });
+      $$('.jig-el').forEach(el => { const on = state.jigs.has(groupOf(el.dataset.jigCtl)); el.classList.toggle('jig-active', on); if (!on && el === state.selected) { el.classList.remove('jig-selected'); state.selected = null; toolbar.hidden = true; } });
+      safeSet('jig-jigs:' + location.host, JSON.stringify(Array.from(state.jigs)));
+      const fr = deviceEl && $('iframe', deviceEl); if (fr && fr.contentWindow) fr.contentWindow.postMessage({ jig: 'jigs', jigs: Array.from(state.jigs) }, '*');
+      renderHUD();
+    };
+    $$('[data-jig-toggle]', hud).forEach(b => b.onclick = () => { const id = b.dataset.jigToggle; if (state.jigs.has(id)) state.jigs.delete(id); else state.jigs.add(id); applyJigs(); });
+    applyJigs();
     $('#jig-grid-btn').onclick = () => toggleGrid();
     const setAdv = on => { hud.classList.toggle('advanced', on); $('#jig-adv-btn').classList.toggle('on', on); safeSet('jig-advanced', on ? '1' : '0'); };
     setAdv(safeGet('jig-advanced') === '1');
