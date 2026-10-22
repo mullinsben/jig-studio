@@ -1041,7 +1041,7 @@
       <button id="jig-adv-btn" class="ghost" title="foundation, columns, rescan, reset">advanced</button>
       <span class="adv"><select id="jig-cols-sel" title="grid columns"></select></span>
       <span class="adv"><button id="jig-found-btn">foundation</button></span>
-      <span class="adv"><button id="jig-norm-btn" title="snap every size and space on the page to the nearest step">quantize</button><select id="jig-q-res" title="quantize resolution"><option value="32">1/32 · page's own steps</option><option value="16" selected>1/16 · canonical scale</option><option value="8">1/8 · coarse</option></select></span>
+      <span class="adv"><button id="jig-norm-btn" title="snap every size and space on the page to the nearest step">quantize</button><select id="jig-q-res" title="how many steps to snap to"><option value="32">light · page's own steps</option><option value="16" selected>medium · 8 sizes, 9 spaces</option><option value="8">strict · 4 sizes, 4 spaces</option></select></span>
       <span class="adv"><button id="jig-scan-btn">rescan</button></span>
       <span class="adv"><button id="jig-reset-btn">reset all</button></span>
     </div>
@@ -1063,7 +1063,7 @@
       ch.appendChild(row);
     }
     if (state.normalize) {
-      const g = normalizeGroups(); const h = document.createElement('h6'); h.textContent = `quantize 1/${state.normalizeRes} · ${state.normalize.length} snaps in ${g.length} groups`; ch.appendChild(h);
+      const g = normalizeGroups(); const h = document.createElement('h6'); h.textContent = `quantize ${resName(state.normalizeRes)} · ${state.normalize.length} snaps in ${g.length} groups`; ch.appendChild(h);
       g.slice(0, 12).forEach(x => { const row = document.createElement('div'); row.className = 'row'; row.innerHTML = `<span class="n">${esc(x.prop)}</span><span class="s">${x.from}px → ${x.to}px · ${x.els.length} element${x.els.length === 1 ? '' : 's'}</span>`; ch.appendChild(row); });
       if (g.length > 12) { const m = document.createElement('div'); m.className = 'empty'; m.textContent = `+ ${g.length - 12} more groups in the patch`; ch.appendChild(m); }
     }
@@ -1101,7 +1101,7 @@
     if (state.normalize) {
       const g = normalizeGroups();
       const qs = quantizeScales(state.normalizeRes || '16');
-      lines.push('', `# quantize · 1/${state.normalizeRes || '16'} · ${state.normalize.length} snaps in ${g.length} groups`, '', `Every font-size, padding, margin, and gap on the page snapped to the nearest step, like notes to a grid. Type steps: ${qs.typeSteps.join(', ')}px. Spacing steps: ${qs.spaceSteps.join(', ')}px. Apply as rule changes, not inline styles: find the rule that sets each value and change it; where several elements share a group they almost certainly share a rule.`, '');
+      lines.push('', `# quantize · ${resName(state.normalizeRes || '16')} · ${state.normalize.length} snaps in ${g.length} groups`, '', `Every font-size, padding, margin, and gap on the page snapped to the nearest step, like notes to a grid. Type steps: ${qs.typeSteps.join(', ')}px. Spacing steps: ${qs.spaceSteps.join(', ')}px. Apply as rule changes, not inline styles: find the rule that sets each value and change it; where several elements share a group they almost certainly share a rule.`, '');
       g.forEach(x => lines.push(`- ${x.prop}: ${x.from}px → ${x.to}px on ${x.els.length} element${x.els.length === 1 ? '' : 's'}`));
       g.forEach(x => json.push({ op: 'quantize', prop: x.prop, from: x.from, to: x.to, count: x.els.length, els: x.els.slice(0, 20), ...(x.els.length > 20 ? { more: x.els.length - 20 } : {}) }));
     }
@@ -1159,6 +1159,7 @@
     if (res === '8') return { typeSteps: [Math.round(body * 0.8), body, Math.round(body * 1.5625), Math.round(body * 2.44)], spaceSteps: [8, 16, 32, 64] };
     return { typeSteps: [-2, -1, 0, 1, 2, 3, 4, 5].map(i => Math.round(body * Math.pow(1.25, i))), spaceSteps: [4, 8, 12, 16, 24, 32, 48, 64, 96] };
   }
+  function resName(r) { return r === '32' ? 'light (page\'s own steps)' : r === '8' ? 'strict (4 sizes, 4 spaces)' : 'medium (8 sizes, 9 spaces)'; }
   function normalizeGroups() {
     const g = new Map();
     (state.normalize || []).forEach(n => { const k = `${n.prop}|${n.from}|${n.to}`; const e = g.get(k) || { prop: n.prop, from: n.from, to: n.to, els: [] }; e.els.push(selectorOf(n.el)); g.set(k, e); });
