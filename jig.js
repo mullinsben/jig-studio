@@ -37,7 +37,7 @@
   // jig toggles: nothing is live until the person switches a jig on
   const JIGS = [
     { id: 'images', label: 'images', ctls: ['crop'] },
-    { id: 'text', label: 'text', ctls: ['type', 'heading', 'text'] },
+    { id: 'text', label: 'type', ctls: ['type', 'heading', 'text'] },
     { id: 'buttons', label: 'buttons', ctls: ['button'] },
     { id: 'spacing', label: 'spacing', ctls: ['section'] }
   ];
