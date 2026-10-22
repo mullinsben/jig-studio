@@ -178,13 +178,16 @@
   }
   function inferGrid() {
     const vw = document.documentElement.clientWidth;
-    const cands = $$('body *').filter(el => { if (!visible(el)) return false; const c = css(el); const r = el.getBoundingClientRect(); return c.marginLeft === c.marginRight && r.width >= vw * 0.5 && r.width <= vw - 16 && Math.abs(r.left - (vw - r.right)) < 3 && Math.abs(r.left - (vw - r.right)) >= 0; })
-      .map(el => Math.round(el.getBoundingClientRect().width));
-    const cl = cluster(cands.map(v => ({ v, n: 1 })), 0.04).sort((a, b) => b.n - a.n);
-    const maxWidth = cl.length ? cl[0].px : Math.min(1200, vw - 64);
-    const margin = Math.max(16, Math.round((vw - maxWidth) / 2 > 200 ? 32 : (vw - maxWidth) / 2));
+    // centered containers narrower than the viewport, by how often their width recurs; ties go to the wider one
+    const els = $$('body *').filter(el => { if (!visible(el)) return false; const r = el.getBoundingClientRect(); return r.width >= vw * 0.5 && r.width <= vw - 16 && Math.abs(r.left - (vw - r.right)) < 3 && r.height >= 40; });
+    const byW = new Map(); els.forEach(el => { const w = Math.round(el.getBoundingClientRect().width / 4) * 4; const e = byW.get(w) || { w, n: 0, el }; e.n++; byW.set(w, e); });
+    const best = Array.from(byW.values()).sort((a, b) => b.n - a.n || b.w - a.w)[0];
+    const maxWidth = best ? best.w : Math.min(1200, vw - 64);
+    const margin = best ? 0 : 32;
+    gridAnchor = best ? best.el : null;
     return { columns: 12, gutter: 24, margin, maxWidth, inferred: true };
   }
+  let gridAnchor = null;   // the element whose edges the inferred grid is drawn on
   function resolveFoundation() {
     const F = state.F; F.mode = F.mode || 'file';
     // type steps: explicit sizes in the file, else resolve the site's --text-* vars, else infer
@@ -391,8 +394,18 @@
       const origIdx = idx;
       // descendants that render at the element's own size (a link inside a heading, a span inside a p) travel with it;
       // ones that are deliberately different (a <small>) are left alone
-      const riders = $$('*', el).filter(d => !d.closest('.jig-tb, .jig-badge') && Math.abs(px(css(d).fontSize) - origPx) < 0.6);
-      const setSize = v => { const f = (n) => { if (v) n.style.setProperty('font-size', v, 'important'); else n.style.removeProperty('font-size'); }; f(el); riders.forEach(f); };
+      const texty = d => Array.from(d.childNodes).some(n => n.nodeType === 3 && n.textContent.trim());
+      const riders = $$('*', el).filter(d => !d.closest('.jig-tb, .jig-badge') && Math.abs(px(css(d).fontSize) - origPx) <= Math.max(2, origPx * 0.12));
+      const forced = [];
+      const setSize = v => {
+        const f = (n) => { if (v) n.style.setProperty('font-size', v, 'important'); else n.style.removeProperty('font-size'); };
+        f(el); riders.forEach(f); forced.forEach(f); forced.length = 0;
+        if (!v) return;
+        // verify: the first text-bearing node must now render at the new size; if not, the text lives in a descendant that sets its own size
+        const want = px(getComputedStyle(el).fontSize);
+        const holders = [el, ...$$('*', el)].filter(d => !d.closest('.jig-tb, .jig-badge') && texty(d));
+        holders.forEach(d => { if (Math.abs(px(css(d).fontSize) - want) > 1 && Math.abs(px(css(d).fontSize) - origPx) <= Math.max(2, origPx * 0.12)) { forced.push(d); f(d); } });
+      };
       el.__jigToolbar = () => [
         btn('−', () => step(-1)), chip(() => state.F.type.ramp[idx]), btn('+', () => step(1))
       ];
@@ -542,7 +555,8 @@
   function padL(el) { return px(css(el).paddingLeft); }
   function padR(el) { return px(css(el).paddingRight); }
   function colWidth(parent) {
-    const w = parent.getBoundingClientRect().width;
+    const box = (gridAnchor && gridAnchor.isConnected && gridAnchor.contains(parent)) ? gridAnchor : parent;
+    const w = box.getBoundingClientRect().width;
     return (w + state.F.grid.gutter) / state.F.grid.columns;
   }
 
@@ -862,7 +876,11 @@
     gridEl.innerHTML = '';
     const cols = document.createElement('div'); cols.className = 'cols';
     cols.style.gridTemplateColumns = `repeat(${G.columns}, 1fr)`; cols.style.gap = `${G.gutter}px`;
-    cols.style.maxWidth = `${G.maxWidth}px`; cols.style.paddingInline = `${Math.min(G.margin, Math.floor(window.innerWidth * 0.06))}px`;
+    if (gridAnchor && gridAnchor.isConnected && state.bp !== 'phone') {
+      // inferred grid: sit exactly on the content container's edges
+      const r = gridAnchor.getBoundingClientRect();
+      cols.style.maxWidth = `${Math.round(r.width)}px`; cols.style.paddingInline = '0'; cols.style.marginLeft = `${Math.round(r.left)}px`;
+    } else { cols.style.maxWidth = `${G.maxWidth}px`; cols.style.paddingInline = `${Math.min(G.margin, Math.floor(window.innerWidth * 0.06))}px`; }
     for (let i = 0; i < G.columns; i++) cols.appendChild(document.createElement('i'));
     gridEl.appendChild(cols);
     gridEl.style.height = `${document.documentElement.scrollHeight}px`;
@@ -1086,7 +1104,9 @@
       const t = steps('type'), sp = steps('space');
       F.type = { ramp: t.map(x => x.token), sizes: Object.fromEntries(t.map(x => [x.token, x.px])), edited: true };
       F.spacing = sp.map(x => x.px); F.spacingEdited = sp;
+      const mwBefore = F.grid.maxWidth;
       ['columns', 'gutter', 'margin', 'maxWidth'].forEach(k => { F.grid[k] = +$(`input[data-g="${k}"]`, foundEl).value || F.grid[k]; });
+      if (F.grid.maxWidth !== mwBefore || F.grid.margin) gridAnchor = null;   // a hand-set width or margin wins over the detected container
       F.edited = true; delete F.type.steps; delete F.spacingSteps; resolveFoundation();
     };
     foundEl.onclick = e => {
