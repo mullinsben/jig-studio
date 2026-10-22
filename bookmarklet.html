@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Jig Studio bookmarklet</title>
+<meta name="description" content="Drag one button to your bookmarks bar; click it on any page to overlay Jig Studio, drag things around, and copy a patch.">
+<meta name="robots" content="noindex">
+<style>
+  :root { --bg: #0b0b0d; --ink: #f3f4f7; --mute: #9aa3b8; --line: #262833; --pop: #3f6fff; --panel: #13141a; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; overflow-x: clip; }
+  body { background: var(--bg); color: var(--ink); font: 16px/1.55 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 680px; margin: 0 auto; padding: 56px 20px 80px; }
+  h1 { font-size: 34px; letter-spacing: -.02em; margin: 0 0 8px; } h1 i { color: var(--pop); font-style: normal; }
+  .lead { color: var(--mute); font-size: 18px; margin: 0 0 32px; }
+  .drop { background: var(--panel); border: 1px dashed var(--line); border-radius: 14px; padding: 28px; text-align: center; margin: 0 0 28px; }
+  .drop p { margin: 0 0 14px; color: var(--mute); }
+  a.jig { display: inline-block; background: var(--pop); color: #fff; font-weight: 700; text-decoration: none; padding: 14px 24px; border-radius: 999px; font-size: 17px; cursor: grab; box-shadow: 0 8px 24px rgba(63,111,255,.35); }
+  a.jig:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
+  h2 { font-size: 20px; margin: 32px 0 8px; }
+  ol { padding-left: 22px; } li { margin: 6px 0; }
+  code { font: 13px ui-monospace, Menlo, monospace; background: var(--panel); padding: 2px 6px; border-radius: 4px; }
+  textarea { width: 100%; height: 120px; font: 12px ui-monospace, Menlo, monospace; background: var(--panel); color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 10px; resize: vertical; }
+  .note { border-left: 3px solid var(--pop); padding: 8px 14px; color: var(--mute); margin: 18px 0; }
+  footer { margin-top: 48px; color: var(--mute); font-size: 14px; } footer a { color: var(--ink); }
+</style>
+</head>
+<body>
+<main>
+  <h1>jig <i>studio</i> · bookmarklet</h1>
+  <p class="lead">Overlay the jig on any page you're looking at. Drag, pinch, step; copy the patch; propose the change to whoever owns the site.</p>
+
+  <div class="drop">
+    <p>Drag this to your bookmarks bar</p>
+    <a class="jig" id="bm" href="#">Jig this page</a>
+    <p style="margin:14px 0 0;font-size:13px">On a phone: bookmark any page, then edit the bookmark and replace its address with the code below.</p>
+  </div>
+
+  <h2>How it works</h2>
+  <ol>
+    <li>On any page, click the bookmark. The jig loads from this site and turns on; nothing is written to the page you're on.</li>
+    <li>Everything it can find becomes adjustable: cover-cropped images, text, buttons, sections, text overlays. The grid, device frames, and protection scan work as usual.</li>
+    <li>No foundation file on a foreign site, so the jig reads the page's CSS variables or infers scales from the rendered page; <strong>advanced → foundation</strong> shows what it decided and lets you correct it.</li>
+    <li><strong>Copy patch</strong>. The patch names the page URL, so the person (or AI) applying it knows where it goes, and it carries the proposed tokens.</li>
+  </ol>
+
+  <div class="note">Some sites ship a strict Content-Security-Policy that blocks injected scripts (most large apps, banks, GitHub). The bookmarklet can't get past that; nothing will happen and the console will say why. A browser extension can, and is on the list.</div>
+
+  <h2>The code</h2>
+  <p style="color:var(--mute)">For editing a bookmark by hand, or for the curious.</p>
+  <textarea id="code" readonly></textarea>
+
+  <footer>Part of <a href="https://github.com/mullinsben/jig-studio">Jig Studio</a> · <a href="/#lab">AI Lab</a> at benjaminmullins.tv</footer>
+</main>
+<script>
+  // The hosted jig.js lives next to this page.
+  const src = new URL('jig.js', location.href).href;
+  const code = `javascript:(function(){if(window.__jig){alert('Jig Studio is already on this page.');return;}var s=document.createElement('script');s.src='${src}?v='+Date.now();s.setAttribute('data-jig-injected','1');s.onerror=function(){alert('This site blocked the jig script (Content-Security-Policy). Try the extension route.');};document.body.appendChild(s);})();`;
+  document.getElementById('bm').setAttribute('href', code);
+  document.getElementById('code').value = code;
+  document.getElementById('bm').addEventListener('click', e => { e.preventDefault(); alert('Drag this button to your bookmarks bar rather than clicking it here.'); });
+</script>
+</body>
+</html>

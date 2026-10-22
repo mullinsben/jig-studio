@@ -8,7 +8,7 @@
 
   // ------------------------------------------------------------ activation
   const url = new URL(location.href);
-  const wanted = url.searchParams.has('jig') || location.hash === '#jig' || safeGet('jig') === '1';
+  const wanted = url.searchParams.has('jig') || location.hash === '#jig' || safeGet('jig') === '1' || (document.currentScript && document.currentScript.dataset.jigInjected);
   if (!wanted) return;
   if (window.__jig) return;
   const EMBED = url.searchParams.get('jig') === 'embed' && window.parent !== window;
@@ -22,6 +22,8 @@
   ];
 
   const SCRIPT = document.currentScript;
+  const SCRIPT_SRC = (SCRIPT && SCRIPT.src) || (window.__jigSrc || '');
+  const INJECTED = !!(SCRIPT && SCRIPT.dataset.jigInjected);
   const DEFAULT_FOUNDATION = {
     name: 'inferred', version: 0,
     grid: { columns: 12, gutter: 24, margin: 32, maxWidth: 1200, phone: { columns: 4, gutter: 16, margin: 16 } },
@@ -925,7 +927,9 @@
   function solidBehind(t) {
     let n = t;
     while (n && n !== document.documentElement) { const c = parseColor(css(n).backgroundColor); if (c && c[3] > 0.9) return c; n = n.parentElement; }
-    return parseColor(css(document.body).backgroundColor) || [255, 255, 255, 1];
+    const h = parseColor(css(document.documentElement).backgroundColor);
+    if (h && h[3] > 0.9) return h;
+    return [255, 255, 255, 1];   // the canvas: browsers paint white under a transparent html/body
   }
   function sampleImage(img, t) {
     if (img.tagName !== 'IMG' || !img.complete || !img.naturalWidth) return null;
@@ -995,7 +999,7 @@
     $('#jig-count').textContent = `${total} change${total === 1 ? '' : 's'} · ${state.warnings.length + state.frame.warnings.length} warning${state.warnings.length + state.frame.warnings.length === 1 ? '' : 's'}`;
     $('#jig-bp').textContent = `${state.bp} · ${window.innerWidth}px`;
     const F = state.F; const inf = F.mode === 'inferred' || F.type.inferred || F.buttons.inferred;
-    $('#jig-src').textContent = `foundation: ${F.name} · ${state.foundationSource}${inf ? ` · ${F.type.steps.length} type steps, ${F.spacingSteps.length} spacing steps, ${F.buttons.sizes.length} button size${F.buttons.sizes.length === 1 ? '' : 's'} · proposed tokens ride in the patch` : ''}`;
+    $('#jig-src').textContent = `${INJECTED ? 'injected by bookmarklet · ' : ''}foundation: ${F.name} · ${state.foundationSource}${inf ? ` · ${F.type.steps.length} type steps, ${F.spacingSteps.length} spacing steps, ${F.buttons.sizes.length} button size${F.buttons.sizes.length === 1 ? '' : 's'} · proposed tokens ride in the patch` : ''}`;
   }
   function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
 
@@ -1084,7 +1088,14 @@
     deviceEl.innerHTML = `<button class="close" title="close">×</button><div class="shell"><div class="cap">${d.name} · ${d.w}×${d.h} · changes here are tagged ${d.bp}</div><iframe width="${d.w}" height="${d.h}" title="${d.name} preview"></iframe></div>`;
     document.body.appendChild(deviceEl);
     const fr = $('iframe', deviceEl); fr.src = u.toString();
-    fr.onload = () => { if (state.grid) setTimeout(() => fr.contentWindow && fr.contentWindow.postMessage({ jig: 'grid', on: true }, '*'), 400); };
+    fr.onload = () => {
+      // a page that doesn't ship jig.js (bookmarklet use) gets it injected into the frame
+      try {
+        const w = fr.contentWindow;
+        if (w && !w.__jig && SCRIPT_SRC) { const sc = w.document.createElement('script'); sc.src = SCRIPT_SRC; sc.dataset.jigInjected = '1'; w.document.body.appendChild(sc); }
+      } catch (e) {}
+      if (state.grid) setTimeout(() => fr.contentWindow && fr.contentWindow.postMessage({ jig: 'grid', on: true }, '*'), 600);
+    };
     const fit = () => { const sh = $('.shell', deviceEl); const sc = Math.min(1, (window.innerHeight - 90) / (d.h + 28), (window.innerWidth - 400) / (d.w + 28)); sh.style.transform = `scale(${sc})`; };
     fit(); on(window, 'resize', fit);
     $('.close', deviceEl).onclick = closeDevice;
