@@ -805,7 +805,7 @@
     #jig-found .actions { display: flex; gap: 6px; margin-top: 12px; flex-wrap: wrap; } #jig-found .actions .primary { background: #3f6fff; }
     #jig-device { position: fixed; inset: 0; z-index: 2147483645; background: rgba(27,22,18,.82); display: flex; align-items: center; justify-content: center; }
     #jig-device .shell { position: relative; background: #0b0908; border-radius: 44px; padding: 14px; box-shadow: 0 30px 80px rgba(0,0,0,.6), inset 0 0 0 2px #2a2420; transform-origin: center; }
-    #jig-device iframe { display: block; border: 0; background: #fff; border-radius: 32px; }
+    #jig-device iframe { display: block; border: 0; background: #fff; border-radius: 32px; width: attr(width px); height: attr(height px); }
     #jig-device .cap { position: absolute; top: -34px; left: 0; right: 0; text-align: center; color: #dfe6ff; font: 12px ui-monospace, Menlo, monospace; }
     #jig-device .close { position: absolute; top: 16px; right: 16px; width: 36px; height: 36px; border: 0; border-radius: 50%; background: #262833; color: #fff; font: 700 16px/1 ui-sans-serif, system-ui; cursor: pointer; }
     #jig-device .close:hover { background: #3f6fff; }
@@ -1238,7 +1238,7 @@
     state.device = d;
     const u = new URL(location.href); u.searchParams.set('jig', 'embed'); u.searchParams.set('device', d.id);
     deviceEl = document.createElement('div'); deviceEl.id = 'jig-device';
-    deviceEl.innerHTML = `<button class="close" title="close">×</button><div class="shell"><div class="cap">${d.name} · ${d.w}×${d.h} · changes here are tagged ${d.bp}</div><iframe width="${d.w}" height="${d.h}" title="${d.name} preview"></iframe></div>`;
+    deviceEl.innerHTML = `<button class="close" title="close">×</button><div class="shell"><div class="cap">${d.name} · ${d.w}×${d.h} · changes here are tagged ${d.bp}</div><iframe width="${d.w}" height="${d.h}" style="width:${d.w}px !important;height:${d.h}px !important" title="${d.name} preview"></iframe></div>`;
     document.body.appendChild(deviceEl);
     const fr = $('iframe', deviceEl); fr.src = u.toString();
     fr.onload = () => {
