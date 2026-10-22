@@ -106,6 +106,13 @@
 
   /* ---------- Cards ---------- */
   .adopt, .annex { padding-block: var(--space-64); }
+  .guestbook { padding-block: var(--space-64); background: var(--c-surface); border-block: 1px solid var(--c-line); }
+  .quotes { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--grid-gutter); margin-top: var(--space-32); }
+  .quotes blockquote { margin: 0; padding: var(--space-24); background: var(--c-bg); border: 1px solid var(--c-line); border-radius: var(--radius-md); display: flex; flex-direction: column; gap: var(--space-12); }
+  .quotes blockquote p { margin: 0; font-size: var(--text-lg); line-height: 1.4; }
+  .quotes blockquote p::before { content: "\201C"; color: var(--c-moss); }
+  .quotes blockquote footer { margin-top: auto; font-family: ui-sans-serif, system-ui, sans-serif; font-size: var(--text-xs); letter-spacing: .08em; text-transform: uppercase; color: var(--c-ink-2); }
+
   .board { padding-block: var(--space-48) 0; }
   .soak { margin: 0 0 var(--space-32); } .soak .ph { aspect-ratio: 970 / 250; border-radius: var(--radius-md); overflow: hidden; } .soak img { width: 100%; height: 100%; object-fit: cover; } .soak figcaption { font-size: var(--text-sm); color: var(--c-ink-2); margin-top: var(--space-8); }
   .banner-board .banner-copy.scrim-bottom { background: linear-gradient(to top, rgba(0,0,0,.66), rgba(0,0,0,0) 60%); }
@@ -135,6 +142,7 @@
   @media (max-width: 760px) {
     :root { --grid-margin: 16px; }
     .hero-media, .hero-copy, .herd-intro, .herd-list { grid-column: 1 / -1; }
+    .quotes { grid-template-columns: 1fr; }
     .hero-media { aspect-ratio: 4 / 3; }
     .cards { grid-template-columns: 1fr 1fr; }
     .banner { aspect-ratio: 4 / 3; }
@@ -153,6 +161,7 @@
       <a href="#board">The committee</a>
       <a href="#habitat">The valley</a>
       <a href="#annex">The annex</a>
+      <a href="#guestbook">Guestbook</a>
       <a href="#visit">Visit</a>
     </nav>
   </div>
@@ -302,6 +311,20 @@
         <img src="assets/annex-puppy-stack.jpg" alt="IMG_4471.jpg" data-jig="crop" data-jig-name="Annex: Puppy stack" style="object-position: 50% 38%;"></div>
         <div class="body"><h3>The other stack</h3><p>They learned it from the kittens. They're not as good at it. They don't know this.</p></div>
       </article>
+    </div>
+  </div>
+</section>
+
+<section class="guestbook" id="guestbook" data-jig="section" data-jig-name="Guestbook section">
+  <div class="container">
+    <div class="eyebrow">Guestbook</div>
+    <h2 data-jig="heading" data-jig-name="Guestbook title">What members say</h2>
+    <p>David reads every entry. David approves every entry. These are the approved entries.</p>
+    <div class="quotes">
+      <blockquote><p>I was there four days. I think. The duck took my watch.</p><footer>Linda, Everett</footer></blockquote>
+      <blockquote><p>Waited six months. Worth it. A capybara fell asleep on me and I now live here.</p><footer>Gary, formerly of Lynnwood</footer></blockquote>
+      <blockquote><p>They said the wait was six months. It was six months. I have never felt so respected by an institution.</p><footer>Priya, Tacoma</footer></blockquote>
+      <blockquote><p>I asked which one was David. Something looked at me. I didn’t ask again.</p><footer>Tom, Port Angeles</footer></blockquote>
     </div>
   </div>
 </section>
