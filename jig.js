@@ -255,12 +255,19 @@
     if (el.dataset.jigName) return `[data-jig-name="${el.dataset.jigName}"]`;
     const parts = [];
     let n = el;
-    while (n && n.nodeType === 1 && parts.length < 4) {
+    const jigWrap = x => x.classList && (x.classList.contains('jig-crop-box') || x.classList.contains('jig-scrim-panel'));
+    while (n && n.nodeType === 1 && n !== document.body && n !== document.documentElement && parts.length < 6) {
+      if (jigWrap(n)) { n = n.parentNode; continue; }
+      if (n !== el && n.id) { parts.unshift('#' + CSS.escape(n.id)); break; }
+      if (n !== el && n.dataset.jigName) { parts.unshift(`[data-jig-name="${n.dataset.jigName}"]`); break; }
       let s = n.tagName.toLowerCase();
-      if (n.id) { parts.unshift('#' + CSS.escape(n.id)); break; }
-      const sib = Array.from(n.parentNode ? n.parentNode.children : []).filter(c => c.tagName === n.tagName);
-      if (sib.length > 1) s += `:nth-of-type(${sib.indexOf(n) + 1})`;
-      parts.unshift(s); n = n.parentNode;
+      const cls = Array.from(n.classList).find(c => !/^jig-/.test(c) && !/^(active|on|is-|has-)/.test(c));
+      if (cls) s += '.' + CSS.escape(cls);
+      const par = n.parentNode; const sib = Array.from(par ? par.children : []).filter(c => c.tagName === n.tagName && (!cls || c.classList.contains(cls)));
+      if (sib.length > 1) s += `:nth-of-type(${Array.from(par.children).filter(c => c.tagName === n.tagName).indexOf(n) + 1})`;
+      parts.unshift(s); n = par;
+      // a class-qualified chain of three is usually unique enough; stop early if it already is
+      if (parts.length >= 3) { try { if (document.querySelectorAll(parts.join(' > ')).length === 1) break; } catch (e) {} }
     }
     return parts.join(' > ');
   }
@@ -1381,7 +1388,7 @@
       const g = normalizeGroups();
       const qs = quantizeScales(state.normalizeRes || '16');
       if ((state.autoFixes || []).length) { lines.push('', `# auto fixes · ${state.autoFixes.length}`, '', 'Protection failures fixed with the same controls a person would use; each is also listed under changes above with its values.', ''); state.autoFixes.forEach(f => lines.push(`- ${nameOf(f.el)}: ${f.what}`)); }
-      lines.push('', `# auto · ${resName(state.normalizeRes || '16')} · ${state.normalize.length} snaps in ${g.length} groups`, '', `Every font-size, padding, margin, and gap on the page snapped to the nearest step, like notes to a grid. Type steps: ${qs.typeSteps.join(', ')}px. Spacing steps: ${qs.spaceSteps.join(', ')}px. Apply as rule changes, not inline styles: find the rule that sets each value and change it; where several elements share a group they almost certainly share a rule.`, '');
+      lines.push('', `# auto · ${resName(state.normalizeRes || '16')} · ${state.normalize.length} snap${state.normalize.length === 1 ? "" : "s"} in ${g.length} group${g.length === 1 ? "" : "s"}`, '', `Every font-size, padding, margin, and gap on the page snapped to the nearest step, like notes to a grid. Type steps: ${qs.typeSteps.join(', ')}px. Spacing steps: ${qs.spaceSteps.join(', ')}px. Apply as rule changes, not inline styles: find the rule that sets each value and change it; where several elements share a group they almost certainly share a rule.`, '');
       g.forEach(x => lines.push(`- ${x.prop}: ${x.from}px → ${x.to}px on ${x.els.length} element${x.els.length === 1 ? '' : 's'}`));
       g.forEach(x => json.push({ op: 'quantize', prop: x.prop, from: x.from, to: x.to, count: x.els.length, els: x.els.slice(0, 20), ...(x.els.length > 20 ? { more: x.els.length - 20 } : {}) }));
     }
@@ -1413,8 +1420,14 @@
     const { typeSteps, spaceSteps } = quantizeScales(res);
     state.normalizeRes = res;
     // buttons are left to the button control (their padding IS their size); snapping them would shrink tap targets the scan then has to grow back
-    const skipEl = el => el.closest('#jig-hud, .jig-tb, #jig-found, #jig-device, .jig-badge, script, style, svg') || el === document.body || el === document.documentElement || !visible(el) || el.dataset.jigCtl === 'button' || el.closest('.jig-el[data-jig-ctl="button"]');
+    const skipEl = el => el.closest('#jig-hud, .jig-tb, #jig-found, #jig-device, .jig-badge, #jig-axtags, #jig-grid, script, style, svg') || el === document.body || el === document.documentElement || !visible(el) || el.dataset.jigCtl === 'button' || el.closest('.jig-el[data-jig-ctl="button"]');
+    const autoMargin = (() => {   // margins authored as auto compute to px; snapping that number would break the layout
+      const rules = []; for (const sh of Array.from(document.styleSheets)) { try { for (const r of Array.from(sh.cssRules || [])) if (r.style && /auto/.test(r.style.margin + r.style.marginTop + r.style.marginBottom + r.style.marginLeft + r.style.marginRight + r.style.marginBlock + r.style.marginInline)) rules.push(r); } catch (e) {} }
+      return (el, prop) => { if (/auto/.test(el.style.getPropertyValue(prop) + el.style.margin)) return true; const side = prop.replace('margin-', ''); return rules.some(r => { try { if (!el.matches(r.selectorText)) return false; } catch (e) { return false; } const st = r.style; const v = st.getPropertyValue(prop) || ((side === 'top' || side === 'bottom') ? st.marginBlock : st.marginInline) || ''; if (/auto/.test(v)) return true; const m = (st.margin || '').split(/\s+/); if (!m[0]) return false; const idx = { top: 0, right: 1, bottom: m.length > 2 ? 2 : 0, left: m.length > 3 ? 3 : (m.length > 1 ? 1 : 0) }[side]; return /auto/.test(m[idx] || ''); }); };
+    })();
     const snap = (el, prop, cur, steps, min, max) => {
+      if (el.classList.contains('jig-scrim-panel') || el.classList.contains('jig-crop-box')) return;   // the jig's own wrappers are never the site's
+      if (/^margin/.test(prop) && autoMargin(el, prop)) return;
       if (!(cur >= min && cur <= max)) return;
       const to = nearest(steps, cur); if (Math.abs(to - cur) < 0.1) return;   // sub-pixel drift counts; it's the most common kind
       out.push({ el, prop, from: Math.round(cur * 10) / 10, to, prev: el.style.getPropertyValue(prop) || '' });
