@@ -97,6 +97,7 @@
   .herd { padding-block: var(--space-24); background: var(--c-surface); border-block: 1px solid var(--c-line); }
   .herd .grid { align-items: start; }
   .herd-intro { grid-column: 1 / span 5; }
+  .herd-intro p + p { margin-top: var(--space-16); }
   .herd-list { grid-column: 7 / span 6; display: grid; grid-template-columns: 1fr 1fr; gap: var(--grid-gutter); }
   .herd-list figure { margin: 0; }
   .herd-list .ph { aspect-ratio: 6 / 5; border-radius: var(--radius-md); overflow: hidden; margin-bottom: var(--space-12); }
@@ -157,12 +158,12 @@
   </div>
 </header>
 
-<!-- SIN 1 (crop): object-position shows the bottom of a portrait photo; the capybara is above the frame. -->
+<!-- (the hero crop used to be sin 1; it was too jarring above the fold. The crop sin now lives on David's card.) -->
 <section class="hero" data-jig="section" data-jig-name="Hero section">
   <div class="container grid">
     <div class="hero-media">
       <img src="assets/hero-steam.jpg" alt="A capybara in a steaming hot spring with a small bird on its head"
-           data-jig="crop" data-jig-name="Hero image" style="object-position: 50% 100%;">
+           data-jig="crop" data-jig-name="Hero image" style="object-position: 50% 58%;">
     </div>
     <div class="hero-copy">
       <div class="eyebrow">A kibbutz of capybaras · Olympic Mountains · members only</div>
@@ -185,6 +186,9 @@
       <div class="eyebrow">Members</div>
       <h2 data-jig="heading" data-jig-name="Meet the herd title" style="font-size: calc(var(--text-3xl) * 1.2);">Meet the herd</h2>
       <p>Most of us were born here. We soak when the water is right, which is around four; we do not use clocks, we use Clementine. Thirty-one members, four pictured; the rest declined.</p>
+      <p>Nobody founded this place. The spring was here, the trees were here, and in 1987 the first of us walked in from somewhere and sat down. The Forest Service has a file. They have chosen not to open it, and we respect that about them.</p>
+      <p>The water is 104 degrees and has never been anything else. The yuzu grow on the far slope and are tended by David’s cousin, whom nobody has met. The oranges arrive on Thursdays. We do not ask from where; the committee has advised us that this is a committee matter.</p>
+      <p>Membership is simple. You ask. In about six months, if the duck is in a mood, you are told where the trailhead is that week. You come. You sit in the water with us until you understand. Most people take an afternoon. Gary took four days and is now a member in a different sense.</p>
     </div>
     <div class="herd-list">
       <figure>
@@ -235,7 +239,8 @@
         <div class="body"><h3>Reginald</h3><p>I run the invitation lottery for David. It is random. Writing to me goes to David.</p></div>
       </article>
       <article class="card">
-        <div class="ph"><img src="assets/card-david.jpg" alt="David, a mallard, rising from the water with both wings spread" data-jig="crop" data-jig-name="Card: David" style="object-position: 50% 50%;"></div>
+        <div class="ph"><!-- SIN 1 (crop): David is framed on his left wing; the duck himself is mostly out of shot. -->
+        <img src="assets/card-david.jpg" alt="David, a mallard, rising from the water with both wings spread" data-jig="crop" data-jig-name="Card: David" style="object-position: 8% 50%;"></div>
         <div class="body"><h3>David</h3><p>The duck. Runs everything. Identifies as a capybara; we stopped correcting him. Arrived like this.</p></div>
       </article>
       <article class="card">

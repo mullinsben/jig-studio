@@ -20,7 +20,7 @@ Open <http://localhost:8000/demo/>. Seven things are deliberately wrong. Then op
 
 | What's wrong | Fix it with |
 | --- | --- |
-| The hero capybara has no head | drag the hero image |
+| David's card shows a wing and very little David | drag the duck |
 | "Meet the herd" is bigger than the h1; the names look like body copy | click any text, press − / + |
 | The membership CTA is tiny next to a huge secondary | click a button, step its size |
 | The card row is nudged off the grid | press **auto**; anything a few px off a column line goes back on it |
