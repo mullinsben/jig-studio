@@ -658,7 +658,7 @@
     function apply() {
       const sz = sizes[si], v = variants[vi];
       if (si !== si0) {
-        el.style.setProperty('padding', `${sz.padY}px ${sz.padX}px`, 'important'); el.style.setProperty('font-size', `${sz.fs}px`, 'important'); el.style.setProperty('line-height', '1.2', 'important');
+        el.style.setProperty('padding', `${sz.padY}px ${sz.padX}px`, 'important'); el.style.setProperty('font-size', `${sz.fs}px`, 'important'); el.style.setProperty('line-height', '1.2', 'important'); el.style.setProperty('min-height', `${sz.h}px`, 'important');
         const d = css(el).display; if (!/flex|grid/.test(d)) el.style.setProperty('display', d === 'block' ? 'flex' : 'inline-flex', 'important');
         el.style.setProperty('align-items', 'center', 'important'); el.style.setProperty('justify-content', 'center', 'important'); el.style.setProperty('box-sizing', 'border-box', 'important');
       } else { ['padding', 'font-size', 'line-height', 'display', 'align-items', 'justify-content', 'box-sizing', 'min-height'].forEach(k => el.style.removeProperty(k)); Object.assign(el.style, { padding: orig.p, fontSize: orig.fs }); }
@@ -1026,8 +1026,10 @@
     if (h1) { const h1px = px(css(h1).fontSize); hs.filter(h => h.tagName === 'H2' && px(css(h).fontSize) > h1px).forEach(h => W.push({ kind: 'hierarchy', el: h, msg: `h2 renders at ${r1(px(css(h).fontSize))}px, larger than the h1 (${r1(h1px)}px)` })); }
     // 2. tap targets
     const min = P.minTapTarget || 44;
-    $$('a.btn, button, [role=button], [data-jig=button]').forEach(b => {
-      if (!b.offsetParent || b.closest('#jig-hud, .jig-tb')) return; const r = b.getBoundingClientRect();
+    const taps = new Set($$('button, [role=button], [data-jig=button], .jig-el[data-jig-ctl="button"], input[type=submit], input[type=button]'));
+    $$('a').forEach(a => { if (looksLikeButton(a)) taps.add(a); });
+    taps.forEach(b => {
+      if (!b.offsetParent || b.closest('#jig-hud, .jig-tb, #jig-found, #jig-device')) return; const r = b.getBoundingClientRect();
       if (r.height < min - 0.5) W.push({ kind: 'tap-target', el: b, msg: `tap target ${Math.round(r.width)}×${Math.round(r.height)}px, min ${min}px tall` });
     });
     // 3. contrast: every element with its own text, sampled under its own box
@@ -1279,7 +1281,8 @@
     const res = ($('#jig-q-res') && $('#jig-q-res').value) || '16';
     const { typeSteps, spaceSteps } = quantizeScales(res);
     state.normalizeRes = res;
-    const skipEl = el => el.closest('#jig-hud, .jig-tb, #jig-found, #jig-device, .jig-badge, script, style, svg') || el === document.body || el === document.documentElement || !visible(el);
+    // buttons are left to the button control (their padding IS their size); snapping them would shrink tap targets the scan then has to grow back
+    const skipEl = el => el.closest('#jig-hud, .jig-tb, #jig-found, #jig-device, .jig-badge, script, style, svg') || el === document.body || el === document.documentElement || !visible(el) || el.dataset.jigCtl === 'button' || el.closest('.jig-el[data-jig-ctl="button"]');
     const snap = (el, prop, cur, steps, min, max) => {
       if (!(cur >= min && cur <= max)) return;
       const to = nearest(steps, cur); if (Math.abs(to - cur) < 0.1) return;   // sub-pixel drift counts; it's the most common kind
