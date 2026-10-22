@@ -761,6 +761,13 @@
   const style = document.createElement('style');
   style.id = 'jig-style';
   style.textContent = `
+    /* the jig's own UI must not inherit the host site's styling */
+    #jig-hud, #jig-hud *, .jig-tb, .jig-tb *, .jig-badge, #jig-found, #jig-found *, #jig-device, #jig-device *, #jig-grid, #jig-grid * { all: revert; box-sizing: border-box; }
+    #jig-hud, .jig-tb, .jig-badge, #jig-found, #jig-device .cap { text-transform: none; letter-spacing: normal; text-shadow: none; }
+    #jig-hud *, .jig-tb *, #jig-found * { text-transform: none; letter-spacing: normal; text-shadow: none; line-height: 1.45; }
+    #jig-hud button, .jig-tb button, #jig-found button, #jig-hud select, #jig-found input { appearance: none; -webkit-appearance: none; text-transform: none; letter-spacing: normal; box-shadow: none; }
+    #jig-hud h5, #jig-hud h6, #jig-found h5, #jig-found h6, #jig-hud p, #jig-found p { margin: 0; }
+    #jig-hud button:focus-visible, .jig-tb button:focus-visible, #jig-found button:focus-visible { outline: 2px solid #3f6fff; outline-offset: 2px; }
     .jig-scrim-panel { display: inline-block; max-width: 100%; }
     html.jig-scanning *, html.jig-scanning *::before, html.jig-scanning *::after { transition: none !important; animation: none !important; }
     .jig-el { outline: 1.5px dashed rgba(63,111,255,.55); outline-offset: 2px; }
@@ -828,7 +835,7 @@
       #jig-hud header { cursor: pointer; }
       #jig-hud header::before { content: ""; width: 36px; height: 4px; border-radius: 2px; background: #3a3d4a; position: absolute; left: 50%; top: 5px; transform: translateX(-50%); }
       #jig-hud header { position: relative; padding-top: 14px; }
-      #jig-phone-btn, #jig-device-sel { display: none; }
+      #jig-device-sel { display: none; }
       #jig-hud { resize: none; }
       .jig-tb button { width: 36px; height: 36px; }
     }
@@ -1034,10 +1041,9 @@
       <button id="jig-adv-btn" class="ghost" title="foundation, columns, rescan, reset">advanced</button>
       <span class="adv"><select id="jig-cols-sel" title="grid columns"></select></span>
       <span class="adv"><button id="jig-found-btn">foundation</button></span>
-      <span class="adv"><button id="jig-norm-btn" title="snap every size and space on the page to the nearest step of the scales">quantize</button></span>
+      <span class="adv"><button id="jig-norm-btn" title="snap every size and space on the page to the nearest step">quantize</button><select id="jig-q-res" title="quantize resolution"><option value="32">1/32 · page's own steps</option><option value="16" selected>1/16 · canonical scale</option><option value="8">1/8 · coarse</option></select></span>
       <span class="adv"><button id="jig-scan-btn">rescan</button></span>
       <span class="adv"><button id="jig-reset-btn">reset all</button></span>
-      <button id="jig-phone-btn" hidden>phone preview</button>
     </div>
     <div class="src" style="opacity:.45">page is inert while the jig is on · hold Alt to click through</div>
     <div class="src" id="jig-src"></div>
@@ -1057,7 +1063,7 @@
       ch.appendChild(row);
     }
     if (state.normalize) {
-      const g = normalizeGroups(); const h = document.createElement('h6'); h.textContent = `quantize · ${state.normalize.length} snaps in ${g.length} groups`; ch.appendChild(h);
+      const g = normalizeGroups(); const h = document.createElement('h6'); h.textContent = `quantize 1/${state.normalizeRes} · ${state.normalize.length} snaps in ${g.length} groups`; ch.appendChild(h);
       g.slice(0, 12).forEach(x => { const row = document.createElement('div'); row.className = 'row'; row.innerHTML = `<span class="n">${esc(x.prop)}</span><span class="s">${x.from}px → ${x.to}px · ${x.els.length} element${x.els.length === 1 ? '' : 's'}</span>`; ch.appendChild(row); });
       if (g.length > 12) { const m = document.createElement('div'); m.className = 'empty'; m.textContent = `+ ${g.length - 12} more groups in the patch`; ch.appendChild(m); }
     }
@@ -1094,7 +1100,8 @@
     warns.forEach(w => json.push({ warn: w.kind, el: w.el, msg: w.msg, ...(w.value ? { value: w.value, min: w.min } : {}) }));
     if (state.normalize) {
       const g = normalizeGroups();
-      lines.push('', `# quantize · ${state.normalize.length} snaps in ${g.length} groups`, '', 'Every font-size, padding, margin, and gap on the page snapped to the nearest step of the scales below, like notes to a grid. Apply as rule changes, not inline styles: find the rule that sets each value and change it; where several elements share a group they almost certainly share a rule.', '');
+      const qs = quantizeScales(state.normalizeRes || '16');
+      lines.push('', `# quantize · 1/${state.normalizeRes || '16'} · ${state.normalize.length} snaps in ${g.length} groups`, '', `Every font-size, padding, margin, and gap on the page snapped to the nearest step, like notes to a grid. Type steps: ${qs.typeSteps.join(', ')}px. Spacing steps: ${qs.spaceSteps.join(', ')}px. Apply as rule changes, not inline styles: find the rule that sets each value and change it; where several elements share a group they almost certainly share a rule.`, '');
       g.forEach(x => lines.push(`- ${x.prop}: ${x.from}px → ${x.to}px on ${x.els.length} element${x.els.length === 1 ? '' : 's'}`));
       g.forEach(x => json.push({ op: 'quantize', prop: x.prop, from: x.from, to: x.to, count: x.els.length, els: x.els.slice(0, 20), ...(x.els.length > 20 ? { more: x.els.length - 20 } : {}) }));
     }
@@ -1121,12 +1128,13 @@
       state.normalize = null; $('#jig-norm-btn').classList.remove('on'); renderHUD(); scanSoon(); return;
     }
     const F = state.F; const out = [];
-    const typeSteps = F.type.steps.filter(x => x.px > 0).map(x => x.px);
-    const spaceSteps = F.spacingSteps.filter(x => x.px > 0).map(x => x.px);
+    const res = ($('#jig-q-res') && $('#jig-q-res').value) || '16';
+    const { typeSteps, spaceSteps } = quantizeScales(res);
+    state.normalizeRes = res;
     const skipEl = el => el.closest('#jig-hud, .jig-tb, #jig-found, #jig-device, .jig-badge, script, style, svg') || el === document.body || el === document.documentElement || !visible(el);
     const snap = (el, prop, cur, steps, min, max) => {
       if (!(cur >= min && cur <= max)) return;
-      const to = nearest(steps, cur); if (Math.abs(to - cur) < 0.6) return;
+      const to = nearest(steps, cur); if (Math.abs(to - cur) < 0.1) return;   // sub-pixel drift counts; it's the most common kind
       out.push({ el, prop, from: Math.round(cur * 10) / 10, to, prev: el.style.getPropertyValue(prop) || '' });
       el.style.setProperty(prop, to + 'px', 'important');
     };
@@ -1140,6 +1148,16 @@
       if (/flex|grid/.test(c.display)) ['row-gap', 'column-gap'].forEach(prop => snap(el, prop, px(c[prop]), spaceSteps, 2, 160));
     });
     state.normalize = out; $('#jig-norm-btn').classList.add('on'); renderHUD(); scanSoon();
+  }
+  // 1/32: the page's own (inferred or edited) steps. 1/16: a 1.25 modular scale off the body size + 4..96 ladder. 1/8: four sizes, four spaces.
+  function quantizeScales(res) {
+    const F = state.F;
+    const own = F.type.steps.filter(x => x.px > 0).map(x => x.px);
+    const bodyStep = F.type.steps.find(x => x.token === 'md' || x.token === 'body') || F.type.steps[Math.floor(F.type.steps.length / 2)];
+    const body = bodyStep ? Math.round(bodyStep.px) : 16;
+    if (res === '32') return { typeSteps: own, spaceSteps: F.spacingSteps.filter(x => x.px > 0).map(x => x.px) };
+    if (res === '8') return { typeSteps: [Math.round(body * 0.8), body, Math.round(body * 1.5625), Math.round(body * 2.44)], spaceSteps: [8, 16, 32, 64] };
+    return { typeSteps: [-2, -1, 0, 1, 2, 3, 4, 5].map(i => Math.round(body * Math.pow(1.25, i))), spaceSteps: [4, 8, 12, 16, 24, 32, 48, 64, 96] };
   }
   function normalizeGroups() {
     const g = new Map();
@@ -1165,7 +1183,7 @@
       <h6>spacing (px)</h6><div id="jf-space">${stepRows(F.spacingSteps, 'space')}</div><button data-add="space">+ step</button>
       <h6>grid</h6><div class="grid4">${['columns', 'gutter', 'margin', 'maxWidth'].map(k => `<div><label>${k}</label><input data-g="${k}" type="number" value="${F.grid[k]}"></div>`).join('')}</div>
       <h6>buttons</h6><p class="lead">${F.buttons.mode === 'measured' ? `measured: ${F.buttons.sizes.map(x => `${x.token} ${x.h}px`).join(' · ')}; variants ${F.buttons.variants.map(x => x.token).join(', ')}` : `classes: ${F.buttons.classPrefix}{${F.buttons.sizes.join('|')}} · {${F.buttons.variants.join('|')}}`}</p>
-      <div class="actions"><button class="primary" id="jf-apply">Apply to page</button><button id="jf-remember">Remember for this site</button><button id="jf-forget">Forget</button><button id="jf-copy">Copy foundation.json</button><button id="jf-reinfer">Re-infer</button></div>`;
+      <div class="actions"><button class="primary" id="jf-apply">Apply to page</button><button id="jf-canon" title="replace the scales with a modular type scale off the body size and a 4/8/12/16/24/32/48/64 ladder">Canonical</button><button id="jf-remember">Remember for this site</button><button id="jf-forget">Forget</button><button id="jf-copy">Copy foundation.json</button><button id="jf-reinfer">Re-infer</button></div>`;
     document.body.appendChild(foundEl);
     const readBack = () => {
       const steps = kind => { const rows = {}; $$(`input[data-k="${kind}"]`, foundEl).forEach(inp => { (rows[inp.dataset.i] = rows[inp.dataset.i] || {})[inp.dataset.f] = inp.dataset.f === 'px' ? +inp.value : inp.value.trim(); }); return Object.values(rows).filter(r => r.token).sort((a, b) => a.px - b.px); };
@@ -1183,6 +1201,18 @@
       if (b.dataset.add) { readBack(); if (b.dataset.add === 'type') { F.type.ramp.push('new'); F.type.sizes.new = 0; } else { F.spacingEdited.push({ token: 'new', px: 0 }); syncSpace(); } delete F.type.steps; delete F.spacingSteps; resolveFoundation(); renderFoundationPanel(); return; }
       if (b.dataset.del) { const [k, i] = b.dataset.del.split(':'); readBack(); if (k === 'type') { const tok = F.type.ramp.splice(+i, 1)[0]; delete F.type.sizes[tok]; } else { F.spacingEdited.splice(+i, 1); syncSpace(); } delete F.type.steps; delete F.spacingSteps; resolveFoundation(); renderFoundationPanel(); return; }
       if (b.id === 'jf-close') { closeFoundationPanel(); return; }
+      if (b.id === 'jf-canon') {
+        // body stays what the page uses; everything else becomes a 1.25 modular scale around it, spacing a clean ladder
+        const bodyStep = (F.type.steps || []).find(x => x.token === 'md' || x.token === 'body') || (F.type.steps || [])[0];
+        const body = bodyStep ? Math.round(bodyStep.px) : 16;
+        const names = ['xs', 'sm', 'md', 'lg', 'xl', '2xl', '3xl', '4xl'];
+        const sizes = {}; names.forEach((n, i) => { sizes[n] = Math.round(body * Math.pow(1.25, i - 2)); });
+        F.type = { ramp: names, sizes, edited: true };
+        F.spacingEdited = [4, 8, 12, 16, 24, 32, 48, 64, 96].map(v => ({ token: String(v), px: v })); F.spacing = F.spacingEdited.map(x => x.px);
+        F.edited = true; delete F.type.steps; delete F.spacingSteps; resolveFoundation(); rewire(); renderFoundationPanel();
+        if (state.normalize) { normalizePage(false); normalizePage(true); }
+        return;
+      }
       if (b.id === 'jf-apply') { readBack(); rewire(); renderFoundationPanel(); flashBtn(b, 'Applied'); }
       if (b.id === 'jf-remember') { readBack(); safeSet('jig-foundation:' + location.host, JSON.stringify(exportFoundation())); state.foundationSource = 'edited in the jig (saved for this site)'; renderHUD(); flashBtn(b, 'Saved'); }
       if (b.id === 'jf-forget') { try { localStorage.removeItem('__jig-foundation:' + location.host); } catch (x) {} flashBtn(b, 'Forgotten; reload to re-infer'); }
@@ -1276,9 +1306,10 @@
     $('#jig-scan-btn').onclick = scanProtection;
     $('#jig-found-btn').onclick = toggleFoundationPanel;
     $('#jig-norm-btn').onclick = () => normalizePage(!state.normalize);
+    $('#jig-q-res').onchange = () => { if (state.normalize) { normalizePage(false); normalizePage(true); } };
     $('#jig-reset-btn').onclick = () => { normalizePage(false); $$('.jig-el').forEach(el => el.__jigReset && el.__jigReset()); state.changes.clear(); state.frame = { changes: [], warnings: [] }; closeDevice(); scanProtection(); };
     $('#jig-copy-btn').onclick = copyPatch;
-    $('#jig-phone-btn').onclick = () => openDevice('iphone-15-pro');
+
     // HUD drag
     let d = null; const hdr = $('header', hud);
     on(hdr, 'pointerdown', e => { if (e.target.closest('.min')) return; d = { x: e.clientX - hud.offsetLeft, y: e.clientY - hud.offsetTop }; hdr.setPointerCapture(e.pointerId); });
