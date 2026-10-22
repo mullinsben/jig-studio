@@ -43,7 +43,8 @@
     selected: null,
     bp: 'desktop',
     device: null,          // active device preview
-    frame: { changes: [], warnings: [] }   // changes reported by an embedded device frame
+    frame: { changes: [], warnings: [] },   // changes reported by an embedded device frame
+    normalize: null                         // [{el, prop, from, to}] while normalize mode is on
   };
 
   function safeGet(k) { try { return localStorage.getItem('__' + k); } catch (e) { return null; } }
@@ -1014,6 +1015,7 @@
       <button id="jig-adv-btn" class="ghost" title="foundation, columns, rescan, reset">advanced</button>
       <span class="adv"><select id="jig-cols-sel" title="grid columns"></select></span>
       <span class="adv"><button id="jig-found-btn">foundation</button></span>
+      <span class="adv"><button id="jig-norm-btn" title="snap every size and space on the page to the nearest step of the scales">quantize</button></span>
       <span class="adv"><button id="jig-scan-btn">rescan</button></span>
       <span class="adv"><button id="jig-reset-btn">reset all</button></span>
       <button id="jig-phone-btn" hidden>phone preview</button>
@@ -1035,6 +1037,11 @@
       row.onclick = () => { const el = $(c.el); if (el) { el.scrollIntoView({ block: 'center', behavior: 'smooth' }); select(el); } };
       ch.appendChild(row);
     }
+    if (state.normalize) {
+      const g = normalizeGroups(); const h = document.createElement('h6'); h.textContent = `quantize · ${state.normalize.length} snaps in ${g.length} groups`; ch.appendChild(h);
+      g.slice(0, 12).forEach(x => { const row = document.createElement('div'); row.className = 'row'; row.innerHTML = `<span class="n">${esc(x.prop)}</span><span class="s">${x.from}px → ${x.to}px · ${x.els.length} element${x.els.length === 1 ? '' : 's'}</span>`; ch.appendChild(row); });
+      if (g.length > 12) { const m = document.createElement('div'); m.className = 'empty'; m.textContent = `+ ${g.length - 12} more groups in the patch`; ch.appendChild(m); }
+    }
     if (state.frame.changes.length) {
       const h = document.createElement('h6'); h.textContent = (state.frame.device || 'device') + ' changes'; ch.appendChild(h);
       state.frame.changes.forEach(c => { const row = document.createElement('div'); row.className = 'row'; row.innerHTML = `<span class="n">${esc(c.name)}</span><span class="s">${esc(c.summary)}</span>`; ch.appendChild(row); });
@@ -1046,7 +1053,7 @@
       row.onclick = () => { w.el.scrollIntoView({ block: 'center', behavior: 'smooth' }); if (w.el.classList.contains('jig-el')) select(w.el); };
       wn.appendChild(row);
     });
-    const total = state.changes.size + state.frame.changes.length;
+    const total = state.changes.size + state.frame.changes.length + (state.normalize ? state.normalize.length : 0);
     $('#jig-count').textContent = `${total} change${total === 1 ? '' : 's'} · ${state.warnings.length + state.frame.warnings.length} warning${state.warnings.length + state.frame.warnings.length === 1 ? '' : 's'}`;
     $('#jig-bp').textContent = `${state.bp} · ${window.innerWidth}px`;
     const F = state.F; const inf = F.mode === 'inferred' || F.type.inferred || F.buttons.inferred;
@@ -1066,6 +1073,12 @@
     const json = [];
     all.forEach(c => { const { name, summary, ...rest } = c; json.push(rest); });
     warns.forEach(w => json.push({ warn: w.kind, el: w.el, msg: w.msg, ...(w.value ? { value: w.value, min: w.min } : {}) }));
+    if (state.normalize) {
+      const g = normalizeGroups();
+      lines.push('', `# quantize · ${state.normalize.length} snaps in ${g.length} groups`, '', 'Every font-size, padding, margin, and gap on the page snapped to the nearest step of the scales below, like notes to a grid. Apply as rule changes, not inline styles: find the rule that sets each value and change it; where several elements share a group they almost certainly share a rule.', '');
+      g.forEach(x => lines.push(`- ${x.prop}: ${x.from}px → ${x.to}px on ${x.els.length} element${x.els.length === 1 ? '' : 's'}`));
+      g.forEach(x => json.push({ op: 'quantize', prop: x.prop, from: x.from, to: x.to, count: x.els.length, els: x.els.slice(0, 20), ...(x.els.length > 20 ? { more: x.els.length - 20 } : {}) }));
+    }
     lines.push('', '---', JSON.stringify(json, null, 2));
     const F = state.F;
     if (F.mode === 'inferred' || F.type.inferred || F.buttons.inferred || F.mode === 'vars' || F.edited) {
@@ -1081,6 +1094,39 @@
     catch (e) { const ta = document.createElement('textarea'); ta.value = text; ta.style.cssText = 'position:fixed;inset:16px;z-index:2147483647;width:60vw;height:60vh;font:12px monospace'; document.body.appendChild(ta); ta.select(); flash('Clipboard blocked; select the text manually.'); on(ta, 'blur', () => ta.remove()); }
   }
   function flash(msg) { const b = $('#jig-copy-btn'); const t = b.textContent; b.textContent = msg; setTimeout(() => (b.textContent = t), 1800); }
+
+  // ------------------------------------------------------------ normalize: snap the whole page to the scales
+  function normalizePage(on) {
+    if (!on) {
+      (state.normalize || []).forEach(n => { n.el.style.removeProperty(n.prop); if (n.prev) n.el.style.setProperty(n.prop, n.prev); });
+      state.normalize = null; $('#jig-norm-btn').classList.remove('on'); renderHUD(); scanSoon(); return;
+    }
+    const F = state.F; const out = [];
+    const typeSteps = F.type.steps.filter(x => x.px > 0).map(x => x.px);
+    const spaceSteps = F.spacingSteps.filter(x => x.px > 0).map(x => x.px);
+    const skipEl = el => el.closest('#jig-hud, .jig-tb, #jig-found, #jig-device, .jig-badge, script, style, svg') || el === document.body || el === document.documentElement || !visible(el);
+    const snap = (el, prop, cur, steps, min, max) => {
+      if (!(cur >= min && cur <= max)) return;
+      const to = nearest(steps, cur); if (Math.abs(to - cur) < 0.6) return;
+      out.push({ el, prop, from: Math.round(cur * 10) / 10, to, prev: el.style.getPropertyValue(prop) || '' });
+      el.style.setProperty(prop, to + 'px', 'important');
+    };
+    // 1. type: elements with their own text (and their same-size riders, so headline links follow their headings)
+    const texty = d => Array.from(d.childNodes).some(n => n.nodeType === 3 && n.textContent.trim().length > 1);
+    $$('body *').forEach(el => { if (skipEl(el) || !texty(el)) return; snap(el, 'font-size', px(css(el).fontSize), typeSteps, 8, 200); });
+    // 2. space: paddings, margins, gaps on block-ish boxes (positive, px-sized; negative and huge values are layout, not rhythm)
+    $$('body *').forEach(el => {
+      if (skipEl(el)) return; const c = css(el); if (!/block|flex|grid|table|list-item/.test(c.display) || c.position === 'fixed') return;
+      ['padding-top', 'padding-bottom', 'padding-left', 'padding-right', 'margin-top', 'margin-bottom'].forEach(prop => snap(el, prop, px(c[prop]), spaceSteps, 2, 160));
+      if (/flex|grid/.test(c.display)) ['row-gap', 'column-gap'].forEach(prop => snap(el, prop, px(c[prop]), spaceSteps, 2, 160));
+    });
+    state.normalize = out; $('#jig-norm-btn').classList.add('on'); renderHUD(); scanSoon();
+  }
+  function normalizeGroups() {
+    const g = new Map();
+    (state.normalize || []).forEach(n => { const k = `${n.prop}|${n.from}|${n.to}`; const e = g.get(k) || { prop: n.prop, from: n.from, to: n.to, els: [] }; e.els.push(selectorOf(n.el)); g.set(k, e); });
+    return Array.from(g.values()).sort((a, b) => b.els.length - a.els.length);
+  }
 
   // ------------------------------------------------------------ foundation panel (inspect and edit the scales)
   let foundEl = null;
@@ -1206,7 +1252,8 @@
     };
     $('#jig-scan-btn').onclick = scanProtection;
     $('#jig-found-btn').onclick = toggleFoundationPanel;
-    $('#jig-reset-btn').onclick = () => { $$('.jig-el').forEach(el => el.__jigReset && el.__jigReset()); state.changes.clear(); state.frame = { changes: [], warnings: [] }; closeDevice(); scanProtection(); };
+    $('#jig-norm-btn').onclick = () => normalizePage(!state.normalize);
+    $('#jig-reset-btn').onclick = () => { normalizePage(false); $$('.jig-el').forEach(el => el.__jigReset && el.__jigReset()); state.changes.clear(); state.frame = { changes: [], warnings: [] }; closeDevice(); scanProtection(); };
     $('#jig-copy-btn').onclick = copyPatch;
     $('#jig-phone-btn').onclick = () => openDevice('iphone-15-pro');
     // HUD drag

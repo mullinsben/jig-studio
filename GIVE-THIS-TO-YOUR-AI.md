@@ -96,7 +96,11 @@ If the site has no `jig.foundation.json`, the jig runs on a built-in default and
 5. **Load the script** once, at the end of `<body>`: `<script src="/jig.js" data-foundation="/jig.foundation.json"></script>`. It does nothing unless `?jig` is in the URL, so it is safe on production.
 6. **Report connection issues.** Tell the person about anything that will stop the jig working: images served cross-origin without CORS (contrast can't be sampled), headings without tokens, buttons that don't follow a class convention, a CSS-in-JS setup where tokens don't surface as custom properties.
 
-## 5. Things not to do
+## 5. Quantize
+
+A patch may carry a `# quantize` section: the person pressed **quantize** and the jig snapped every font-size, padding, margin, and gap on the page to the nearest step of the scales (inferred or edited). The JSON entries look like `{ "op": "quantize", "prop": "font-size", "from": 13, "to": 12, "count": 10, "els": [...] }`. Apply these as **rule changes, not inline styles**: elements in one group almost always share a CSS rule; find that rule and change the value once. Where the group's selectors clearly span unrelated rules, change each rule. Never paste 94 inline styles. If a snap looks wrong for a specific element (a deliberate one-off), leave it and say so.
+
+## 6. Things not to do
 
 - Don't apply a patch to a different page than the one in its header.
 - Don't invent values that aren't in the foundation; ask.
