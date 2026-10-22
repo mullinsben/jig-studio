@@ -318,14 +318,14 @@
       if (upgraded) el.style.setProperty('object-fit', 'cover', 'important');
       let [ox, oy] = parsePos(orig.op);
       let zoom = 1;
-      el.__jigOrig = orig;
+      el.__jigOrig = orig; el.dataset.jigDrag = '1';
       el.style.cursor = 'grab';
 
       let drag = null;
       on(el, 'pointerdown', e => {
         if (e.button !== 0) return;
         if (e.altKey) return;
-        if (e.target.closest('.jig-el') !== el) return;
+        if (e.target.closest('[data-jig-drag]') !== el) return;
         e.preventDefault(); e.stopPropagation(); try { el.setPointerCapture(e.pointerId); } catch (x) {}
         if (isImg) { const f = naturalFit(el, zoom); if (f.ovx < 2 && f.ovy < 2) { zoom = Math.max(zoom, 1.2); apply(); } }
         drag = { x: e.clientX, y: e.clientY, ox, oy, id: e.pointerId }; el.style.cursor = 'grabbing';
@@ -489,13 +489,15 @@
         ? () => [btn('◐', () => { scrim = SCRIMS[(SCRIMS.indexOf(scrim) + 1) % SCRIMS.length]; applyScrim(); commit(); refreshToolbar(el); scanSoon(); }), chip(() => 'scrim ' + scrim), sep(), ...arrows()]
         : () => [chip(() => `${cols} col · ${rowTok}px`), ...arrows()];
       if (!el.__jigToolbar) el.__jigToolbar = el.__jigToolbarText;
+      el.dataset.jigDrag = '1';
       el.style.cursor = 'move';
       let drag = null;
       on(el, 'pointerdown', e => {
         if (e.button !== 0 || e.altKey) return;
-        if (e.target.closest('.jig-el') !== el) return;   // a nested jig element (a button inside this paragraph) owns its own gesture
+        if (e.target.closest('[data-jig-drag]') !== el) return;   // the nearest thing that actually drags owns the gesture
         e.preventDefault(); e.stopPropagation(); try { el.setPointerCapture(e.pointerId); } catch (x) {}
         drag = { x: e.clientX, y: e.clientY, cols, rowTok, offX, offY, anchor, id: e.pointerId, gridWas: state.grid };
+        if (isAbs) { const r0 = parent.getBoundingClientRect(); const p0 = (panel || el).getBoundingClientRect(); drag.baseLeft = p0.left - r0.left - padL(el) - offX; }   // where the panel sits with zero offset
         if (!state.grid) toggleGrid(true);
       });
       on(el, 'pointermove', e => {
@@ -507,7 +509,7 @@
           const r = parent.getBoundingClientRect();
           const inner = r.width - (padL(el) + padR(el)); const cw = (inner + state.F.grid.gutter) / state.F.grid.columns;
           const pr = panel ? panel.getBoundingClientRect() : r;
-          const px0 = pr.left - r.left - padL(el) + dx;                       // where the panel's left edge would be
+          const px0 = drag.baseLeft + drag.offX + dx;                        // panel's left edge if it followed the pointer exactly
           const maxCol = Math.max(0, state.F.grid.columns - Math.ceil(pr.width / cw));
           cols = clamp(Math.round(px0 / cw), 0, maxCol);
           const fy = (e.clientY - r.top) / r.height; const v = fy < 1 / 3 ? 'top' : fy > 2 / 3 ? 'bottom' : 'center';
@@ -703,7 +705,7 @@
   function on(el, ev, fn, opt) { el.addEventListener(ev, fn, opt); listeners.push([el, ev, fn, opt]); }
   function unwire() {
     for (let i = listeners.length - 1; i >= 0; i--) { const [el, ev, fn, opt] = listeners[i]; if (el instanceof Element && el.classList && el.classList.contains('jig-el')) { el.removeEventListener(ev, fn, opt); listeners.splice(i, 1); } }
-    $$('.jig-el').forEach(el => { el.classList.remove('jig-el', 'jig-selected'); delete el.dataset.jigCtl; delete el.__jigToolbar; delete el.__jigToolbarText; delete el.__jigReset; delete el.__jigResetText; delete el.__jigNudge; const pn = el.querySelector(':scope > .jig-scrim-panel'); if (pn) { while (pn.firstChild) el.appendChild(pn.firstChild); pn.remove(); } });
+    $$('.jig-el').forEach(el => { el.classList.remove('jig-el', 'jig-selected'); delete el.dataset.jigCtl; delete el.dataset.jigDrag; delete el.__jigToolbar; delete el.__jigToolbarText; delete el.__jigReset; delete el.__jigResetText; delete el.__jigNudge; const pn = el.querySelector(':scope > .jig-scrim-panel'); if (pn) { while (pn.firstChild) el.appendChild(pn.firstChild); pn.remove(); } });
     state.selected = null; toolbar.hidden = true;
   }
   function rewire() { unwire(); delete state.F.type.steps; delete state.F.spacingSteps; resolveFoundation(); wire(); scanProtection(); renderHUD(); }
@@ -781,6 +783,7 @@
   style.textContent = `
     /* the jig's own UI must not inherit the host site's styling */
     #jig-hud, #jig-hud *, .jig-tb, .jig-tb *, .jig-badge, #jig-found, #jig-found *, #jig-device, #jig-device *, #jig-grid, #jig-grid * { all: revert; box-sizing: border-box; }
+    #jig-grid[hidden], .jig-tb[hidden], .jig-badge[hidden], #jig-hud [hidden], #jig-found [hidden], #jig-device [hidden] { display: none !important; }
     #jig-hud, .jig-tb, .jig-badge, #jig-found, #jig-device .cap { text-transform: none; letter-spacing: normal; text-shadow: none; }
     #jig-hud *, .jig-tb *, #jig-found * { text-transform: none; letter-spacing: normal; text-shadow: none; line-height: 1.45; }
     #jig-hud button, .jig-tb button, #jig-found button, #jig-hud select, #jig-found input { appearance: none; -webkit-appearance: none; text-transform: none; letter-spacing: normal; box-shadow: none; }
