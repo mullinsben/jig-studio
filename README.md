@@ -16,7 +16,7 @@ cd jig-studio
 python3 -m http.server 8000      # any static server; file:// blocks image sampling
 ```
 
-Open <http://localhost:8000/demo/>. Six things are deliberately wrong. Then open <http://localhost:8000/demo/?jig> and fix them:
+Open <http://localhost:8000/demo/>. Seven things are deliberately wrong. Then open <http://localhost:8000/demo/?jig> and fix them:
 
 | What's wrong | Fix it with |
 | --- | --- |
@@ -26,6 +26,7 @@ Open <http://localhost:8000/demo/>. Six things are deliberately wrong. Then open
 | The card row is nudged off the grid | press **auto**; anything a few px off a column line goes back on it |
 | White copy over the palest part of the banner; contrast fails | drag the copy to a darker corner |
 | Section padding is 24 / 48 / 16 | click a section, step its padding |
+| A puppy's alt text is `IMG_4471.jpg` | the **ax** pill shows it pink; the patch carries the note for your AI to write real alt text |
 
 Press **Copy patch**. Paste it to your AI along with [`GIVE-THIS-TO-YOUR-AI.md`](GIVE-THIS-TO-YOUR-AI.md).
 
@@ -80,7 +81,7 @@ Everything below is found automatically; `data-jig="<control>"` forces one, `dat
 | `section` | click, then − / + | `paddingY` on the spacing scale |
 | `grid` | not a toggle: **auto** finds blocks sitting a few px off a column line and puts them back; `data-jig="grid"` opts a row into − / 0 / + by hand | `marginLeft` |
 
-Nothing is live until you switch a jig on. The HUD's top row has five press-state toggles, **images · type · buttons · spacing · ax** (type covers the ramp, placement to the grid, and scrims; **ax** paints everything that fails protection pink, with a chip saying why, and clicking a chip jumps to it); only the active kinds get outlines and respond to the mouse, so a busy page stays readable while you work on one thing. The choice is remembered per site. Protection scans everything regardless.
+Nothing is live until you switch a jig on. The HUD's top row has five press-state toggles, **images · type · buttons · spacing · ax** (type covers the ramp, placement to the grid, and scrims; **ax** is on by default and paints everything that fails protection pink, with a chip saying why; clicking a chip jumps to it); only the active kinds get outlines and respond to the mouse, so a busy page stays readable while you work on one thing. The choice is remembered per site. Protection scans everything regardless.
 
 HUD: **grid** (or press **g**) with a column picker (2 to 16), **foundation** (inspect and edit the scales the jig is using: rename or retune steps, add or remove them, set the grid; apply live, remember for this site, copy as `jig.foundation.json`, or re-infer), **auto** with a strength picker (one click snaps every font-size, padding, margin, and gap on the page to the nearest step and then fixes what protection flagged: scrims escalate gradient → tint → glass until text over an image passes, short buttons step up to 44px, an h2 that outgrew the h1 steps down, blocks sitting up to 16px off a column line go back on the grid, and images re-centre on their subject (faces where the browser can detect them, otherwise the densest detail); colour failures stay as warnings. Strength: light uses the page's own inferred steps and just removes drift; medium uses a 1.25 modular scale off the body size (8 sizes) and a 4 to 96 ladder (9 spaces); strict is four sizes and four spaces, the brutal setting; the patch lists the snaps grouped by rule so the AI changes CSS rules, not elements), **rescan** protection, a **device** button (iPhone 15 Pro, iPhone SE, Pixel 8, Galaxy S24, iPad Mini; opens the page in a true-size frame, the button shows which device is live, and "back to desktop" or Esc closes it; changes made there land in the same patch tagged with the device), **reset all**, **Copy patch**. The HUD drags by its header, minimizes with –, and resizes from its corner. Esc deselects. Click × on any change to undo just that one.
 
@@ -88,6 +89,7 @@ HUD: **grid** (or press **g**) with a column picker (2 to 16), **foundation** (i
 
 Every time jig mode opens, and after every change, the whole page is scanned:
 
+- images with no `alt` attribute, or alt text that is a filename or placeholder (`alt=""` is accepted as decorative)
 - contrast against the sampled background (WCAG AA; large text gets the 3:1 rule)
 - tap targets under the foundation's `minTapTarget`
 - skipped heading levels

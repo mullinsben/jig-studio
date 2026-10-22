@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Capy Co. · A capybara hot spring in the Olympic Mountains</title>
-<meta name="description" content="Jig Studio demo site: an invite-only capybara hot spring hidden in the Olympic Mountains. Six things on the page are deliberately wrong. Add ?jig to the URL and fix them by dragging.">
+<meta name="description" content="Jig Studio demo site: an invite-only capybara hot spring hidden in the Olympic Mountains. Seven things on the page are deliberately wrong. Add ?jig to the URL and fix them by dragging.">
 <style>
   /* ---------- Foundation tokens (what jig.foundation.json describes) ---------- */
   :root {
@@ -105,6 +105,9 @@
 
   /* ---------- Cards ---------- */
   .adopt, .annex { padding-block: var(--space-64); }
+  .board { padding-block: var(--space-48) 0; }
+  .soak { margin: 0 0 var(--space-32); } .soak .ph { aspect-ratio: 970 / 250; border-radius: var(--radius-md); overflow: hidden; } .soak img { width: 100%; height: 100%; object-fit: cover; } .soak figcaption { font-size: var(--text-sm); color: var(--c-ink-2); margin-top: var(--space-8); }
+  .banner-board .banner-copy.scrim-bottom { background: linear-gradient(to top, rgba(0,0,0,.66), rgba(0,0,0,0) 60%); }
   .cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--grid-gutter); }
   .card { background: var(--c-surface); border: 1px solid var(--c-line); border-radius: var(--radius-md); overflow: hidden; }
   .card .ph { aspect-ratio: 1; overflow: hidden; }
@@ -146,6 +149,7 @@
     <nav>
       <a href="#herd">The herd</a>
       <a href="#adopt">Adopt</a>
+      <a href="#board">The board</a>
       <a href="#habitat">The valley</a>
       <a href="#annex">The annex</a>
       <a href="#visit">Visit</a>
@@ -180,7 +184,7 @@
     <div class="herd-intro">
       <div class="eyebrow">Residents</div>
       <h2 data-jig="heading" data-jig-name="Meet the herd title" style="font-size: calc(var(--text-3xl) * 1.2);">Meet the herd</h2>
-      <p>Most of us were born here. We soak when the water is right, which is around four; we do not use clocks, we use the one with the top hat.</p>
+      <p>Most of us were born here. We soak when the water is right, which is around four; we do not use clocks, we use Clementine. Thirty-one of us, four pictured; the rest declined.</p>
     </div>
     <div class="herd-list">
       <figure>
@@ -197,6 +201,20 @@
           <p>I keep the waiting list. The monocle is mine. The list belongs to David; I am only allowed to hold it.</p>
         </figcaption>
       </figure>
+      <figure>
+        <div class="ph"><img src="assets/herd-stack.jpg" alt="Three capybaras stacked in the hot spring, the top one in a small hat" data-jig="crop" data-jig-name="Herd photo: The stack" style="object-position: 50% 30%;"></div>
+        <figcaption>
+          <h3 data-jig="heading" data-jig-name="Stack name" style="font-size: var(--text-md); font-weight: 400;">The stack</h3>
+          <p>Management. Three of us, one hat. The hat rotates; the stack does not. The kittens learned it from us.</p>
+        </figcaption>
+      </figure>
+      <figure>
+        <div class="ph"><img src="assets/herd-yuzu.jpg" alt="A capybara in the hot spring with three yuzu balanced on its head" data-jig="crop" data-jig-name="Herd photo: Clementine"></div>
+        <figcaption>
+          <h3 data-jig="heading" data-jig-name="Clementine name" style="font-size: var(--text-md); font-weight: 400;">Clementine</h3>
+          <p>Tests the water. Tests the yuzu. If the yuzu stay on, the water is right.</p>
+        </figcaption>
+      </figure>
     </div>
   </div>
 </section>
@@ -209,11 +227,11 @@
     <p>Your money becomes oranges, hoof care, and yuzu from David’s cousin, who is also David. In return, we move you up the list. We are aware this is a bribe; we are rodents, not saints.</p>
     <div class="cards" style="margin-left: 14px; margin-top: var(--space-32);" data-jig="grid" data-jig-name="Card row">
       <article class="card">
-        <div class="ph"><img src="assets/card-oranges.jpg" alt="Capybara balancing three oranges" data-jig="crop" data-jig-name="Card: Stacker"></div>
-        <div class="body"><h3>Stacker</h3><p>I have balanced three oranges since 2019. I will not be explaining it.</p></div>
+        <div class="ph"><img src="assets/herd-tower.jpg" alt="Capybara balancing a tower of eight oranges" data-jig="crop" data-jig-name="Card: Stacker" style="object-position: 50% 62%;"></div>
+        <div class="body"><h3>Stacker</h3><p>Eight oranges, since 2019. I will not be explaining it. The ninth is a matter for the board.</p></div>
       </article>
       <article class="card">
-        <div class="ph"><img src="assets/card-monocle.jpg" alt="Capybara with monocle" data-jig="crop" data-jig-name="Card: Reginald"></div>
+        <div class="ph"><img src="assets/herd-reginald-river.jpg" alt="Capybara in a top hat standing in a river" data-jig="crop" data-jig-name="Card: Reginald" style="object-position: 50% 35%;"></div>
         <div class="body"><h3>Reginald</h3><p>I run the invitation lottery for David. It is random. Writing to me goes to David.</p></div>
       </article>
       <article class="card">
@@ -224,6 +242,19 @@
         <div class="ph"><img src="assets/card-puppy.jpg" alt="A puppy" data-jig="crop" data-jig-name="Card: Intern"></div>
         <div class="body"><h3>The intern</h3><p>Seasonal. Supervises steam. We do not know whose it is.</p></div>
       </article>
+    </div>
+  </div>
+</section>
+
+<!-- The board: three top hats, one chair, no duck in frame. A second overlay for the text jig, with a scrim already in place so it passes. -->
+<section class="board" id="board" data-jig="section" data-jig-name="Board section">
+  <div class="container">
+    <div class="banner banner-board">
+      <img src="assets/banner-board.jpg" alt="Three capybaras in top hats sitting in a row in the water" data-jig="crop" data-jig-name="Board banner image" style="object-position: 50% 50%;">
+      <div class="banner-copy scrim-bottom" data-jig="text" data-jig-name="Board banner copy" style="justify-content: flex-end;">
+        <h2 data-jig="heading" data-jig-name="Board banner title">The board</h2>
+        <p>Meets Thursdays, in the water. David chairs. David is not pictured; David is never pictured.</p>
+      </div>
     </div>
   </div>
 </section>
@@ -261,7 +292,8 @@
         <div class="body"><h3>Biscuit</h3><p>Asleep since you arrived. Will remain so. Counts as cuddling if you are quiet.</p></div>
       </article>
       <article class="card">
-        <div class="ph"><img src="assets/annex-puppy-stack.jpg" alt="Three puppies stacked in front of a window" data-jig="crop" data-jig-name="Annex: Puppy stack" style="object-position: 50% 38%;"></div>
+        <div class="ph"><!-- SIN 7 (alt text): the alt is a camera filename. -->
+        <img src="assets/annex-puppy-stack.jpg" alt="IMG_4471.jpg" data-jig="crop" data-jig-name="Annex: Puppy stack" style="object-position: 50% 38%;"></div>
         <div class="body"><h3>The other stack</h3><p>They learned it from the kittens. They are not as good at it. They do not know this.</p></div>
       </article>
     </div>
@@ -270,6 +302,10 @@
 
 <section class="cta" id="visit" data-jig="section" data-jig-name="Visit section">
   <div class="container">
+    <figure class="soak">
+      <div class="ph"><img src="assets/banner-soak.jpg" alt="The herd soaking in the hot spring among floating yuzu" data-jig="crop" data-jig-name="Soak photo" style="object-position: 50% 45%;"></div>
+      <figcaption>Four o’clock. The water was right.</figcaption>
+    </figure>
     <div class="eyebrow">Visit</div>
     <h2 data-jig="heading" data-jig-name="Visit title">Request an invitation</h2>
     <p>Ask, and in about six months David will write back; he signs as a capybara. Directions come as a map drawn by the one who can hold a pencil; the trailhead moves because David moves it. Bring a towel. Leave the phone. Do not bring David a friend. He has asked.</p>

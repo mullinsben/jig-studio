@@ -74,6 +74,7 @@ After applying, re-run whatever the site uses to build, and tell the person whic
 
 Protection warnings come from a light accessibility scan the jig runs on the whole page in jig mode:
 
+- `alt`: an image with no `alt` attribute, or a filename/placeholder alt. Write real alt text from the image and its context; use `alt=""` only when the image is decorative
 - `contrast`: text against its sampled background, WCAG AA (4.5, or 3 for large text)
 - `tap-target`: interactive element shorter than the foundation's `minTapTarget` (44px)
 - `heading-order`: a heading level is skipped (h2 → h4)

@@ -820,6 +820,8 @@
     #jig-axtags { all: revert; position: fixed; inset: 0; z-index: 2147483645; pointer-events: none; }
     #jig-axtags .tag { all: revert; position: fixed; pointer-events: auto; cursor: pointer; background: #ff2d9b; color: #fff; font: 700 10px/1 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .02em; padding: 4px 6px; border-radius: 4px; white-space: nowrap; box-shadow: 0 2px 8px rgba(0,0,0,.35); }
     #jig-axtags .tag[hidden] { display: none !important; }
+    #jig-hud .welcome { margin: 10px 12px 2px; padding: 10px 12px; background: #13141a; border: 1px solid #262833; border-left: 3px solid #3f6fff; border-radius: 8px; font: 12px/1.5 ui-sans-serif, system-ui; color: #c9d1e6; }
+    #jig-hud .welcome b { color: #fff; font-weight: 600; } #jig-hud .welcome i { font-style: normal; color: #fff; border: 1px solid #3a3d4a; border-radius: 999px; padding: 0 6px; font-size: 11px; }
     #jig-hud .jigs .lbl { font: 11px ui-sans-serif, system-ui; letter-spacing: .14em; text-transform: uppercase; opacity: .6; align-self: center; margin-right: 2px; }
     .jig-badge { position: fixed; z-index: 2147483646; pointer-events: none; font: 11px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
       background: #0b0b0d; color: #dfe6ff; padding: 3px 7px; border-radius: 4px; white-space: nowrap; transform: translate(0,-110%); box-shadow: 0 2px 8px rgba(0,0,0,.3); }
@@ -887,6 +889,11 @@
     #jig-hud .tools button:hover, #jig-hud footer button:hover { background: #3f6fff; }
     #jig-hud .list { overflow: auto; padding: 8px 12px; flex: 1; }
     #jig-hud h6 { margin: 8px 0 4px; font-size: 11px; letter-spacing: .14em; text-transform: uppercase; opacity: .6; }
+    #jig-hud h6.fold { display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; opacity: .85; padding: 4px 0; }
+    #jig-hud h6.fold::before { content: "▸"; font-size: 10px; opacity: .7; transition: transform .12s; }
+    #jig-hud h6.fold[aria-expanded="true"]::before { transform: rotate(90deg); }
+    #jig-hud h6.fold em { font-style: normal; margin-left: auto; background: #262833; color: #dfe6ff; border-radius: 999px; padding: 1px 8px; font-size: 11px; letter-spacing: 0; text-transform: none; }
+    #jig-hud h6.fold em.warn { background: #ff2d9b; color: #fff; }
     #jig-hud .row { display: flex; gap: 8px; align-items: baseline; padding: 4px 0; border-bottom: 1px dashed #262833; cursor: pointer; }
     #jig-hud .row:hover { color: #dfe6ff; }
     #jig-hud .row .n { font-weight: 600; min-width: 0; flex: 0 1 42%; } #jig-hud .row .s { opacity: .8; flex: 1 1 58%; min-width: 0; } #jig-hud .row .x { opacity: .5; }
@@ -1001,6 +1008,13 @@
     const hs = $$('h1,h2,h3,h4,h5,h6').filter(h => h.offsetParent && !h.closest('#jig-hud'));
     let last = 0;
     hs.forEach(h => { const n = +h.tagName[1]; if (last && n > last + 1) W.push({ kind: 'heading-order', el: h, msg: `h${last} → h${n} skips a level` }); last = n; });
+    // 0. alt text: every visible content image needs an alt attribute; "" is fine (decorative), a filename is not
+    $$('img').forEach(img => {
+      if (!img.offsetParent || img.closest('#jig-hud, .jig-tb, #jig-found, #jig-device') || img.width < 24 || img.height < 24) return;
+      if (img.getAttribute('role') === 'presentation' || img.getAttribute('aria-hidden') === 'true') return;
+      if (!img.hasAttribute('alt')) W.push({ kind: 'alt', el: img, msg: 'image has no alt attribute' });
+      else { const a = img.getAttribute('alt').trim(); if (a && (/\.(jpe?g|png|gif|webp|svg|avif)$/i.test(a) || /^(image|img|photo|picture|dsc|img_)[\s_\-\d]*$/i.test(a))) W.push({ kind: 'alt', el: img, msg: `alt text looks like a placeholder: "${a.slice(0, 40)}"` }); }
+    });
     // 1b. visual hierarchy: an h2 rendered larger than the page h1
     const h1 = hs.find(h => h.tagName === 'H1');
     if (h1) { const h1px = px(css(h1).fontSize); hs.filter(h => h.tagName === 'H2' && px(css(h).fontSize) > h1px).forEach(h => W.push({ kind: 'hierarchy', el: h, msg: `h2 renders at ${r1(px(css(h).fontSize))}px, larger than the h1 (${r1(h1px)}px)` })); }
@@ -1056,7 +1070,7 @@
     state.warnings.forEach(w => { if (!w.el || !w.el.isConnected) return; w.el.classList.add('jig-ax'); byEl.set(w.el, (byEl.get(w.el) || []).concat(w)); });
     byEl.forEach((ws, el) => {
       const tag = document.createElement('div'); tag.className = 'tag'; tag.__el = el;
-      tag.textContent = ws.map(w => w.kind === 'contrast' ? `contrast ${w.value} / ${w.min}` : w.kind === 'tap-target' ? `tap ${w.msg.replace(/.*×(\d+)px.*/, '$1')}px tall` : w.kind).join(' · ');
+      tag.textContent = ws.map(w => w.kind === 'contrast' ? `contrast ${w.value} / ${w.min}` : w.kind === 'tap-target' ? `tap ${w.msg.replace(/.*×(\d+)px.*/, '$1')}px tall` : w.kind === 'alt' ? 'no alt' : w.kind).join(' · ');
       tag.title = ws.map(w => w.msg).join('\n');
       tag.onclick = () => { el.scrollIntoView({ block: 'center', behavior: 'smooth' }); if (el.classList.contains('jig-el') && el.classList.contains('jig-active')) select(el); };
       axTags.appendChild(tag);
@@ -1127,6 +1141,7 @@
   hud.innerHTML = `
     <header><b>jig <i>studio</i></b><small id="jig-bp"></small><button class="min" id="jig-min-btn" title="minimize">–</button></header>
     <div class="jigs">${JIGS.map(j => `<button data-jig-toggle="${j.id}" aria-pressed="false">${j.label}</button>`).join('')}</div>
+    <div class="welcome" id="jig-welcome" hidden><b>Pink is what fails accessibility.</b> Switch on <i>images</i>, <i>type</i>, <i>buttons</i> or <i>spacing</i>, then drag or click anything outlined. Everything you do lands in one patch; <b>Copy patch</b> and hand it to your AI.</div>
     <div class="tools">
       <button id="jig-grid-btn" title="g">grid</button>
       <span class="devwrap"><button id="jig-device-btn" title="preview on a phone or tablet" aria-haspopup="menu" aria-expanded="false">device ▾</button>
@@ -1140,7 +1155,7 @@
       <div class="arow"><label>scales</label><div><button id="jig-found-btn">foundation</button><button id="jig-scan-btn">rescan</button><button id="jig-reset-btn">reset all</button></div></div>
       <div class="src" id="jig-src"></div>
     </div>
-    <div class="list"><h6>changes</h6><div id="jig-changes"></div><h6>notes</h6><div id="jig-warn"></div></div>
+    <div class="list"><h6 class="fold" data-fold="changes" aria-expanded="false"><span>changes</span><em id="jig-ch-n">0</em></h6><div id="jig-changes" hidden></div><h6 class="fold" data-fold="warn" aria-expanded="false"><span>notes</span><em id="jig-wn-n">0</em></h6><div id="jig-warn" hidden></div></div>
     <footer><button class="primary" id="jig-copy-btn">Copy patch</button><small id="jig-count"></small></footer>
     <div class="hint">page is inert while the jig is on · hold Alt to click through · Esc deselects</div>`;
 
@@ -1174,7 +1189,9 @@
       wn.appendChild(row);
     });
     const total = state.changes.size + state.frame.changes.length + (state.normalize ? state.normalize.length : 0);
-    $('#jig-count').textContent = `${total} change${total === 1 ? '' : 's'} · ${state.warnings.length + state.frame.warnings.length} note${state.warnings.length + state.frame.warnings.length === 1 ? '' : 's'}`;
+    const nW = state.warnings.length + state.frame.warnings.length;
+    $('#jig-count').textContent = `${total} change${total === 1 ? '' : 's'} · ${nW} note${nW === 1 ? '' : 's'}`;
+    const chN = $('#jig-ch-n'), wnN = $('#jig-wn-n'); if (chN) chN.textContent = total; if (wnN) { wnN.textContent = nW; wnN.classList.toggle('warn', nW > 0); }
     if (!state.device) $('#jig-bp').textContent = `${state.bp} · ${window.innerWidth}px`;
     const F = state.F; const inf = F.mode === 'inferred' || F.type.inferred || F.buttons.inferred;
     $('#jig-src').textContent = `${INJECTED ? 'injected by bookmarklet · ' : ''}foundation: ${F.name} · ${state.foundationSource}${inf ? ` · ${F.type.steps.length} type steps, ${F.spacingSteps.length} spacing steps, ${F.buttons.sizes.length} button size${F.buttons.sizes.length === 1 ? '' : 's'} · proposed tokens ride in the patch` : ''}`;
@@ -1485,13 +1502,18 @@
     document.body.append(hud);
     on(window, 'message', e => { if (e.data && e.data.jig === 'frame') { state.frame = { changes: e.data.changes || [], warnings: e.data.warnings || [], device: e.data.device, bp: e.data.bp }; renderHUD(); } });
     $('#jig-min-btn').onclick = e => { e.stopPropagation(); hud.classList.toggle('collapsed'); $('#jig-min-btn').textContent = hud.classList.contains('collapsed') ? '+' : '–'; };
+    // changes / notes fold shut by default; the state is remembered for the session
+    $$('h6.fold', hud).forEach(h => { const body = $('#jig-' + (h.dataset.fold === 'warn' ? 'warn' : 'changes')); const key = 'jig-fold-' + h.dataset.fold; const open = safeGet(key) === '1'; body.hidden = !open; h.setAttribute('aria-expanded', open ? 'true' : 'false');
+      h.onclick = () => { const o = body.hidden; body.hidden = !o; h.setAttribute('aria-expanded', o ? 'true' : 'false'); safeSet(key, o ? '1' : '0'); }; });
     const devBtn = $('#jig-device-btn'), devMenu = $('#jig-device-menu');
     const showDevMenu = show => { devMenu.hidden = !show; devBtn.setAttribute('aria-expanded', show ? 'true' : 'false'); };
     devBtn.onclick = e => { e.stopPropagation(); showDevMenu(devMenu.hidden); };
     $$('[data-device]', devMenu).forEach(m => m.onclick = e => { e.stopPropagation(); showDevMenu(false); if (m.dataset.device) openDevice(m.dataset.device); else closeDevice(); });
     on(document, 'pointerdown', e => { if (!devMenu.hidden && !e.target.closest('.devwrap')) showDevMenu(false); }, true);
     syncDeviceBtn();
-    try { JSON.parse(safeGet('jig-jigs:' + location.host) || '[]').forEach(id => state.jigs.add(id)); } catch (e) {}
+    let firstRun = false;
+    try { const saved = safeGet('jig-jigs:' + location.host); firstRun = !saved; (saved ? JSON.parse(saved) : ['ax']).forEach(id => state.jigs.add(id)); } catch (e) { state.jigs.add('ax'); }
+    const welcome = $('#jig-welcome'); if (welcome) welcome.hidden = !firstRun;
     const applyJigs = () => {
       $$('[data-jig-toggle]', hud).forEach(b => { const on = state.jigs.has(b.dataset.jigToggle); b.classList.toggle('on', on); b.setAttribute('aria-pressed', on ? 'true' : 'false'); });
       $$('.jig-el').forEach(el => { const on = state.jigs.has(groupOf(el.dataset.jigCtl)); el.classList.toggle('jig-active', on); if (!on && el === state.selected) { el.classList.remove('jig-selected'); state.selected = null; toolbar.hidden = true; } });
@@ -1499,7 +1521,7 @@
       const fr = deviceEl && $('iframe', deviceEl); if (fr && fr.contentWindow) fr.contentWindow.postMessage({ jig: 'jigs', jigs: Array.from(state.jigs) }, '*');
       paintAX(); renderHUD();
     };
-    $$('[data-jig-toggle]', hud).forEach(b => b.onclick = () => { const id = b.dataset.jigToggle; if (state.jigs.has(id)) state.jigs.delete(id); else state.jigs.add(id); applyJigs(); });
+    $$('[data-jig-toggle]', hud).forEach(b => b.onclick = () => { const id = b.dataset.jigToggle; if (state.jigs.has(id)) state.jigs.delete(id); else state.jigs.add(id); if (welcome && id !== 'ax') welcome.hidden = true; applyJigs(); });
     applyJigs();
     $('#jig-grid-btn').onclick = () => toggleGrid();
     const setAdv = on => { hud.classList.toggle('advanced', on); $('#jig-adv-btn').classList.toggle('on', on); safeSet('jig-advanced', on ? '1' : '0'); };
