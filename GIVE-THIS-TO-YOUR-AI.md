@@ -46,7 +46,7 @@ The rule for all of them: **edit tokens and classes, never write pixel values.**
 | --- | --- | --- |
 | `crop` | `objectPosition` (or `backgroundPosition`), optional `zoom` | Set `object-position` (or `background-position`) on that element in the stylesheet or inline style. If `zoom` is present, apply `transform: scale(zoom)` with `transform-origin` equal to the position, and make sure the container has `overflow: hidden`. |
 | `size` | `widthCols`, `widthPx`, `box` | The image's box was resized to N grid columns. Set the width on `box` when present (the wrapper that holds only this image), else on the image; prefer a column span or percentage in the site's grid vocabulary over the px. |
-| `type` (alias `heading`) | `from`, `to`, `step` | Change the element's font size to `var(--text-<to>)`. Applies to any text element: headings, paragraphs, captions, eyebrows, list items. If the element had an inline font-size override that caused the problem, remove the override instead of adding another. |
+| `type` (alias `heading`) | `from`, `to`, `step`, optional `contrast` | Change the element's font size to `var(--text-<to>)`. Applies to any text element: headings, paragraphs, captions, eyebrows, list items. If the element had an inline font-size override that caused the problem, remove the override instead of adding another. `contrast` is a colour fix: `{ prop, from, to, before, after, min }` where `prop` is `color` or `background-color` and `to` is the nearest shade of the same hue that passes. This is the one place the jig touches colour. Map `to` onto the site's palette: if a token is within a hair of it, use the token; if the site's token itself fails everywhere it's used, change the token; otherwise add a `-strong` / `-text` variant of the token rather than a one-off hex. |
 | `text` | `anchor`, `col`, `offsetCols`, `offsetY`, `maxWidthCols`, `scrim` | Text only ever moves to the grid. For copy overlaid on an image: `anchor` is the vertical band (`top`, `center`, `bottom`) and `col` is the 1-based grid column its left edge sits on, inside the container's padding; `offsetY` is a spacing-scale nudge inward from that band's edge. Implement as `justify-content` for the band plus a `translate`/`margin-left` of `(col - 1)` column widths for the panel. For in-flow text: `offsetCols` shifts the element right by N columns and `offsetY` by a spacing token (`var(--space-N)`); `maxWidthCols` caps width at N columns. `scrim` is `gradient`, `tint`, or `glass`; see below. |
 
 Scrims (content protection for text over images). Implement each as a class on the site, then apply the class; don't inline the styles:
@@ -106,5 +106,5 @@ A patch may carry `# auto fixes` and `# auto` sections. `# auto fixes` lists wha
 
 - Don't apply a patch to a different page than the one in its header.
 - Don't invent values that aren't in the foundation; ask.
-- Don't touch color. The jig doesn't emit color changes on purpose.
+- Don't touch colour beyond what a `contrast` entry asks for. The jig emits colour only as a contrast fix, and only as the nearest passing shade of the same hue.
 - Don't "improve" things the patch didn't mention.

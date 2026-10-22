@@ -325,7 +325,8 @@
       on(el, 'pointerdown', e => {
         if (e.button !== 0) return;
         if (e.altKey) return;
-        if (e.target.closest('[data-jig-drag]') !== el) return;
+        if (!el.classList.contains('jig-active')) return;
+        if (e.target.closest('[data-jig-drag], .jig-el.jig-active') !== el) return;
         e.preventDefault(); e.stopPropagation(); try { el.setPointerCapture(e.pointerId); } catch (x) {}
         if (isImg) { const f = naturalFit(el, zoom); if (f.ovx < 2 && f.ovy < 2) { zoom = Math.max(zoom, 1.2); apply(); } }
         drag = { x: e.clientX, y: e.clientY, ox, oy, id: e.pointerId }; el.style.cursor = 'grabbing';
@@ -459,7 +460,10 @@
           `ramp ${origTok} → ${ramp[idx].token} (${idx - origIdx > 0 ? '+' : ''}${idx - origIdx}${ramp[idx].var ? '' : ', ' + ramp[idx].px + 'px'})`);
         refreshToolbar(el);
       }
-      el.__jigReset = () => { idx = origIdx; setSize(''); unrecord(el, 'type'); refreshToolbar(el); };
+      let cfix = null;
+      el.__jigFixContrast = () => { if (cfix) { cfix.undo(); cfix = null; setBadge(el, 'colour restored'); return; } const r = fixContrast(el); if (!r) setBadge(el, 'contrast: nothing the jig can do here (text over an image wants a scrim)'); else if (r.already) setBadge(el, `contrast already passes (${r.ratio.toFixed(1)})`); else { cfix = r; setBadge(el, `${r.prop} ${r.from} → ${r.to} · contrast ${r.before.toFixed(1)} → ${r.after.toFixed(1)}`); } scanSoon(); refreshToolbar(el); };
+      const tb0 = el.__jigToolbar; el.__jigToolbar = () => [...tb0(), sep(), (() => { const b = btn('aa', () => el.__jigFixContrast()); b.title = cfix ? 'restore the original colour' : 'fix contrast: nearest passing shade of the same hue'; if (cfix) b.classList.add('on'); return b; })()];
+      el.__jigReset = () => { idx = origIdx; setSize(''); unrecord(el, 'type'); if (cfix) { cfix.undo(); cfix = null; } refreshToolbar(el); };
       el.__jigStepType = step;
     }
   };
@@ -506,7 +510,8 @@
       let drag = null;
       on(el, 'pointerdown', e => {
         if (e.button !== 0 || e.altKey) return;
-        if (e.target.closest('[data-jig-drag]') !== el) return;   // the nearest thing that actually drags owns the gesture
+        if (!el.classList.contains('jig-active')) return;          // this jig is switched off; let the event reach whatever is inside
+        if (e.target.closest('[data-jig-drag], .jig-el.jig-active') !== el) return;   // the nearest active thing owns the gesture
         e.preventDefault(); e.stopPropagation(); try { el.setPointerCapture(e.pointerId); } catch (x) {}
         drag = { x: e.clientX, y: e.clientY, cols, rowTok, offX, offY, anchor, id: e.pointerId, gridWas: state.grid };
         if (isAbs) { const r0 = parent.getBoundingClientRect(); const p0 = (panel || el).getBoundingClientRect(); drag.baseLeft = p0.left - r0.left - padL(el) - offX; }   // where the panel sits with zero offset
@@ -644,7 +649,7 @@
 
   // measured buttons (no class convention on the site): sizes and variants are observed clusters, applied as px
   function initMeasured(el, B) {
-    const h0 = el.getBoundingClientRect().height; const c0 = css(el);
+    const h0 = el.getBoundingClientRect().height; const c0 = css(el); el.__jigH0 = h0;
     const sizes = B.sizes, variants = B.variants;
     let si = sizes.indexOf(nearest(sizes, h0, x => x.h)); const si0 = si;
     const k0 = `${c0.backgroundColor}|${c0.color}`; let vi = Math.max(0, variants.findIndex(v => `${v.bg}|${v.fg}` === k0)); const vi0 = vi;
@@ -786,7 +791,7 @@
       }
       on(el, 'pointerenter', () => hover(el));
       on(el, 'pointerleave', () => hover(null));
-      on(el, 'click', e => { if (e.altKey) return; e.preventDefault(); e.stopPropagation(); select(el); });
+      on(el, 'click', e => { if (e.altKey) return; if (!el.classList.contains('jig-active')) return; e.preventDefault(); e.stopPropagation(); select(el); });
     }
   }
 
@@ -828,6 +833,7 @@
     .jig-tb { position: fixed; z-index: 2147483646; display: flex; gap: 4px; align-items: center; background: #0b0b0d; border-radius: 8px; padding: 4px; box-shadow: 0 4px 16px rgba(0,0,0,.35); }
     .jig-tb button { font: 600 13px ui-sans-serif, system-ui; background: #262833; color: #fff; border: 0; border-radius: 6px; min-width: 28px; height: 28px; padding: 0 6px; cursor: pointer; }
     .jig-tb button:hover { background: #3f6fff; }
+    .jig-tb button.on { background: #3f6fff; }
     .jig-tb .chip { font: 11px ui-monospace, Menlo, monospace; color: #dfe6ff; padding: 0 6px; min-width: 34px; text-align: center; }
     .jig-tb .sep { width: 1px; height: 18px; background: #3a3d4a; margin: 0 2px; }
     #jig-grid { position: absolute; inset: 0; pointer-events: none; z-index: 2147483640; }
@@ -1135,6 +1141,34 @@
   function parseColor(s) { const m = (s || '').match(/rgba?\(([^)]+)\)/); if (!m) return null; const p = m[1].split(',').map(parseFloat); return [p[0], p[1], p[2], p.length > 3 ? p[3] : 1]; }
   function lum([r, g, b]) { const f = v => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }; return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b); }
   function contrast(a, b) { const l1 = lum(a), l2 = lum(b); return (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05); }
+  function rgb2hsl([r, g, b]) { r /= 255; g /= 255; b /= 255; const mx = Math.max(r, g, b), mn = Math.min(r, g, b); let h = 0, s = 0; const l = (mx + mn) / 2; if (mx !== mn) { const d = mx - mn; s = l > 0.5 ? d / (2 - mx - mn) : d / (mx + mn); h = mx === r ? (g - b) / d + (g < b ? 6 : 0) : mx === g ? (b - r) / d + 2 : (r - g) / d + 4; h /= 6; } return [h, s, l]; }
+  function hsl2rgb([h, s, l]) { if (s === 0) { const v = Math.round(l * 255); return [v, v, v]; } const q = l < 0.5 ? l * (1 + s) : l + s - l * s, p = 2 * l - q; const f = t => { t = (t + 1) % 1; return t < 1 / 6 ? p + (q - p) * 6 * t : t < 1 / 2 ? q : t < 2 / 3 ? p + (q - p) * (2 / 3 - t) * 6 : p; }; return [f(h + 1 / 3), f(h), f(h - 1 / 3)].map(v => Math.round(v * 255)); }
+  const hex = ([r, g, b]) => '#' + [r, g, b].map(v => Math.round(v).toString(16).padStart(2, '0')).join('');
+  // Nudge a colour's lightness, same hue and saturation, until it clears `need` against `against`. Returns null if it can't.
+  function passingShade(color, against, need) {
+    const [h, sat, l0] = rgb2hsl(color); const dir = lum(against) > 0.5 ? -1 : 1;   // light background: go darker; dark background: go lighter
+    for (let l = l0; l >= 0 && l <= 1; l += dir * 0.02) { const c = hsl2rgb([h, sat, l]); if (contrast(c, against) >= need) return c; }
+    const c = hsl2rgb([h, sat, dir < 0 ? 0 : 1]); return contrast(c, against) >= need ? c : null;
+  }
+  // Fix a plain-background contrast failure on `el` by moving ITS colour (or its own background, if it paints one) to the nearest passing shade.
+  // Text over images is the scrim's job, not this.
+  function fixContrast(el) {
+    if (imageBehind(el)) return null;
+    const c = css(el); const fg = parseColor(c.color); if (!fg) return null;
+    const own = parseColor(c.backgroundColor); const hasOwnBg = own && own[3] > 0.9;
+    const bg = hasOwnBg ? own : solidBehind(el);
+    const fs = px(c.fontSize), bold = px(c.fontWeight) >= 700; const P = state.F.protect || {};
+    const need = (fs >= 24 || (bold && fs >= 18.66)) ? Math.min(3, P.minContrast || 4.5) : (P.minContrast || 4.5);
+    const before = contrast(fg, bg); if (before >= need) return { already: true, ratio: before };
+    const prop = hasOwnBg ? 'background-color' : 'color';
+    const to = hasOwnBg ? passingShade(own, fg, need) : passingShade(fg, bg, need); if (!to) return null;
+    const prev = el.style.getPropertyValue(prop);
+    el.style.setProperty(prop, hex(to), 'important');
+    const after = hasOwnBg ? contrast(fg, to) : contrast(to, bg);
+    const from = hex(hasOwnBg ? own : fg);
+    record(el, 'type', { contrast: { prop, from, to: hex(to), before: +before.toFixed(1), after: +after.toFixed(1), min: need } }, `${prop === 'color' ? 'colour' : 'background'} ${from} → ${hex(to)} (contrast ${before.toFixed(1)} → ${after.toFixed(1)})`);
+    return { prop, from, to: hex(to), before, after, undo: () => { el.style.removeProperty(prop); if (prev) el.style.setProperty(prop, prev); unrecord(el, 'type'); } };
+  }
 
   // ------------------------------------------------------------ HUD
   const hud = document.createElement('div'); hud.id = 'jig-hud';
@@ -1238,7 +1272,7 @@
   function normalizePage(on) {
     if (!on) {
       (state.normalize || []).forEach(n => { n.el.style.removeProperty(n.prop); if (n.prev) n.el.style.setProperty(n.prop, n.prev); });
-      (state.autoFixes || []).forEach(f => { if (f.undo) { f.undo(); unrecord(f.el, 'grid'); } else if (f.el.__jigReset) f.el.__jigReset(); });
+      (state.autoFixes || []).forEach(f => { if (f.undo) { f.undo(); unrecord(f.el, f.ctl || 'grid'); } else if (f.el.__jigReset) f.el.__jigReset(); });
       state.normalize = null; state.autoFixes = []; $('#jig-norm-btn').classList.remove('on'); renderHUD(); scanSoon(); return;
     }
     const F = state.F; const out = [];
@@ -1328,7 +1362,8 @@
     for (let pass = 0; pass < 4; pass++) {
       let did = false;
       for (const w of state.warnings.slice()) {
-        if (w.kind === 'contrast' || w.kind === 'busy-background' || w.kind === 'text-over-image') {
+        const plain = w.kind === 'contrast' && /on background/.test(w.msg);
+        if (!plain && (w.kind === 'contrast' || w.kind === 'busy-background' || w.kind === 'text-over-image')) {
           const ov = w.el.closest('.jig-el[data-jig-ctl="text"]'); if (!ov || !ov.__jigSetScrim || seen.has(ov)) continue;
           seen.add(ov);
           for (const sc of ['gradient', 'tint', 'glass']) {
@@ -1336,6 +1371,10 @@
             if (!state.warnings.some(x => ov.contains(x.el) && /contrast|busy|text-over/.test(x.kind))) { state.autoFixes.push({ el: ov, what: `scrim ${sc} (text over image now passes)` }); did = true; break; }
             if (sc === 'glass') state.autoFixes.push({ el: ov, what: 'scrim glass (best effort; still short of AA)' });
           }
+        }
+        if (plain && !seen.has(w.el)) {
+          seen.add(w.el); const r = fixContrast(w.el);
+          if (r && !r.already) { state.autoFixes.push({ el: w.el, ctl: 'type', what: `${r.prop === 'color' ? 'colour' : 'background'} ${r.from} → ${r.to} (contrast ${r.before.toFixed(1)} → ${r.after.toFixed(1)})`, undo: r.undo }); did = true; }
         }
         if (w.kind === 'tap-target' && w.el.__jigStepSize && !seen.has(w.el)) {
           seen.add(w.el); let steps = 0;
