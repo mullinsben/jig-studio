@@ -39,7 +39,8 @@
     { id: 'images', label: 'images', ctls: ['crop'] },
     { id: 'text', label: 'type', ctls: ['type', 'heading', 'text'] },
     { id: 'buttons', label: 'buttons', ctls: ['button'] },
-    { id: 'spacing', label: 'spacing', ctls: ['section'] }
+    { id: 'spacing', label: 'spacing', ctls: ['section'] },
+    { id: 'ax', label: 'ax', ctls: [] }          // paints protection failures pink on the page
   ];
   const groupOf = ctl => (JIGS.find(j => j.ctls.includes(ctl)) || {}).id;
   const state = {
@@ -801,6 +802,7 @@
     #jig-hud button:focus-visible, .jig-tb button:focus-visible, #jig-found button:focus-visible { outline: 2px solid #3f6fff; outline-offset: 2px; }
     .jig-scrim-panel { display: inline-block; max-width: 100%; }
     html.jig-scanning *, html.jig-scanning *::before, html.jig-scanning *::after { transition: none !important; animation: none !important; }
+    html.jig-scanning #jig-axtags { display: none !important; }
     .jig-el.jig-active { outline: 1.5px dashed rgba(63,111,255,.55); outline-offset: 2px; }
     .jig-el.jig-active:hover, .jig-el.jig-active.jig-selected { outline: 2px solid #3f6fff; }
     .jig-el.jig-el:not(.jig-active) { pointer-events: none; cursor: auto !important; }
@@ -809,6 +811,12 @@
     #jig-hud .jigs button { flex: 1; font: 600 12px ui-sans-serif, system-ui; background: transparent; color: #9aa3b8; border: 1px solid #262833; border-radius: 999px; padding: 6px 4px; cursor: pointer; text-align: center; }
     #jig-hud .jigs button:hover { border-color: #3f6fff; color: #fff; }
     #jig-hud .jigs button.on { background: #3f6fff; border-color: #3f6fff; color: #fff; }
+    #jig-hud .jigs button[data-jig-toggle="ax"]:hover { border-color: #ff2d9b; }
+    #jig-hud .jigs button[data-jig-toggle="ax"].on { background: #ff2d9b; border-color: #ff2d9b; color: #fff; }
+    .jig-ax.jig-ax { outline: 2px solid #ff2d9b !important; outline-offset: 2px !important; box-shadow: 0 0 0 5px rgba(255,45,155,.22) !important; }
+    #jig-axtags { all: revert; position: fixed; inset: 0; z-index: 2147483645; pointer-events: none; }
+    #jig-axtags .tag { all: revert; position: fixed; pointer-events: auto; cursor: pointer; background: #ff2d9b; color: #fff; font: 700 10px/1 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .02em; padding: 4px 6px; border-radius: 4px; white-space: nowrap; box-shadow: 0 2px 8px rgba(0,0,0,.35); }
+    #jig-axtags .tag[hidden] { display: none !important; }
     #jig-hud .jigs .lbl { font: 11px ui-sans-serif, system-ui; letter-spacing: .14em; text-transform: uppercase; opacity: .6; align-self: center; margin-right: 2px; }
     .jig-badge { position: fixed; z-index: 2147483646; pointer-events: none; font: 11px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
       background: #0b0b0d; color: #dfe6ff; padding: 3px 7px; border-radius: 4px; white-space: nowrap; transform: translate(0,-110%); box-shadow: 0 2px 8px rgba(0,0,0,.3); }
@@ -1021,7 +1029,30 @@
       const need = large ? Math.min(3, P.minContrast || 4.5) : (P.minContrast || 4.5);
       if (ratio < need) W.push({ kind: 'contrast', el: t, msg: `contrast ${ratio.toFixed(1)} ${how}${over ? ' (worst patch)' : ''}, min ${need}${large ? ' (large text)' : ''}`, value: +ratio.toFixed(1), min: need });
     });
-    state.warnings = W; renderHUD(); postToParent();
+    state.warnings = W; renderHUD(); postToParent(); paintAX();
+  }
+  // ax jig: every element with a protection warning gets a pink outline and a chip saying why
+  let axTags = null;
+  function paintAX() {
+    const axOn = state.jigs.has('ax');
+    $$('.jig-ax').forEach(el => el.classList.remove('jig-ax'));
+    if (!axTags) { axTags = document.createElement('div'); axTags.id = 'jig-axtags'; document.body.appendChild(axTags); on(window, 'scroll', placeAXTags, { passive: true }); on(window, 'resize', placeAXTags); }
+    axTags.innerHTML = '';
+    if (!axOn) return;
+    const byEl = new Map();
+    state.warnings.forEach(w => { if (!w.el || !w.el.isConnected) return; w.el.classList.add('jig-ax'); byEl.set(w.el, (byEl.get(w.el) || []).concat(w)); });
+    byEl.forEach((ws, el) => {
+      const tag = document.createElement('div'); tag.className = 'tag'; tag.__el = el;
+      tag.textContent = ws.map(w => w.kind === 'contrast' ? `contrast ${w.value} / ${w.min}` : w.kind === 'tap-target' ? `tap ${w.msg.replace(/.*×(\d+)px.*/, '$1')}px tall` : w.kind).join(' · ');
+      tag.title = ws.map(w => w.msg).join('\n');
+      tag.onclick = () => { el.scrollIntoView({ block: 'center', behavior: 'smooth' }); if (el.classList.contains('jig-el') && el.classList.contains('jig-active')) select(el); };
+      axTags.appendChild(tag);
+    });
+    placeAXTags();
+  }
+  function placeAXTags() {
+    if (!axTags) return;
+    $$('.tag', axTags).forEach(t => { const r = t.__el.getBoundingClientRect(); const off = r.top < 22; t.style.top = `${Math.max(0, off ? r.bottom + 4 : r.top - 20)}px`; t.style.left = `${Math.max(0, r.left)}px`; t.hidden = r.width === 0 || r.bottom < 0 || r.top > window.innerHeight; });
   }
   function imageBehind(t) {
     let n = t.parentElement;
@@ -1423,7 +1454,7 @@
       // inside a device frame: no HUD; the parent page's HUD collects our changes and drives the grid
       (url.searchParams.get('jigs') || '').split(',').filter(Boolean).forEach(id => state.jigs.add(id));
       $$('.jig-el').forEach(el => el.classList.toggle('jig-active', state.jigs.has(groupOf(el.dataset.jigCtl))));
-      on(window, 'message', e => { if (e.data && e.data.jig === 'jigs') { state.jigs = new Set(e.data.jigs); $$('.jig-el').forEach(el => el.classList.toggle('jig-active', state.jigs.has(groupOf(el.dataset.jigCtl)))); } });
+      on(window, 'message', e => { if (e.data && e.data.jig === 'jigs') { state.jigs = new Set(e.data.jigs); $$('.jig-el').forEach(el => el.classList.toggle('jig-active', state.jigs.has(groupOf(el.dataset.jigCtl)))); paintAX(); } });
       on(window, 'message', e => { if (e.data && e.data.jig === 'grid') { if (e.data.columns) { state.F.grid.columns = e.data.columns; if (state.grid) drawGrid(); } toggleGrid(!!e.data.on); } });
       const imgs0 = $$('img').filter(i => !i.complete);
       await Promise.all(imgs0.map(i => new Promise(r => { i.onload = i.onerror = r; })));
@@ -1441,7 +1472,7 @@
       $$('.jig-el').forEach(el => { const on = state.jigs.has(groupOf(el.dataset.jigCtl)); el.classList.toggle('jig-active', on); if (!on && el === state.selected) { el.classList.remove('jig-selected'); state.selected = null; toolbar.hidden = true; } });
       safeSet('jig-jigs:' + location.host, JSON.stringify(Array.from(state.jigs)));
       const fr = deviceEl && $('iframe', deviceEl); if (fr && fr.contentWindow) fr.contentWindow.postMessage({ jig: 'jigs', jigs: Array.from(state.jigs) }, '*');
-      renderHUD();
+      paintAX(); renderHUD();
     };
     $$('[data-jig-toggle]', hud).forEach(b => b.onclick = () => { const id = b.dataset.jigToggle; if (state.jigs.has(id)) state.jigs.delete(id); else state.jigs.add(id); applyJigs(); });
     applyJigs();
