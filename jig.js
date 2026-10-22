@@ -273,7 +273,7 @@
     const k = keyOf(el, ctl);
     const base = { el: selectorOf(el), name: nameOf(el), ctl, bp: state.bp, ...(DEVICE ? { device: DEVICE } : {}) };
     state.changes.set(k, Object.assign(base, data, { summary }));
-    renderHUD(); postToParent();
+    renderHUD(); postToParent(); scanSoon();
   }
   function unrecord(el, ctl) { state.changes.delete(keyOf(el, ctl)); renderHUD(); postToParent(); }
   function postToParent() {
@@ -304,6 +304,8 @@
       let drag = null;
       on(el, 'pointerdown', e => {
         if (e.button !== 0) return;
+        if (e.altKey) return;
+        if (e.target.closest('.jig-el') !== el) return;
         e.preventDefault(); e.stopPropagation(); try { el.setPointerCapture(e.pointerId); } catch (x) {}
         drag = { x: e.clientX, y: e.clientY, ox, oy, id: e.pointerId }; el.style.cursor = 'grabbing';
       });
@@ -379,20 +381,24 @@
       const origTok = nearest(ramp, origPx, r => r.px).token;
       let idx = ramp.findIndex(r => r.token === origTok);
       const origIdx = idx;
+      // descendants that render at the element's own size (a link inside a heading, a span inside a p) travel with it;
+      // ones that are deliberately different (a <small>) are left alone
+      const riders = $$('*', el).filter(d => !d.closest('.jig-tb, .jig-badge') && Math.abs(px(css(d).fontSize) - origPx) < 0.6);
+      const setSize = v => { const f = (n) => { if (v) n.style.setProperty('font-size', v, 'important'); else n.style.removeProperty('font-size'); }; f(el); riders.forEach(f); };
       el.__jigToolbar = () => [
         btn('−', () => step(-1)), chip(() => state.F.type.ramp[idx]), btn('+', () => step(1))
       ];
       on(el, 'wheel', e => { if (!(e.ctrlKey || e.metaKey)) return; e.preventDefault(); step(e.deltaY < 0 ? 1 : -1); }, { passive: false });
       function step(d) {
         idx = clamp(idx + d, 0, ramp.length - 1);
-        el.style.fontSize = typeValue(ramp[idx]);
+        setSize(idx === origIdx ? '' : typeValue(ramp[idx]));
         setBadge(el, `${ramp[idx].var || 'step ' + ramp[idx].token} · ${ramp[idx].px}px`);
         if (idx === origIdx) unrecord(el, 'type');
         else record(el, 'type', { from: origTok, to: ramp[idx].token, step: idx - origIdx, px: ramp[idx].px, ...(ramp[idx].var ? { var: ramp[idx].var } : { inferred: true }) },
           `ramp ${origTok} → ${ramp[idx].token} (${idx - origIdx > 0 ? '+' : ''}${idx - origIdx}${ramp[idx].var ? '' : ', ' + ramp[idx].px + 'px'})`);
         refreshToolbar(el);
       }
-      el.__jigReset = () => { idx = origIdx; el.style.fontSize = ''; unrecord(el, 'type'); refreshToolbar(el); };
+      el.__jigReset = () => { idx = origIdx; setSize(''); unrecord(el, 'type'); refreshToolbar(el); };
     }
   };
 
@@ -427,13 +433,14 @@
       }
       const arrows = () => [btn('←', () => el.__jigNudge(-1, 0)), btn('→', () => el.__jigNudge(1, 0)), btn('↑', () => el.__jigNudge(0, -1)), btn('↓', () => el.__jigNudge(0, 1))];
       el.__jigToolbarText = isAbs
-        ? () => [btn('◐', () => { scrim = SCRIMS[(SCRIMS.indexOf(scrim) + 1) % SCRIMS.length]; applyScrim(); commit(); refreshToolbar(el); scanProtection(); }), chip(() => 'scrim ' + scrim), sep(), ...arrows()]
+        ? () => [btn('◐', () => { scrim = SCRIMS[(SCRIMS.indexOf(scrim) + 1) % SCRIMS.length]; applyScrim(); commit(); refreshToolbar(el); scanSoon(); }), chip(() => 'scrim ' + scrim), sep(), ...arrows()]
         : () => [chip(() => `${cols} col · ${rowTok}px`), ...arrows()];
       if (!el.__jigToolbar) el.__jigToolbar = el.__jigToolbarText;
       el.style.cursor = 'move';
       let drag = null;
       on(el, 'pointerdown', e => {
-        if (e.button !== 0 || e.target.closest('a, button')) return;
+        if (e.button !== 0 || e.altKey) return;
+        if (e.target.closest('.jig-el') !== el) return;   // a nested jig element (a button inside this paragraph) owns its own gesture
         e.preventDefault(); e.stopPropagation(); try { el.setPointerCapture(e.pointerId); } catch (x) {}
         drag = { x: e.clientX, y: e.clientY, cols, rowTok, offX, offY, anchor, id: e.pointerId, gridWas: state.grid };
         if (!state.grid) toggleGrid(true);
@@ -560,7 +567,7 @@
           if (variant !== origVar) { data.variant = variant; bits.push(`variant ${origVar} → ${variant}`); }
           record(el, 'button', data, bits.join(', '));
         }
-        refreshToolbar(el); scanProtection();
+        refreshToolbar(el); scanSoon();
       }
       el.__jigReset = () => { el.classList.remove(P + size, P + variant); el.classList.add(P + origSize, P + origVar); size = origSize; variant = origVar; unrecord(el, 'button'); refreshToolbar(el); };
     }
@@ -576,7 +583,8 @@
     el.__jigToolbar = () => [btn('−', () => cyc('size', -1)), chip(() => sizes[si].token), btn('+', () => cyc('size', 1)), sep(), btn('◐', () => cyc('variant', 1)), chip(() => variants[vi].token)];
     function apply() {
       const sz = sizes[si], v = variants[vi];
-      if (si !== si0) { el.style.padding = `${sz.padY}px ${sz.padX}px`; el.style.fontSize = `${sz.fs}px`; el.style.minHeight = `${sz.h}px`; } else Object.assign(el.style, { padding: orig.p, fontSize: orig.fs, minHeight: orig.mh });
+      if (si !== si0) { el.style.setProperty('padding', `${sz.padY}px ${sz.padX}px`, 'important'); el.style.setProperty('font-size', `${sz.fs}px`, 'important'); el.style.setProperty('min-height', `${sz.h}px`, 'important'); el.style.setProperty('line-height', `${Math.max(1, Math.round(sz.h - 2 * sz.padY))}px`, 'important'); }
+      else { ['padding', 'font-size', 'min-height', 'line-height'].forEach(k => el.style.removeProperty(k)); Object.assign(el.style, { padding: orig.p, fontSize: orig.fs, minHeight: orig.mh }); }
       if (vi !== vi0) { el.style.background = v.bg; el.style.color = v.fg; el.style.borderColor = v.border; } else Object.assign(el.style, { background: orig.bg, color: orig.c, borderColor: orig.bc });
       setBadge(el, `size ${sz.token} (${sz.h}px) · ${v.token}`);
     }
@@ -585,7 +593,7 @@
       apply();
       if (si === si0 && vi === vi0) unrecord(el, 'button');
       else { const data = { inferred: true }; const bits = []; if (si !== si0) { data.size = sizes[si].token; data.height = sizes[si].h; bits.push(`size ${sizes[si0].token} → ${sizes[si].token} (${sizes[si].h}px)`); } if (vi !== vi0) { data.variant = variants[vi].token; bits.push(`variant ${variants[vi0].token} → ${variants[vi].token}`); } record(el, 'button', data, bits.join(', ')); }
-      refreshToolbar(el); scanProtection();
+      refreshToolbar(el); scanSoon();
     }
     el.__jigReset = () => { si = si0; vi = vi0; apply(); unrecord(el, 'button'); refreshToolbar(el); };
   }
@@ -601,13 +609,13 @@
       el.__jigToolbar = () => [btn('−', () => step(-1)), chip(() => `pad ${sp[idx]}`), btn('+', () => step(1))];
       function step(d) {
         idx = clamp(idx + d, 0, sp.length - 1);
-        el.style.paddingBlock = spaceValue(steps[idx]);
+        if (idx === origIdx) el.style.removeProperty('padding-block'); else el.style.setProperty('padding-block', spaceValue(steps[idx]), 'important');
         setBadge(el, `padding-block ${steps[idx].var || sp[idx] + 'px'}`);
         if (idx === origIdx) unrecord(el, 'spacing');
         else record(el, 'spacing', { paddingY: sp[idx], ...(steps[idx].var ? {} : { inferred: true }) }, `padding ${Math.round(origTop)} → ${sp[idx]}`);
         refreshToolbar(el);
       }
-      el.__jigReset = () => { idx = origIdx; el.style.paddingBlock = ''; unrecord(el, 'spacing'); refreshToolbar(el); };
+      el.__jigReset = () => { idx = origIdx; el.style.removeProperty('padding-block'); unrecord(el, 'spacing'); refreshToolbar(el); };
     }
   };
 
@@ -703,7 +711,7 @@
       }
       on(el, 'pointerenter', () => hover(el));
       on(el, 'pointerleave', () => hover(null));
-      on(el, 'click', e => { if (ctl !== 'crop' && e.target.closest('a, button')) e.preventDefault(); e.stopPropagation(); select(el); });
+      on(el, 'click', e => { if (e.altKey) return; e.preventDefault(); e.stopPropagation(); select(el); });
     }
   }
 
@@ -712,6 +720,7 @@
   style.id = 'jig-style';
   style.textContent = `
     .jig-scrim-panel { display: inline-block; max-width: 100%; }
+    html.jig-scanning *, html.jig-scanning *::before, html.jig-scanning *::after { transition: none !important; animation: none !important; }
     .jig-el { outline: 1.5px dashed rgba(63,111,255,.55); outline-offset: 2px; }
     .jig-el:hover, .jig-el.jig-selected { outline: 2px solid #3f6fff; }
     .jig-badge { position: fixed; z-index: 2147483646; pointer-events: none; font: 11px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -815,10 +824,18 @@
   function chip(fn) { const c = document.createElement('span'); c.className = 'chip'; c.textContent = fn(); return c; }
   function sep() { const s = document.createElement('span'); s.className = 'sep'; return s; }
 
+  // The page is inert while the jig is on: clicks never navigate, submit, or reach the site's own handlers.
+  // Hold Alt to let a click through on purpose.
+  const inJigUI = t => !!(t && t.closest && t.closest('#jig-hud, .jig-tb, #jig-found, #jig-device, .jig-badge'));
   on(document, 'click', e => {
-    if (e.target.closest('#jig-hud, .jig-tb, .jig-el')) return;
-    $$('.jig-selected').forEach(x => x.classList.remove('jig-selected')); state.selected = null; toolbar.hidden = true;
-  });
+    if (inJigUI(e.target) || e.altKey) return;
+    e.preventDefault();
+    if (!e.target.closest('.jig-el')) { e.stopPropagation(); $$('.jig-selected').forEach(x => x.classList.remove('jig-selected')); state.selected = null; toolbar.hidden = true; }
+  }, true);
+  on(document, 'auxclick', e => { if (!inJigUI(e.target) && !e.altKey) { e.preventDefault(); e.stopPropagation(); } }, true);
+  on(document, 'submit', e => { if (!inJigUI(e.target)) { e.preventDefault(); e.stopPropagation(); } }, true);
+  on(document, 'dragstart', e => { if (!inJigUI(e.target)) e.preventDefault(); }, true);  // native image/link drag fights our drag
+  on(document, 'contextmenu', e => { if (!inJigUI(e.target) && e.target.closest('.jig-el')) e.preventDefault(); }, true);
   on(window, 'scroll', () => { if (state.selected) refreshToolbar(state.selected); }, { passive: true });
   on(window, 'resize', () => { if (state.selected) refreshToolbar(state.selected); drawGrid(); });
   on(document, 'keydown', e => {
@@ -850,7 +867,14 @@
   }
 
   // ------------------------------------------------------------ protection scan (AX)
+  let scanTimer = null;
+  function scanSoon() { clearTimeout(scanTimer); scanTimer = setTimeout(scanProtection, 250); }
   function scanProtection() {
+    clearTimeout(scanTimer);
+    document.documentElement.classList.add('jig-scanning');   // transitions off: read settled values, not a frame of an animation
+    try { scanNow(); } finally { document.documentElement.classList.remove('jig-scanning'); }
+  }
+  function scanNow() {
     const P = state.F.protect || {}; const W = [];
     // 1. heading order
     const hs = $$('h1,h2,h3,h4,h5,h6').filter(h => h.offsetParent && !h.closest('#jig-hud'));
@@ -968,6 +992,7 @@
       <span class="adv"><button id="jig-reset-btn">reset all</button></span>
       <button id="jig-phone-btn" hidden>phone preview</button>
     </div>
+    <div class="src" style="opacity:.45">page is inert while the jig is on · hold Alt to click through</div>
     <div class="src" id="jig-src"></div>
     <div class="list"><h6>changes</h6><div id="jig-changes"></div><h6>protection</h6><div id="jig-warn"></div></div>
     <footer><button class="primary" id="jig-copy-btn">Copy patch</button><small id="jig-count"></small></footer>`;
