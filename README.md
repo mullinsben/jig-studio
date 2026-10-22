@@ -22,7 +22,7 @@ Open <http://localhost:8000/demo/>. Seven things are deliberately wrong. Then op
 | --- | --- |
 | The hero capybara has no head | drag the hero image |
 | "Meet the herd" is bigger than the h1; the names look like body copy | click any text, press − / + |
-| The primary CTA is tiny next to a huge secondary | click a button, step its size |
+| The membership CTA is tiny next to a huge secondary | click a button, step its size |
 | The card row is nudged off the grid | press **auto**; anything a few px off a column line goes back on it |
 | White copy over the palest part of the banner; contrast fails | drag the copy to a darker corner |
 | Section padding is 24 / 48 / 16 | click a section, step its padding |
@@ -32,7 +32,7 @@ Press **Copy patch**. Paste it to your AI along with [`GIVE-THIS-TO-YOUR-AI.md`]
 
 ## Try it on a site with no design system
 
-`demo/legacy/` is the same sanctuary as Dave built it in 2011: inline styles, fourteen font sizes, paddings chosen by dice, buttons that are links with a background color. Open <http://localhost:8000/demo/legacy/?jig>. The jig finds no foundation, measures the page, and manufactures one: a type ramp, a spacing scale, button sizes and variants, a grid. Every control works against those inferred scales, and **Copy patch** appends a proposed `:root` block and `jig.foundation.json` the site could adopt, with a note on every value it collapsed.
+`demo/legacy/` is the same kibbutz as Dave built it in 2016: inline styles, fourteen font sizes, paddings chosen by dice, buttons that are links with a background color. Open <http://localhost:8000/demo/legacy/?jig>. The jig finds no foundation, measures the page, and manufactures one: a type ramp, a spacing scale, button sizes and variants, a grid. Every control works against those inferred scales, and **Copy patch** appends a proposed `:root` block and `jig.foundation.json` the site could adopt, with a note on every value it collapsed.
 
 ## How the jig decides what it can edit
 
@@ -104,7 +104,7 @@ They're listed in the HUD under **notes** and included in the patch. They never 
 
 ```json
 {
-  "name": "capy-co",
+  "name": "capybutz",
   "grid": { "columns": 12, "gutter": 24, "margin": 32, "maxWidth": 1200 },
   "breakpoints": { "phone": 390, "desktop": 1440 },
   "spacing": [4, 8, 12, 16, 24, 32, 48, 64, 96],
@@ -121,7 +121,7 @@ You can also inline it: `<script type="application/json" id="jig-foundation">{�
 ## The patch
 
 ```
-# jig patch · capy-co · /demo/index.html · 2026-10-21 15:44
+# jig patch · capybutz · /demo/index.html · 2026-10-21 15:44
 
 - Hero image: crop moved to 50% 77%
 - Adopt CTA: size sm → lg

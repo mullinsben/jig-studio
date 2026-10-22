@@ -1,5 +1,5 @@
 {
-  "name": "capy-co",
+  "name": "capybutz",
   "version": 1,
   "grid": { "columns": 12, "gutter": 24, "margin": 32, "maxWidth": 1200 },
   "breakpoints": { "phone": 390, "desktop": 1440 },
