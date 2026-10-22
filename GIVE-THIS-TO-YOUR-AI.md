@@ -15,7 +15,7 @@ A patch has two halves separated by `---`:
 - Meet the herd title: ramp 3xl → 2xl (-1)
 - Adopt CTA: size sm → lg
 
-⚠ 1 protection warning:
+⚠ 1 note (accessibility):
 - p "The future is not set…": contrast 3.6 over image, min 4.5
 
 ---

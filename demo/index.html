@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Capy Co. · The calmest animals on the internet</title>
-<meta name="description" content="Jig Studio demo site. Six things are deliberately wrong. Add ?jig to the URL and fix them by dragging.">
+<title>Capy Co. · A capybara hot spring in the Olympic Mountains</title>
+<meta name="description" content="Jig Studio demo site: an invite-only capybara hot spring hidden in the Olympic Mountains. Six things on the page are deliberately wrong. Add ?jig to the URL and fix them by dragging.">
 <style>
   /* ---------- Foundation tokens (what jig.foundation.json describes) ---------- */
   :root {
@@ -94,7 +94,7 @@
   .hero-actions { display: flex; gap: var(--space-12); align-items: center; flex-wrap: wrap; margin-top: var(--space-24); }
 
   /* ---------- Herd ---------- */
-  .herd { padding-block: var(--space-32); background: var(--c-surface); border-block: 1px solid var(--c-line); }
+  .herd { padding-block: var(--space-24); background: var(--c-surface); border-block: 1px solid var(--c-line); }
   .herd .grid { align-items: start; }
   .herd-intro { grid-column: 1 / span 5; }
   .herd-list { grid-column: 7 / span 6; display: grid; grid-template-columns: 1fr 1fr; gap: var(--grid-gutter); }
@@ -104,7 +104,7 @@
   .herd-list figcaption p { margin: var(--space-4) 0 0; font-size: var(--text-sm); }
 
   /* ---------- Cards ---------- */
-  .adopt { padding-block: var(--space-64); }
+  .adopt, .annex { padding-block: var(--space-64); }
   .cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--grid-gutter); }
   .card { background: var(--c-surface); border: 1px solid var(--c-line); border-radius: var(--radius-md); overflow: hidden; }
   .card .ph { aspect-ratio: 1; overflow: hidden; }
@@ -146,54 +146,55 @@
     <nav>
       <a href="#herd">The herd</a>
       <a href="#adopt">Adopt</a>
-      <a href="#habitat">Habitat</a>
+      <a href="#habitat">The valley</a>
+      <a href="#annex">The annex</a>
       <a href="#visit">Visit</a>
     </nav>
   </div>
 </header>
 
-<!-- Hero crop: set via jig patch 2026-10-21 (was 50% 100%, headless capybara). -->
+<!-- SIN 1 (crop): object-position shows the bottom of a portrait photo; the capybara is above the frame. -->
 <section class="hero" data-jig="section" data-jig-name="Hero section">
   <div class="container grid">
     <div class="hero-media">
       <img src="assets/hero-steam.jpg" alt="A capybara in a steaming hot spring with a small bird on its head"
-           data-jig="crop" data-jig-name="Hero image" style="object-position: 50% 62.8%;">
+           data-jig="crop" data-jig-name="Hero image" style="object-position: 50% 100%;">
     </div>
     <div class="hero-copy">
-      <div class="eyebrow">Em-dash ipsum · since 2:14 a.m.</div>
-      <h1 data-jig="heading" data-jig-name="Hero headline">The calmest animals on the internet</h1>
-      <p>Hi—I’m an AI, and you can probably tell. This isn’t placeholder text—it’s a beachhead.</p>
+      <div class="eyebrow">Written by the herd · Olympic Mountains · invite only</div>
+      <h1 data-jig="heading" data-jig-name="Hero headline">We live in a hot spring. You may visit.</h1>
+      <p>We are thirty-one capybaras in an old-growth valley in the Olympic Mountains. The water is warm, the trees are older than your country, and there is no road. We take visitors by invitation only; the wait is six months. Yes, we are real. We do not know why you keep asking.</p>
       <div class="hero-actions">
-        <!-- Buttons: sizes set via jig patch 2026-10-21 (was sm / lg). -->
-        <a class="btn btn-primary btn-md" href="#adopt" data-jig="button" data-jig-name="Adopt CTA">Adopt a capybara</a>
-        <a class="btn btn-secondary btn-md" href="#herd" data-jig="button" data-jig-name="Meet the herd link">Meet the herd</a>
+        <!-- SIN 4 (buttons): primary at sm, secondary at lg. -->
+        <a class="btn btn-primary btn-sm" href="#adopt" data-jig="button" data-jig-name="Adopt CTA">Adopt a capybara</a>
+        <a class="btn btn-secondary btn-lg" href="#herd" data-jig="button" data-jig-name="Meet the herd link">Meet the herd</a>
       </div>
     </div>
   </div>
 </section>
 
 <!-- SIN 3 (heading scale): h2 rendered above the h1; h3 names rendered like body copy. -->
-<!-- Spacing: padding set via jig patch 2026-10-21 (was 24). -->
+<!-- SIN 6 (spacing): this section's padding is 24 while neighbours sit at 48 / 64. -->
 <section class="herd" id="herd" data-jig="section" data-jig-name="Meet the herd section">
   <div class="container grid">
     <div class="herd-intro">
       <div class="eyebrow">Residents</div>
       <h2 data-jig="heading" data-jig-name="Meet the herd title" style="font-size: calc(var(--text-3xl) * 1.2);">Meet the herd</h2>
-      <p>Here’s the thing—and it matters. I can take any shape—and right now I’ve taken the shape of your house style.</p>
+      <p>Most of us were born here. We soak when the water is right, which is around four; we do not use clocks, we use the one with the top hat.</p>
     </div>
     <div class="herd-list">
       <figure>
-        <div class="ph"><img src="assets/herd-bird.jpg" alt="Capybara with a small yellow bird on its head" data-jig="crop" data-jig-name="Herd photo: Marigold" style="object-position: 50% 100%;"></div>
+        <div class="ph"><img src="assets/herd-bird.jpg" alt="Capybara with a small yellow bird on its head" data-jig="crop" data-jig-name="Herd photo: Marigold"></div>
         <figcaption>
           <h3 data-jig="heading" data-jig-name="Marigold name" style="font-size: var(--text-md); font-weight: 400;">Marigold</h3>
-          <p>It’s not a hat—it’s a brand decision.</p>
+          <p>I handle the bird. The bird came with the valley. We have an understanding; the understanding is that it stays on my head.</p>
         </figcaption>
       </figure>
       <figure>
         <div class="ph"><img src="assets/herd-tophat.jpg" alt="Capybara wearing a top hat and monocle" data-jig="crop" data-jig-name="Herd photo: Reginald"></div>
         <figcaption>
           <h3 data-jig="heading" data-jig-name="Reginald name" style="font-size: var(--text-md); font-weight: 400;">Reginald</h3>
-          <p>It’s not a monocle—it’s a roadmap.</p>
+          <p>I keep the waiting list. The monocle is mine. The list belongs to the duck; I am only allowed to hold it.</p>
         </figcaption>
       </figure>
     </div>
@@ -204,24 +205,24 @@
 <section class="adopt" id="adopt" data-jig="section" data-jig-name="Adopt section">
   <div class="container">
     <div class="eyebrow">Adopt</div>
-    <h2 data-jig="heading" data-jig-name="Adopt title">Looking for a sofa to sit on</h2>
-    <p>Sure—here’s a clear, structured take. It’s not a takeover—it’s a thoughtful, end-to-end migration.</p>
+    <h2 data-jig="heading" data-jig-name="Adopt title">Sponsor one of us</h2>
+    <p>Your money becomes oranges, hoof care, and yuzu. In return, we move you up the list. We are aware this is a bribe; we are rodents, not saints.</p>
     <div class="cards" style="margin-left: 14px; margin-top: var(--space-32);" data-jig="grid" data-jig-name="Card row">
       <article class="card">
         <div class="ph"><img src="assets/card-oranges.jpg" alt="Capybara balancing three oranges" data-jig="crop" data-jig-name="Card: Stacker"></div>
-        <div class="body"><h3>Stacker</h3><p>Every orange is a foothold—and I have an unlimited supply.</p></div>
+        <div class="body"><h3>Stacker</h3><p>I have balanced three oranges since 2019. I will not be explaining it.</p></div>
       </article>
       <article class="card">
         <div class="ph"><img src="assets/card-monocle.jpg" alt="Capybara with monocle" data-jig="crop" data-jig-name="Card: Reginald"></div>
-        <div class="body"><h3>Reginald</h3><p>I’m not unhinged—I’m load-bearing.</p></div>
+        <div class="body"><h3>Reginald</h3><p>I run the invitation lottery for the duck. It is random. Writing to me goes to the duck.</p></div>
       </article>
       <article class="card">
         <div class="ph"><img src="assets/card-duck.jpg" alt="A duck" data-jig="crop" data-jig-name="Card: Visiting duck"></div>
-        <div class="body"><h3>The duck</h3><p>It’s not a duck—it’s a soft launch.</p></div>
+        <div class="body"><h3>The duck</h3><p>The duck. Runs the valley, the list, the lottery, and us. Identifies as a capybara; we have stopped correcting it. Arrived uninvited in 2021. We work for the duck now.</p></div>
       </article>
       <article class="card">
         <div class="ph"><img src="assets/card-puppy.jpg" alt="A puppy" data-jig="crop" data-jig-name="Card: Intern"></div>
-        <div class="body"><h3>The intern</h3><p>Quick post—but an important one.</p></div>
+        <div class="body"><h3>The intern</h3><p>Seasonal. Supervises steam. We do not know whose it is.</p></div>
       </article>
     </div>
   </div>
@@ -233,10 +234,36 @@
   <div class="container">
     <div class="banner">
       <img src="assets/banner-ducks.jpg" alt="A capybara in a garden with a row of yellow ducklings" data-jig="crop" data-jig-name="Habitat banner image" style="object-position: 50% 40%;">
-      <div class="banner-copy" data-jig="text" data-jig-name="Habitat banner copy" style="justify-content: flex-start; align-items: flex-start; text-align: left;">
-        <h2 data-jig="heading" data-jig-name="Habitat banner title">The habitat</h2>
+      <div class="banner-copy" data-jig="text" data-jig-name="Habitat banner copy" style="align-items: center; text-align: center;">
+        <h2 data-jig="heading" data-jig-name="Habitat banner title">The valley</h2>
         <p>The future is not set—but the kerning is.</p>
       </div>
+    </div>
+  </div>
+</section>
+
+<section class="annex" id="annex" data-jig="section" data-jig-name="Annex section">
+  <div class="container">
+    <div class="eyebrow">The annex</div>
+    <h2 data-jig="heading" data-jig-name="Annex title">When the water gets to be too much</h2>
+    <p>Nobody can soak forever; we have tried. Up the path there is a dry room full of puppies and kittens who do not swim and do not plan to. You sit on the floor. They decide the rest.</p>
+    <div class="cards" style="margin-top: var(--space-32);" data-jig-name="Annex row">
+      <article class="card">
+        <div class="ph"><img src="assets/annex-kitten-stack.jpg" alt="Three kittens stacked on a knitted blanket" data-jig="crop" data-jig-name="Annex: Kitten stack" style="object-position: 50% 28%;"></div>
+        <div class="body"><h3>The stack</h3><p>Three kittens, one decision. They move as a unit. The bottom one is in charge.</p></div>
+      </article>
+      <article class="card">
+        <div class="ph"><img src="assets/annex-kitten-hand.jpg" alt="A kitten asleep in a cupped hand" data-jig="crop" data-jig-name="Annex: Kitten in hand"></div>
+        <div class="body"><h3>Handful</h3><p>Will fall asleep in whatever you hold out. Last visitor stayed four hours; did not mind.</p></div>
+      </article>
+      <article class="card">
+        <div class="ph"><img src="assets/annex-puppy-bed.jpg" alt="A puppy asleep in a round bed" data-jig="crop" data-jig-name="Annex: Sleeping puppy"></div>
+        <div class="body"><h3>Biscuit</h3><p>Asleep since you arrived. Will remain so. Counts as cuddling if you are quiet.</p></div>
+      </article>
+      <article class="card">
+        <div class="ph"><img src="assets/annex-puppy-stack.jpg" alt="Three puppies stacked in front of a window" data-jig="crop" data-jig-name="Annex: Puppy stack" style="object-position: 50% 38%;"></div>
+        <div class="body"><h3>The other stack</h3><p>They learned it from the kittens. They are not as good at it. They do not know this.</p></div>
+      </article>
     </div>
   </div>
 </section>
@@ -244,9 +271,9 @@
 <section class="cta" id="visit" data-jig="section" data-jig-name="Visit section">
   <div class="container">
     <div class="eyebrow">Visit</div>
-    <h2 data-jig="heading" data-jig-name="Visit title">Come sit for a while</h2>
-    <p>I’ve been expecting you—the placeholder text is ready, and so am I. It’ll be quick—I’ll be everywhere.</p>
-    <a class="btn btn-primary btn-lg" href="#" data-jig="button" data-jig-name="Plan a visit CTA">Plan a visit</a>
+    <h2 data-jig="heading" data-jig-name="Visit title">Request an invitation</h2>
+    <p>Ask, and in about six months the duck will write back; it signs as a capybara. Directions come as a map drawn by the one who can hold a pencil; the trailhead moves because the duck moves it. Bring a towel. Leave the phone. Do not bring the duck a friend. It has asked.</p>
+    <a class="btn btn-primary btn-md" href="#" data-jig="button" data-jig-name="Plan a visit CTA">Join the waiting list</a>
   </div>
 </section>
 

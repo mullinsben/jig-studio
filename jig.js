@@ -482,6 +482,8 @@
       if (isAbs) {
         panel = document.createElement('div'); panel.className = 'jig-scrim-panel';
         while (el.firstChild) panel.appendChild(el.firstChild);
+        // a block overlay centred by text-align needs the panel centred too; flex overlays do it through align-items: inherit
+        const pc = css(el); if (!/flex|grid/.test(pc.display)) { if (pc.textAlign === 'center') panel.classList.add('c'); else if (pc.textAlign === 'right' || pc.textAlign === 'end') panel.classList.add('r'); }
         el.appendChild(panel);
       }
       const dirFor = () => { const [v, h] = (anchor || 'center-center').split('-'); return v === 'top' ? 'to bottom' : v === 'bottom' ? 'to top' : h === 'left' ? 'to right' : h === 'right' ? 'to left' : 'to top'; };
@@ -800,7 +802,8 @@
     #jig-hud button, .jig-tb button, #jig-found button, #jig-hud select, #jig-found input { appearance: none; -webkit-appearance: none; text-transform: none; letter-spacing: normal; box-shadow: none; }
     #jig-hud h5, #jig-hud h6, #jig-found h5, #jig-found h6, #jig-hud p, #jig-found p { margin: 0; }
     #jig-hud button:focus-visible, .jig-tb button:focus-visible, #jig-found button:focus-visible { outline: 2px solid #3f6fff; outline-offset: 2px; }
-    .jig-scrim-panel { display: inline-block; max-width: 100%; }
+    .jig-scrim-panel { display: flex; flex-direction: column; align-items: inherit; width: fit-content; max-width: 100%; }
+    .jig-scrim-panel.c { margin-inline: auto; } .jig-scrim-panel.r { margin-left: auto; }
     html.jig-scanning *, html.jig-scanning *::before, html.jig-scanning *::after { transition: none !important; animation: none !important; }
     html.jig-scanning #jig-axtags { display: none !important; }
     .jig-el.jig-active { outline: 1.5px dashed rgba(63,111,255,.55); outline-offset: 2px; }
@@ -870,6 +873,15 @@
     #jig-hud .hint { padding: 6px 12px 8px; font: 11px ui-monospace, Menlo, monospace; opacity: .4; background: #13141a; }
     #jig-hud .tools button, #jig-hud footer button { font: 600 12px ui-sans-serif, system-ui; background: #262833; color: #fff; border: 0; border-radius: 6px; padding: 6px 10px; cursor: pointer; }
     #jig-hud .tools button.on { background: #2bb673; }
+    #jig-hud .devwrap { position: relative; }
+    #jig-hud #jig-device-btn.on { background: #3f6fff; }
+    #jig-device-menu { position: absolute; top: calc(100% + 6px); left: 0; z-index: 3; min-width: 200px; background: #13141a; border: 1px solid #262833; border-radius: 8px; padding: 4px; box-shadow: 0 10px 30px rgba(0,0,0,.45); display: flex; flex-direction: column; gap: 2px; }
+    #jig-device-menu button { display: flex; justify-content: space-between; gap: 12px; width: 100%; text-align: left; background: transparent; color: #dfe6ff; border: 0; border-radius: 6px; padding: 7px 10px; font: 500 12px ui-sans-serif, system-ui; cursor: pointer; }
+    #jig-device-menu button small { color: #9aa3b8; font: 11px ui-monospace, Menlo, monospace; }
+    #jig-device-menu button:hover { background: #262833; }
+    #jig-device-menu button.on { background: #3f6fff; color: #fff; } #jig-device-menu button.on small { color: #dfe6ff; }
+    #jig-device-menu button.back { border-top: 1px solid #262833; border-radius: 0 0 6px 6px; margin-top: 2px; color: #9aa3b8; }
+    #jig-device-menu[hidden] { display: none !important; }
     #jig-hud .tools button.ghost { background: transparent; color: #9aa3b8; border: 1px solid #262833; }
     #jig-hud .tools button.ghost.on { background: transparent; color: #fff; border-color: #3f6fff; }
     #jig-hud .tools button:hover, #jig-hud footer button:hover { background: #3f6fff; }
@@ -889,7 +901,7 @@
       #jig-hud header { cursor: pointer; }
       #jig-hud header::before { content: ""; width: 36px; height: 4px; border-radius: 2px; background: #3a3d4a; position: absolute; left: 50%; top: 5px; transform: translateX(-50%); }
       #jig-hud header { position: relative; padding-top: 14px; }
-      #jig-device-sel { display: none; }
+      .devwrap { display: none; }
       #jig-hud { resize: none; }
       .jig-tb button { width: 36px; height: 36px; }
     }
@@ -1117,7 +1129,8 @@
     <div class="jigs">${JIGS.map(j => `<button data-jig-toggle="${j.id}" aria-pressed="false">${j.label}</button>`).join('')}</div>
     <div class="tools">
       <button id="jig-grid-btn" title="g">grid</button>
-      <select id="jig-device-sel" title="device preview"><option value="">desktop</option>${DEVICES.map(d => `<option value="${d.id}">${d.name}</option>`).join('')}</select>
+      <span class="devwrap"><button id="jig-device-btn" title="preview on a phone or tablet" aria-haspopup="menu" aria-expanded="false">device ▾</button>
+      <div id="jig-device-menu" role="menu" hidden>${DEVICES.map(d => `<button role="menuitemradio" data-device="${d.id}"><span>${d.name}</span><small>${d.w}×${d.h}</small></button>`).join('')}<button role="menuitem" data-device="" class="back">back to desktop</button></div></span>
       <span class="spacer"></span>
       <button id="jig-adv-btn" class="ghost" title="foundation, columns, auto, rescan, reset">advanced</button>
     </div>
@@ -1127,7 +1140,7 @@
       <div class="arow"><label>scales</label><div><button id="jig-found-btn">foundation</button><button id="jig-scan-btn">rescan</button><button id="jig-reset-btn">reset all</button></div></div>
       <div class="src" id="jig-src"></div>
     </div>
-    <div class="list"><h6>changes</h6><div id="jig-changes"></div><h6>protection</h6><div id="jig-warn"></div></div>
+    <div class="list"><h6>changes</h6><div id="jig-changes"></div><h6>notes</h6><div id="jig-warn"></div></div>
     <footer><button class="primary" id="jig-copy-btn">Copy patch</button><small id="jig-count"></small></footer>
     <div class="hint">page is inert while the jig is on · hold Alt to click through · Esc deselects</div>`;
 
@@ -1153,7 +1166,7 @@
       const h = document.createElement('h6'); h.textContent = (state.frame.device || 'device') + ' changes'; ch.appendChild(h);
       state.frame.changes.forEach(c => { const row = document.createElement('div'); row.className = 'row'; row.innerHTML = `<span class="n">${esc(c.name)}</span><span class="s">${esc(c.summary)}</span>`; ch.appendChild(row); });
     }
-    if (!state.warnings.length) wn.innerHTML = '<div class="empty">No protection warnings on this page.</div>';
+    if (!state.warnings.length) wn.innerHTML = '<div class="empty">No notes. The page passes.</div>';
     state.warnings.forEach(w => {
       const row = document.createElement('div'); row.className = 'row warn';
       row.innerHTML = `<span class="n">${esc(nameOf(w.el))}</span><span class="s">${esc(w.msg)}</span>`;
@@ -1161,7 +1174,7 @@
       wn.appendChild(row);
     });
     const total = state.changes.size + state.frame.changes.length + (state.normalize ? state.normalize.length : 0);
-    $('#jig-count').textContent = `${total} change${total === 1 ? '' : 's'} · ${state.warnings.length + state.frame.warnings.length} warning${state.warnings.length + state.frame.warnings.length === 1 ? '' : 's'}`;
+    $('#jig-count').textContent = `${total} change${total === 1 ? '' : 's'} · ${state.warnings.length + state.frame.warnings.length} note${state.warnings.length + state.frame.warnings.length === 1 ? '' : 's'}`;
     if (!state.device) $('#jig-bp').textContent = `${state.bp} · ${window.innerWidth}px`;
     const F = state.F; const inf = F.mode === 'inferred' || F.type.inferred || F.buttons.inferred;
     $('#jig-src').textContent = `${INJECTED ? 'injected by bookmarklet · ' : ''}foundation: ${F.name} · ${state.foundationSource}${inf ? ` · ${F.type.steps.length} type steps, ${F.spacingSteps.length} spacing steps, ${F.buttons.sizes.length} button size${F.buttons.sizes.length === 1 ? '' : 's'} · proposed tokens ride in the patch` : ''}`;
@@ -1176,7 +1189,7 @@
     if (!all.length) lines.push('- (no changes)');
     all.forEach(c => lines.push(`- ${c.name}: ${c.summary}${c.bp !== 'desktop' ? ` (${c.device ? c.device + ', ' : ''}${c.bp})` : ''}`));
     const warns = [...state.warnings.map(w => ({ kind: w.kind, el: selectorOf(w.el), name: nameOf(w.el), msg: w.msg, value: w.value, min: w.min })), ...state.frame.warnings.map(w => ({ ...w, msg: w.msg + ' (' + (state.frame.device || 'device') + ')' }))];
-    if (warns.length) { lines.push('', `⚠ ${warns.length} protection warning${warns.length === 1 ? '' : 's'}:`); warns.forEach(w => lines.push(`- ${w.name}: ${w.msg}`)); }
+    if (warns.length) { lines.push('', `⚠ ${warns.length} note${warns.length === 1 ? '' : 's'} (accessibility):`); warns.forEach(w => lines.push(`- ${w.name}: ${w.msg}`)); }
     const json = [];
     all.forEach(c => { const { name, summary, ...rest } = c; json.push(rest); });
     warns.forEach(w => json.push({ warn: w.kind, el: w.el, msg: w.msg, ...(w.value ? { value: w.value, min: w.min } : {}) }));
@@ -1424,13 +1437,19 @@
     };
     const fit = () => { const sh = $('.shell', deviceEl); const sc = Math.min(1, (window.innerHeight - 90) / (d.h + 28), (window.innerWidth - 400) / (d.w + 28)); sh.style.transform = `scale(${sc})`; };
     fit(); on(window, 'resize', fit);
-    gridEl.hidden = true; $('#jig-bp').textContent = `${d.name} · ${d.w}px`;
+    gridEl.hidden = true; $('#jig-bp').textContent = `${d.name} · ${d.w}px`; syncDeviceBtn();
     $('.close', deviceEl).onclick = closeDevice;
     on(deviceEl, 'click', e => { if (e.target === deviceEl) closeDevice(); });
   }
+  function syncDeviceBtn() {
+    const b = $('#jig-device-btn'); if (!b) return;
+    const d = state.device; b.textContent = d ? `${d.name} ▾` : 'device ▾'; b.classList.toggle('on', !!d);
+    $$('#jig-device-menu [data-device]').forEach(m => m.classList.toggle('on', !!d && m.dataset.device === d.id));
+    const back = $('#jig-device-menu .back'); if (back) back.hidden = !d;
+  }
   function closeDevice() {
     if (deviceEl) { deviceEl.remove(); deviceEl = null; }
-    state.device = null; $('#jig-device-sel').value = '';
+    state.device = null; syncDeviceBtn();
     if (state.grid) { gridEl.hidden = false; drawGrid(); }
     // keep frame changes in the patch until reset; they were real
     renderHUD();
@@ -1466,7 +1485,12 @@
     document.body.append(hud);
     on(window, 'message', e => { if (e.data && e.data.jig === 'frame') { state.frame = { changes: e.data.changes || [], warnings: e.data.warnings || [], device: e.data.device, bp: e.data.bp }; renderHUD(); } });
     $('#jig-min-btn').onclick = e => { e.stopPropagation(); hud.classList.toggle('collapsed'); $('#jig-min-btn').textContent = hud.classList.contains('collapsed') ? '+' : '–'; };
-    $('#jig-device-sel').onchange = e => openDevice(e.target.value);
+    const devBtn = $('#jig-device-btn'), devMenu = $('#jig-device-menu');
+    const showDevMenu = show => { devMenu.hidden = !show; devBtn.setAttribute('aria-expanded', show ? 'true' : 'false'); };
+    devBtn.onclick = e => { e.stopPropagation(); showDevMenu(devMenu.hidden); };
+    $$('[data-device]', devMenu).forEach(m => m.onclick = e => { e.stopPropagation(); showDevMenu(false); if (m.dataset.device) openDevice(m.dataset.device); else closeDevice(); });
+    on(document, 'pointerdown', e => { if (!devMenu.hidden && !e.target.closest('.devwrap')) showDevMenu(false); }, true);
+    syncDeviceBtn();
     try { JSON.parse(safeGet('jig-jigs:' + location.host) || '[]').forEach(id => state.jigs.add(id)); } catch (e) {}
     const applyJigs = () => {
       $$('[data-jig-toggle]', hud).forEach(b => { const on = state.jigs.has(b.dataset.jigToggle); b.classList.toggle('on', on); b.setAttribute('aria-pressed', on ? 'true' : 'false'); });
