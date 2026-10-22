@@ -450,6 +450,7 @@
         refreshToolbar(el);
       }
       el.__jigReset = () => { idx = origIdx; setSize(''); unrecord(el, 'type'); refreshToolbar(el); };
+      el.__jigStepType = step;
     }
   };
 
@@ -483,6 +484,7 @@
         setBadge(el, `scrim ${scrim}`);
       }
       const arrows = () => [btn('←', () => el.__jigNudge(-1, 0)), btn('→', () => el.__jigNudge(1, 0)), btn('↑', () => el.__jigNudge(0, -1)), btn('↓', () => el.__jigNudge(0, 1))];
+      el.__jigSetScrim = isAbs ? (name => { scrim = SCRIMS.includes(name) ? name : 'none'; applyScrim(); commit(); refreshToolbar(el); }) : null;
       el.__jigToolbarText = isAbs
         ? () => [btn('◐', () => { scrim = SCRIMS[(SCRIMS.indexOf(scrim) + 1) % SCRIMS.length]; applyScrim(); commit(); refreshToolbar(el); scanSoon(); }), chip(() => 'scrim ' + scrim), sep(), ...arrows()]
         : () => [chip(() => `${cols} col · ${rowTok}px`), ...arrows()];
@@ -622,6 +624,7 @@
         refreshToolbar(el); scanSoon();
       }
       el.__jigReset = () => { el.classList.remove(P + size, P + variant); el.classList.add(P + origSize, P + origVar); size = origSize; variant = origVar; unrecord(el, 'button'); refreshToolbar(el); };
+      el.__jigStepSize = d => { if ((d > 0 && B.sizes.indexOf(size) < B.sizes.length - 1) || (d < 0 && B.sizes.indexOf(size) > 0)) { cycle('size', d); return true; } return false; };
     }
   };
 
@@ -648,6 +651,7 @@
       refreshToolbar(el); scanSoon();
     }
     el.__jigReset = () => { si = si0; vi = vi0; apply(); unrecord(el, 'button'); refreshToolbar(el); };
+    el.__jigStepSize = d => { if ((d > 0 && si < sizes.length - 1) || (d < 0 && si > 0)) { cyc('size', d); return true; } return false; };
   }
 
   // --- section: padding on the spacing scale --------------------------------
@@ -1060,7 +1064,7 @@
       <button id="jig-adv-btn" class="ghost" title="foundation, columns, rescan, reset">advanced</button>
       <span class="adv"><select id="jig-cols-sel" title="grid columns"></select></span>
       <span class="adv"><button id="jig-found-btn">foundation</button></span>
-      <span class="adv"><button id="jig-norm-btn" title="snap every size and space on the page to the nearest step">quantize</button><select id="jig-q-res" title="how many steps to snap to"><option value="32">light · page's own steps</option><option value="16" selected>medium · 8 sizes, 9 spaces</option><option value="8">strict · 4 sizes, 4 spaces</option></select></span>
+      <span class="adv"><button id="jig-norm-btn" title="snap every size and space to the scales, and fix what protection flagged">auto</button><select id="jig-q-res" title="how many steps to snap to"><option value="32">light · page's own steps</option><option value="16" selected>medium · 8 sizes, 9 spaces</option><option value="8">strict · 4 sizes, 4 spaces</option></select></span>
       <span class="adv"><button id="jig-scan-btn">rescan</button></span>
       <span class="adv"><button id="jig-reset-btn">reset all</button></span>
     </div>
@@ -1082,7 +1086,8 @@
       ch.appendChild(row);
     }
     if (state.normalize) {
-      const g = normalizeGroups(); const h = document.createElement('h6'); h.textContent = `quantize ${resName(state.normalizeRes)} · ${state.normalize.length} snaps in ${g.length} groups`; ch.appendChild(h);
+      const g = normalizeGroups(); const h = document.createElement('h6'); h.textContent = `auto ${resName(state.normalizeRes)} · ${state.normalize.length} snaps · ${(state.autoFixes || []).length} fixes`; ch.appendChild(h);
+      (state.autoFixes || []).forEach(f => { const row = document.createElement('div'); row.className = 'row'; row.innerHTML = `<span class="n">${esc(nameOf(f.el))}</span><span class="s">${esc(f.what)}</span>`; ch.appendChild(row); });
       g.slice(0, 12).forEach(x => { const row = document.createElement('div'); row.className = 'row'; row.innerHTML = `<span class="n">${esc(x.prop)}</span><span class="s">${x.from}px → ${x.to}px · ${x.els.length} element${x.els.length === 1 ? '' : 's'}</span>`; ch.appendChild(row); });
       if (g.length > 12) { const m = document.createElement('div'); m.className = 'empty'; m.textContent = `+ ${g.length - 12} more groups in the patch`; ch.appendChild(m); }
     }
@@ -1120,7 +1125,8 @@
     if (state.normalize) {
       const g = normalizeGroups();
       const qs = quantizeScales(state.normalizeRes || '16');
-      lines.push('', `# quantize · ${resName(state.normalizeRes || '16')} · ${state.normalize.length} snaps in ${g.length} groups`, '', `Every font-size, padding, margin, and gap on the page snapped to the nearest step, like notes to a grid. Type steps: ${qs.typeSteps.join(', ')}px. Spacing steps: ${qs.spaceSteps.join(', ')}px. Apply as rule changes, not inline styles: find the rule that sets each value and change it; where several elements share a group they almost certainly share a rule.`, '');
+      if ((state.autoFixes || []).length) { lines.push('', `# auto fixes · ${state.autoFixes.length}`, '', 'Protection failures fixed with the same controls a person would use; each is also listed under changes above with its values.', ''); state.autoFixes.forEach(f => lines.push(`- ${nameOf(f.el)}: ${f.what}`)); }
+      lines.push('', `# auto · ${resName(state.normalizeRes || '16')} · ${state.normalize.length} snaps in ${g.length} groups`, '', `Every font-size, padding, margin, and gap on the page snapped to the nearest step, like notes to a grid. Type steps: ${qs.typeSteps.join(', ')}px. Spacing steps: ${qs.spaceSteps.join(', ')}px. Apply as rule changes, not inline styles: find the rule that sets each value and change it; where several elements share a group they almost certainly share a rule.`, '');
       g.forEach(x => lines.push(`- ${x.prop}: ${x.from}px → ${x.to}px on ${x.els.length} element${x.els.length === 1 ? '' : 's'}`));
       g.forEach(x => json.push({ op: 'quantize', prop: x.prop, from: x.from, to: x.to, count: x.els.length, els: x.els.slice(0, 20), ...(x.els.length > 20 ? { more: x.els.length - 20 } : {}) }));
     }
@@ -1144,7 +1150,8 @@
   function normalizePage(on) {
     if (!on) {
       (state.normalize || []).forEach(n => { n.el.style.removeProperty(n.prop); if (n.prev) n.el.style.setProperty(n.prop, n.prev); });
-      state.normalize = null; $('#jig-norm-btn').classList.remove('on'); renderHUD(); scanSoon(); return;
+      (state.autoFixes || []).forEach(f => f.el.__jigReset && f.el.__jigReset());
+      state.normalize = null; state.autoFixes = []; $('#jig-norm-btn').classList.remove('on'); renderHUD(); scanSoon(); return;
     }
     const F = state.F; const out = [];
     const res = ($('#jig-q-res') && $('#jig-q-res').value) || '16';
@@ -1166,7 +1173,42 @@
       ['padding-top', 'padding-bottom', 'padding-left', 'padding-right', 'margin-top', 'margin-bottom'].forEach(prop => snap(el, prop, px(c[prop]), spaceSteps, 2, 160));
       if (/flex|grid/.test(c.display)) ['row-gap', 'column-gap'].forEach(prop => snap(el, prop, px(c[prop]), spaceSteps, 2, 160));
     });
-    state.normalize = out; $('#jig-norm-btn').classList.add('on'); renderHUD(); scanSoon();
+    state.normalize = out; $('#jig-norm-btn').classList.add('on');
+    autoFixAX();
+    renderHUD(); scanSoon();
+  }
+  // Fix what protection flagged, using the same controls a person would: scrims for text over images,
+  // a size step for short tap targets, a ramp step down for an h2 that outgrew the h1. Colour stays a warning.
+  function autoFixAX() {
+    state.autoFixes = [];
+    scanProtection();
+    const seen = new Set();
+    for (let pass = 0; pass < 4; pass++) {
+      let did = false;
+      for (const w of state.warnings.slice()) {
+        if (w.kind === 'contrast' || w.kind === 'busy-background' || w.kind === 'text-over-image') {
+          const ov = w.el.closest('.jig-el[data-jig-ctl="text"]'); if (!ov || !ov.__jigSetScrim || seen.has(ov)) continue;
+          seen.add(ov);
+          for (const sc of ['gradient', 'tint', 'glass']) {
+            ov.__jigSetScrim(sc); scanProtection();
+            if (!state.warnings.some(x => ov.contains(x.el) && /contrast|busy|text-over/.test(x.kind))) { state.autoFixes.push({ el: ov, what: `scrim ${sc} (text over image now passes)` }); did = true; break; }
+            if (sc === 'glass') state.autoFixes.push({ el: ov, what: 'scrim glass (best effort; still short of AA)' });
+          }
+        }
+        if (w.kind === 'tap-target' && w.el.__jigStepSize && !seen.has(w.el)) {
+          seen.add(w.el); let steps = 0;
+          while (steps < 2 && w.el.getBoundingClientRect().height < ((state.F.protect || {}).minTapTarget || 44) - 0.5 && w.el.__jigStepSize(1)) steps++;
+          if (steps) { state.autoFixes.push({ el: w.el, what: `size +${steps} (tap target now ${Math.round(w.el.getBoundingClientRect().height)}px)` }); did = true; }
+        }
+        if (w.kind === 'hierarchy' && w.el.__jigStepType && !seen.has(w.el)) {
+          seen.add(w.el); const h1 = $$('h1').find(h => h.offsetParent); const h1px = h1 ? px(css(h1).fontSize) : 0; let steps = 0;
+          while (steps < 3 && px(css(w.el).fontSize) > h1px + 0.5) { w.el.__jigStepType(-1); steps++; }
+          if (steps) { state.autoFixes.push({ el: w.el, what: `ramp -${steps} (now ≤ h1)` }); did = true; }
+        }
+      }
+      scanProtection();
+      if (!did) break;
+    }
   }
   // 1/32: the page's own (inferred or edited) steps. 1/16: a 1.25 modular scale off the body size + 4..96 ladder. 1/8: four sizes, four spaces.
   function quantizeScales(res) {
