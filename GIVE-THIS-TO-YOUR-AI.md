@@ -16,7 +16,7 @@ A patch has two halves separated by `---`:
 - Adopt CTA: size sm → lg
 
 ⚠ 1 note (accessibility):
-- p "The future is not set…": contrast 3.6 over image, min 4.5
+- p "No road in. The trees are…": contrast 3.6 over image, min 4.5
 
 ---
 [

@@ -308,7 +308,7 @@
       const isImg = el.tagName === 'IMG';
       const orig = {
         op: isImg ? css(el).objectPosition : css(el).backgroundPosition,
-        tr: el.style.transform || '', to: el.style.transformOrigin || '',
+        tr: el.style.transform || '', to: el.style.transformOrigin || '', opInline: isImg ? (el.style.objectPosition || '') : (el.style.backgroundPosition || ''),
         fit: isImg ? css(el).objectFit : ''
       };
       const parent = el.parentElement;
@@ -317,7 +317,8 @@
       const upgraded = isImg && !/cover|none/.test(orig.fit);
       if (upgraded) el.style.setProperty('object-fit', 'cover', 'important');
       let [ox, oy] = parsePos(orig.op);
-      let zoom = 1;
+      const zoom0 = (() => { const m = orig.tr.match(/scale\(\s*([\d.]+)/); return m ? clamp(+m[1], 1, 4) : 1; })();   // a site can ship a baked-in zoom
+      let zoom = zoom0;
       el.__jigOrig = orig; el.dataset.jigDrag = '1';
       el.style.cursor = 'grab';
 
@@ -404,7 +405,7 @@
         return Math.abs(before[0] - ox) > 0.5 || Math.abs(before[1] - oy) > 0.5;
       };
       el.__jigReset = () => {
-        ox = parsePos(orig.op)[0]; oy = parsePos(orig.op)[1]; zoom = 1; apply(); ['object-position', 'transform-origin', 'transform'].forEach(k => el.style.removeProperty(k)); unrecord(el, 'crop');
+        ox = parsePos(orig.op)[0]; oy = parsePos(orig.op)[1]; zoom = zoom0; apply(); ['object-position', 'transform-origin', 'transform'].forEach(k => el.style.removeProperty(k)); if (orig.opInline) el.style[isImg ? 'objectPosition' : 'backgroundPosition'] = orig.opInline; if (orig.tr) el.style.transform = orig.tr; if (orig.to) el.style.transformOrigin = orig.to; unrecord(el, 'crop');
         if (wCols != null) { ['width', 'max-width'].forEach(k => box.style.removeProperty(k)); if (origBox.w) box.style.width = origBox.w; if (origBox.mw) box.style.maxWidth = origBox.mw; if (box !== el) el.style.removeProperty('width'); wCols = null; unrecord(el, 'size'); }
       };
     }
