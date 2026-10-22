@@ -344,9 +344,25 @@
       on(el, 'touchend', () => { if (pinch) { pinch = null; commit(); } });
       function dist(t) { return Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY); }
       function setZoom(z, silent) { if (!isImg) return; zoom = clamp(Math.round(z * 100) / 100, 1, 4); apply(); if (!silent) commit(); refreshToolbar(el); }
+      // the box we resize: a wrapper that exists only to hold this image, else the image itself
+      const box = (parent && parent.children.length === 1 && !/^(BODY|MAIN|HTML)$/.test(parent.tagName) && parent.getBoundingClientRect().width <= el.getBoundingClientRect().width + 2) ? parent : el;
+      const origBox = { w: box.style.getPropertyValue('width'), mw: box.style.getPropertyValue('max-width'), h: box.style.getPropertyValue('height') };
+      let wCols = null;
+      const colsNow = () => { const cw = colWidth(box.parentElement || document.body); return wCols != null ? wCols : Math.max(1, Math.round((box.getBoundingClientRect().width + state.F.grid.gutter) / cw)); };
+      function setWidth(dc) {
+        const cw = colWidth(box.parentElement || document.body);
+        wCols = clamp(colsNow() + dc, 1, state.F.grid.columns);
+        const w = Math.round(wCols * cw - state.F.grid.gutter);
+        box.style.setProperty('width', `${w}px`, 'important'); box.style.setProperty('max-width', '100%', 'important');
+        if (box !== el) { el.style.setProperty('width', '100%', 'important'); }
+        setBadge(el, `width ${wCols} col (${w}px)`);
+        record(el, 'size', { widthCols: wCols, widthPx: w, ...(box !== el ? { box: selectorOf(box) } : {}) }, `width → ${wCols} col (${w}px)`);
+        refreshToolbar(el);
+      }
       el.__jigToolbar = () => [
         btn('−', () => setZoom(zoom - 0.1)), chip(() => (isImg ? r2(zoom).toFixed(2) + '×' : 'pan')), btn('+', () => setZoom(zoom + 0.1)),
-        sep(), btn('←', () => nudge(-1, 0)), btn('→', () => nudge(1, 0)), btn('↑', () => nudge(0, -1)), btn('↓', () => nudge(0, 1))
+        sep(), btn('←', () => nudge(-1, 0)), btn('→', () => nudge(1, 0)), btn('↑', () => nudge(0, -1)), btn('↓', () => nudge(0, 1)),
+        sep(), btn('w−', () => setWidth(-1)), chip(() => colsNow() + ' col'), btn('w+', () => setWidth(1))
       ];
       function nudge(dx, dy) { ox = clamp(ox + dx, 0, 100); oy = clamp(oy + dy, 0, 100); apply(); commit(); }
       el.__jigNudge = nudge;
@@ -366,7 +382,10 @@
         const data = isImg ? { objectPosition: `${r1(ox)}% ${r1(oy)}%`, ...(zoom !== 1 ? { zoom: r2(zoom) } : {}), ...(upgraded ? { objectFit: 'cover' } : {}) } : { backgroundPosition: `${r1(ox)}% ${r1(oy)}%` };
         record(el, 'crop', data, `crop moved to ${r1(ox)}% ${r1(oy)}%${zoom !== 1 ? ', zoom ' + r2(zoom) + '×' : ''}${upgraded ? ' (as object-fit: cover)' : ''}`);
       }
-      el.__jigReset = () => { ox = parsePos(orig.op)[0]; oy = parsePos(orig.op)[1]; zoom = 1; apply(); ['object-position', 'transform-origin', 'transform'].forEach(k => el.style.removeProperty(k)); unrecord(el, 'crop'); };
+      el.__jigReset = () => {
+        ox = parsePos(orig.op)[0]; oy = parsePos(orig.op)[1]; zoom = 1; apply(); ['object-position', 'transform-origin', 'transform'].forEach(k => el.style.removeProperty(k)); unrecord(el, 'crop');
+        if (wCols != null) { ['width', 'max-width'].forEach(k => box.style.removeProperty(k)); if (origBox.w) box.style.width = origBox.w; if (origBox.mw) box.style.maxWidth = origBox.mw; if (box !== el) el.style.removeProperty('width'); wCols = null; unrecord(el, 'size'); }
+      };
     }
   };
   function parsePos(s) {
@@ -749,7 +768,7 @@
     .jig-badge { position: fixed; z-index: 2147483646; pointer-events: none; font: 11px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
       background: #0b0b0d; color: #dfe6ff; padding: 3px 7px; border-radius: 4px; white-space: nowrap; transform: translate(0,-110%); box-shadow: 0 2px 8px rgba(0,0,0,.3); }
     .jig-tb { position: fixed; z-index: 2147483646; display: flex; gap: 4px; align-items: center; background: #0b0b0d; border-radius: 8px; padding: 4px; box-shadow: 0 4px 16px rgba(0,0,0,.35); }
-    .jig-tb button { font: 600 13px ui-sans-serif, system-ui; background: #262833; color: #fff; border: 0; border-radius: 6px; width: 28px; height: 28px; cursor: pointer; }
+    .jig-tb button { font: 600 13px ui-sans-serif, system-ui; background: #262833; color: #fff; border: 0; border-radius: 6px; min-width: 28px; height: 28px; padding: 0 6px; cursor: pointer; }
     .jig-tb button:hover { background: #3f6fff; }
     .jig-tb .chip { font: 11px ui-monospace, Menlo, monospace; color: #dfe6ff; padding: 0 6px; min-width: 34px; text-align: center; }
     .jig-tb .sep { width: 1px; height: 18px; background: #3a3d4a; margin: 0 2px; }
@@ -764,7 +783,7 @@
     #jig-hud header .min { margin-left: 8px; width: 24px; height: 24px; border: 0; border-radius: 6px; background: #262833; color: #fff; cursor: pointer; font: 700 14px/1 ui-sans-serif, system-ui; }
     #jig-hud header .min:hover { background: #3f6fff; }
     #jig-hud .tools select { font: 600 12px ui-sans-serif, system-ui; background: #262833; color: #fff; border: 0; border-radius: 6px; padding: 6px 8px; cursor: pointer; }
-    #jig-found { position: fixed; top: 16px; left: 16px; width: 380px; max-height: calc(100vh - 32px); overflow: auto; z-index: 2147483644; background: #0b0b0d; color: #f3f4f7; border-radius: 12px; box-shadow: 0 12px 40px rgba(0,0,0,.45); font: 13px/1.45 ui-sans-serif, system-ui, sans-serif; padding: 12px 14px 14px; }
+    #jig-found { position: fixed; top: 16px; left: 16px; width: 380px; padding-right: 40px; max-height: calc(100vh - 32px); overflow: auto; z-index: 2147483644; background: #0b0b0d; color: #f3f4f7; border-radius: 12px; box-shadow: 0 12px 40px rgba(0,0,0,.45); font: 13px/1.45 ui-sans-serif, system-ui, sans-serif; padding: 12px 14px 14px; }
     #jig-found h5 { margin: 0 0 6px; font-size: 14px; } #jig-found h5 i { color: #3f6fff; font-style: normal; }
     #jig-found h6 { margin: 12px 0 4px; font-size: 11px; letter-spacing: .14em; text-transform: uppercase; opacity: .6; }
     #jig-found .lead { opacity: .7; font-size: 12px; margin: 0 0 4px; }
@@ -862,7 +881,7 @@
   on(window, 'scroll', () => { if (state.selected) refreshToolbar(state.selected); }, { passive: true });
   on(window, 'resize', () => { if (state.selected) refreshToolbar(state.selected); drawGrid(); });
   on(document, 'keydown', e => {
-    if (e.key === 'Escape') { $$('.jig-selected').forEach(x => x.classList.remove('jig-selected')); state.selected = null; toolbar.hidden = true; }
+    if (e.key === 'Escape') { if (foundEl) return closeFoundationPanel(); if (deviceEl) return closeDevice(); $$('.jig-selected').forEach(x => x.classList.remove('jig-selected')); state.selected = null; toolbar.hidden = true; }
     if (e.key === 'g' && !e.metaKey && !e.ctrlKey && !/input|textarea/i.test(e.target.tagName)) toggleGrid();
     if (state.selected && state.selected.__jigNudge && /^Arrow/.test(e.key)) {
       e.preventDefault(); const step = e.shiftKey ? 5 : 1;
@@ -1130,13 +1149,16 @@
 
   // ------------------------------------------------------------ foundation panel (inspect and edit the scales)
   let foundEl = null;
-  function toggleFoundationPanel() { if (foundEl) { foundEl.remove(); foundEl = null; return; } renderFoundationPanel(); }
+  function toggleFoundationPanel() { if (foundEl) closeFoundationPanel(); else renderFoundationPanel(); }
+  function closeFoundationPanel() { if (foundEl) { foundEl.remove(); foundEl = null; } const b = $('#jig-found-btn'); if (b) b.classList.remove('on'); }
   function renderFoundationPanel() {
     if (foundEl) foundEl.remove();
     const F = state.F; foundEl = document.createElement('div'); foundEl.id = 'jig-found';
     const inf = F.mode === 'inferred' || F.mode === 'vars';
     const stepRows = (steps, kind) => steps.map((st, i) => `<div class="frow"><input data-k="${kind}" data-i="${i}" data-f="token" value="${esc(st.token)}" title="token name"><input data-k="${kind}" data-i="${i}" data-f="px" type="number" value="${st.px}" title="px"><button class="x" data-del="${kind}:${i}" title="remove">×</button></div>${st.observed && st.observed.length > 1 ? `<small class="o">observed ${st.observed.join(', ')}</small>` : ''}`).join('');
+    const fb = $('#jig-found-btn'); if (fb) fb.classList.add('on');
     foundEl.innerHTML = `
+      <button class="x close" id="jf-close" title="close (Esc)" style="position:absolute;top:10px;right:10px">×</button>
       <h5>foundation <i>${esc(F.name)}</i></h5>
       <p class="lead">${esc(state.foundationSource)}. ${inf ? 'These are a reading of the page, not a decision. Rename, retune, add or remove steps; the controls and the patch follow.' : 'Edit here to try a different scale on this page; the patch will carry the change as a proposal.'}</p>
       <h6>type ramp (px)</h6><div id="jf-type">${stepRows(F.type.steps, 'type')}</div><button data-add="type">+ step</button>
@@ -1160,6 +1182,7 @@
       const syncSpace = () => { F.spacing = F.spacingEdited.map(x => x.px); };
       if (b.dataset.add) { readBack(); if (b.dataset.add === 'type') { F.type.ramp.push('new'); F.type.sizes.new = 0; } else { F.spacingEdited.push({ token: 'new', px: 0 }); syncSpace(); } delete F.type.steps; delete F.spacingSteps; resolveFoundation(); renderFoundationPanel(); return; }
       if (b.dataset.del) { const [k, i] = b.dataset.del.split(':'); readBack(); if (k === 'type') { const tok = F.type.ramp.splice(+i, 1)[0]; delete F.type.sizes[tok]; } else { F.spacingEdited.splice(+i, 1); syncSpace(); } delete F.type.steps; delete F.spacingSteps; resolveFoundation(); renderFoundationPanel(); return; }
+      if (b.id === 'jf-close') { closeFoundationPanel(); return; }
       if (b.id === 'jf-apply') { readBack(); rewire(); renderFoundationPanel(); flashBtn(b, 'Applied'); }
       if (b.id === 'jf-remember') { readBack(); safeSet('jig-foundation:' + location.host, JSON.stringify(exportFoundation())); state.foundationSource = 'edited in the jig (saved for this site)'; renderHUD(); flashBtn(b, 'Saved'); }
       if (b.id === 'jf-forget') { try { localStorage.removeItem('__jig-foundation:' + location.host); } catch (x) {} flashBtn(b, 'Forgotten; reload to re-infer'); }

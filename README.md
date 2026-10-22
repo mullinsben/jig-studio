@@ -73,7 +73,7 @@ Everything below is found automatically; `data-jig="<control>"` forces one, `dat
 
 | control | gesture | emits |
 | --- | --- | --- |
-| `crop` | drag to pan; click for −/+ zoom and arrow buttons; ⌘/Ctrl + wheel or pinch to zoom; arrow keys nudge (Shift = 5%) | `objectPosition`, `zoom` |
+| `crop` | drag to pan; click for −/+ zoom, arrow buttons, and w−/w+ to resize the image's box in grid columns; ⌘/Ctrl + wheel or pinch to zoom; arrow keys nudge (Shift = 5%). Plain `<img>` tags are upgraded to `object-fit: cover` in jig mode so they crop too | `objectPosition`, `zoom`, `objectFit`, `widthCols` |
 | `type` | click any text, then − / +; or ⌘/Ctrl + wheel | ramp step, e.g. `3xl → 2xl`; works on headings, body, captions, eyebrows |
 | `text` | drag; it only lands on grid columns (the grid shows itself while you drag). Overlays also pick a top/center/bottom band; ⌘/Ctrl + wheel sets max-width in columns; click for the scrim picker (gradient / tint / glass) | `anchor`, `col`, `offsetCols`, `offsetY`, `maxWidthCols`, `scrim` |
 | `button` | click, then − / + for size, ◐ for variant | `size`, `variant` |

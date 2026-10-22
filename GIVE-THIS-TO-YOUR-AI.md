@@ -34,7 +34,7 @@ Each JSON entry has:
 | key | meaning |
 | --- | --- |
 | `el` | A CSS selector for the element, as the jig could best name it. Prefer `data-jig-name` or `id`; fall back to the structural selector. |
-| `ctl` | Which control produced it: `crop`, `type` (any text element; `heading` is an older alias), `text`, `button`, `spacing`, `grid`, or `foundation` (a change to the foundation itself, e.g. the grid column count). The grid can be 2 to 16 columns; the patch header's foundation tells you which. |
+| `ctl` | Which control produced it: `crop`, `size` (an image's box width in columns), `type` (any text element; `heading` is an older alias), `text`, `button`, `spacing`, `grid`, or `foundation` (a change to the foundation itself, e.g. the grid column count). The grid can be 2 to 16 columns; the patch header's foundation tells you which. |
 | `bp` | Breakpoint the person was on: `desktop` or `phone`. A change scoped to `phone` goes inside the site's phone media query, never in the base rule. |
 | `warn` | Present instead of `ctl` on protection warnings. Warnings are advisory; the approver decides. Do not silently "fix" a warning unless the person asks. |
 
@@ -45,6 +45,7 @@ The rule for all of them: **edit tokens and classes, never write pixel values.**
 | `ctl` | fields | what to change in source |
 | --- | --- | --- |
 | `crop` | `objectPosition` (or `backgroundPosition`), optional `zoom` | Set `object-position` (or `background-position`) on that element in the stylesheet or inline style. If `zoom` is present, apply `transform: scale(zoom)` with `transform-origin` equal to the position, and make sure the container has `overflow: hidden`. |
+| `size` | `widthCols`, `widthPx`, `box` | The image's box was resized to N grid columns. Set the width on `box` when present (the wrapper that holds only this image), else on the image; prefer a column span or percentage in the site's grid vocabulary over the px. |
 | `type` (alias `heading`) | `from`, `to`, `step` | Change the element's font size to `var(--text-<to>)`. Applies to any text element: headings, paragraphs, captions, eyebrows, list items. If the element had an inline font-size override that caused the problem, remove the override instead of adding another. |
 | `text` | `anchor`, `col`, `offsetCols`, `offsetY`, `maxWidthCols`, `scrim` | Text only ever moves to the grid. For copy overlaid on an image: `anchor` is the vertical band (`top`, `center`, `bottom`) and `col` is the 1-based grid column its left edge sits on, inside the container's padding; `offsetY` is a spacing-scale nudge inward from that band's edge. Implement as `justify-content` for the band plus a `translate`/`margin-left` of `(col - 1)` column widths for the panel. For in-flow text: `offsetCols` shifts the element right by N columns and `offsetY` by a spacing token (`var(--space-N)`); `maxWidthCols` caps width at N columns. `scrim` is `gradient`, `tint`, or `glass`; see below. |
 
