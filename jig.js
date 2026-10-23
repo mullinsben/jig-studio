@@ -213,9 +213,17 @@
         if (rr - l >= A.width * 0.7) gridInset = { l: l - A.left, r: A.left + A.width - rr };
       }
       const L0 = A.left + (gridInset ? gridInset.l : 0), W = A.width - (gridInset ? gridInset.l + gridInset.r : 0);
-      const parts = kids.filter(r => r.width < W * 0.7 && r.width >= W * 0.08 && r.left >= L0 - 1 && r.right <= L0 + W + 1);
-      const Ls = parts.map(r => Math.round(r.left)), Rs = parts.map(r => Math.round(r.right));
-      const gaps = []; Rs.forEach(rv => Ls.forEach(lv => { const g = lv - rv; if (g >= 4 && g <= 48) gaps.push(g); }));
+      // page-level rows only: siblings side by side, each a real block (≥15% of the content width). A thumbnail beside its text is a card's layout, not the page's.
+      const cbox = k => { const r = k.getBoundingClientRect(), c = css(k); const pl = px(c.paddingLeft) + px(c.borderLeftWidth), pr = px(c.paddingRight) + px(c.borderRightWidth); return { left: r.left + pl, right: r.right - pr, width: r.width - pl - pr, top: r.top, bottom: r.bottom, height: r.height }; };
+      const Lset = new Set(), Rset = new Set(), gaps = [];
+      best.els.forEach(c => $$('*', c).forEach(row => {
+        if (row.children.length < 2 || row.closest('#jig-hud, #jig-axtags, .jig-tb')) return;
+        const ks = Array.from(row.children).filter(visible).map(cbox).filter(k => k.width >= W * 0.15 && k.height >= 60 && k.left >= L0 - 2 && k.right <= L0 + W + 2);
+        const side = ks.filter((k, i) => ks.some((o, j) => j !== i && o.top < k.bottom - 10 && k.top < o.bottom - 10 && (o.left >= k.right - 1 || o.right <= k.left + 1)));
+        if (side.length < 2) return;
+        side.sort((x, y) => x.left - y.left).forEach((k, i) => { Lset.add(Math.round(k.left)); Rset.add(Math.round(k.right)); const nx = side[i + 1]; if (nx && Math.abs(nx.top - k.top) < 40) { const g = Math.round(nx.left - k.right); if (g >= 4 && g <= 48) gaps.push(g); } });
+      }));
+      const Ls = Array.from(Lset), Rs = Array.from(Rset);   // each distinct edge counts once: twelve identical teasers don't outvote the page
       // fit gutter and column count together; keep the simplest grid (fewest columns) that lands as many real edges on lines as the best fit does
       const edges = Ls.map(x => x - L0).concat(Rs.map(x => x - L0)).filter(e => e > 2 && e < W - 2);   // the outer edges fit every grid; they prove nothing
       const gapCount = new Map(); gaps.forEach(g => gapCount.set(g, (gapCount.get(g) || 0) + 1));

@@ -1,6 +1,6 @@
 const { chromium } = require('playwright');
 (async () => { const b = await chromium.launch();
-for (const [u, sel] of [['mr2.html', '.card'], ['mr3.html', '.r3 .card, .r2 .card'], ['gw.html', 'article']]) { const p = await b.newPage({ viewport: { width: 1414, height: 900 } }); p.on('pageerror', e => console.log('ERR', e.message));
+for (const [u, sel] of [['mr2.html', '.card'], ['mr3.html', '.r3 .card, .r2 .card'], ['gw.html', 'article'], ['gw2.html', 'article']]) { const p = await b.newPage({ viewport: { width: 1414, height: 900 } }); p.on('pageerror', e => console.log('ERR', e.message));
 await p.goto('http://localhost:8777/' + u + '?jig'); await p.waitForFunction(() => window.__jig && document.querySelector('#jig-wn-n').textContent !== '…');
 await p.click('#jig-grid-btn'); await p.waitForTimeout(300);
 console.log(u, JSON.stringify(await p.evaluate(sel => { const G = __jig.state.F.grid; const ls = [...document.querySelectorAll('#jig-grid .cols i')].map(i => [i.getBoundingClientRect().left, i.getBoundingClientRect().right]);
