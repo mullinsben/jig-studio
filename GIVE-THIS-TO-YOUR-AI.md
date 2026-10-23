@@ -110,6 +110,8 @@ If the site has no `jig.foundation.json`, the jig runs on a built-in default and
 
 A patch may carry `# auto fixes` and `# auto` sections. `# auto fixes` lists what the jig fixed with its own controls (a scrim, a button size step, a ramp step, a block moved back onto a column line, an image crop re-centred on its subject); each also appears under changes with its values, so apply them like any other change. `# auto` means the person pressed **auto** and the jig snapped every font-size, padding, margin, and gap on the page to the nearest step of a scale. The header names the strength (light = the page's own steps, medium = a canonical modular scale, strict = four sizes and four spaces) and lists the exact type and spacing steps used; treat those steps as the tokens to define. The JSON entries look like `{ "op": "quantize", "prop": "font-size", "from": 13, "to": 12, "count": 10, "els": [...] }`. Apply these as **rule changes, not inline styles**: elements in one group almost always share a CSS rule; find that rule and change the value once. Where the group's selectors clearly span unrelated rules, change each rule. Never paste 94 inline styles. If a snap looks wrong for a specific element (a deliberate one-off), leave it and say so.
 
+Each `quantize` entry lists `els` (selectors) and `hints` (what each element says, in the same order). Apply every element in the group: if a selector is hard to resolve against the source, find the element by its hint. A group usually maps to one rule; where an element sets the value inline (a `style=""` attribute), change it there too, or nothing changes on the page.
+
 ## 6. Things not to do
 
 - Don't apply a patch to a different page than the one in its header.

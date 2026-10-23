@@ -335,9 +335,12 @@
       if (n !== el && n.id) { parts.unshift('#' + CSS.escape(n.id)); break; }
       if (n !== el && n.dataset.jigName) { parts.unshift(`[data-jig-name="${n.dataset.jigName}"]`); break; }
       let s = n.tagName.toLowerCase();
-      const cls = Array.from(n.classList).find(c => !/^jig-/.test(c) && !/^(active|on|is-|has-)/.test(c));
+      const par = n.parentNode; const kin = Array.from(par ? par.children : []).filter(c => c.tagName === n.tagName);
+      const usable = Array.from(n.classList).filter(c => !/^jig-/.test(c) && !/^(active|on|is-|has-)/.test(c));
+      // prefer a class that tells this element apart from its siblings (div.left, not div.col:nth-of-type(2)); an AI reading the HTML can find a class, it can't easily count siblings
+      const cls = usable.find(c => kin.filter(k => k.classList.contains(c)).length === 1) || usable[0];
       if (cls) s += '.' + CSS.escape(cls);
-      const par = n.parentNode; const sib = Array.from(par ? par.children : []).filter(c => c.tagName === n.tagName && (!cls || c.classList.contains(cls)));
+      const sib = kin.filter(c => !cls || c.classList.contains(cls));
       if (sib.length > 1) s += `:nth-of-type(${Array.from(par.children).filter(c => c.tagName === n.tagName).indexOf(n) + 1})`;
       parts.unshift(s); n = par;
       // a class-qualified chain of three is usually unique enough; stop early if it already is
@@ -1515,7 +1518,7 @@
     const prop = hasOwnBg ? 'background-color' : 'color';
     let to = hasOwnBg ? passingShade(own, fg, need) : passingShade(fg, bg, need); if (!to) return null;
     let group = null;
-    if (shared) { const k = prop + hex(hasOwnBg ? own : fg); group = shared.get(k) || { to: null, fixes: [] }; shared.set(k, group);
+    if (shared) { const k = hex(hasOwnBg ? own : fg); /* one colour, one fix, as a background or as text */ group = shared.get(k) || { to: null, fixes: [] }; shared.set(k, group);
       if (group.to && (hasOwnBg ? contrast(fg, group.to) : contrast(group.to, bg)) >= need) to = group.to;   // one colour, one fix
       else if (group.to) { group.to = to; group.fixes.forEach(f => f.reapply(to)); }   // this one needs it darker: bring the earlier ones along
       else group.to = to; }
@@ -1635,7 +1638,7 @@
       if ((state.autoFixes || []).length) { lines.push('', `# auto fixes · ${state.autoFixes.length}`, '', 'Protection failures fixed with the same controls a person would use; each is also listed under changes above with its values.', ''); { const g = new Map(); state.autoFixes.forEach(f => { const k = f.what.replace(/\(contrast [\d.]+ → [\d.]+\)/, '').trim(); if (!g.has(k)) g.set(k, []); g.get(k).push(f); }); g.forEach((l, k) => lines.push(l.length > 1 ? `- ${l.length} × ${k} (first: ${nameOf(l[0].el)})` : `- ${nameOf(l[0].el)}: ${l[0].what}`)); } }
       lines.push('', `# auto · ${resName(state.normalizeRes || '16')} · ${g.reduce((a, x) => a + x.els.length, 0)} snap${g.reduce((a, x) => a + x.els.length, 0) === 1 ? "" : "s"} in ${g.length} group${g.length === 1 ? "" : "s"}`, '', `Font sizes, paddings, margins and gaps snapped to the nearest step, like notes to a grid. Deliberately left alone: buttons and links (their padding is their tap target), images, the jig's own wrappers, margins set to auto, and any type snap that would have made a row wrap. Small text only ever rounds up; ties round up. Type steps: ${qs.typeSteps.join(', ')}px. Spacing steps: ${qs.spaceSteps.join(', ')}px. Apply as rule changes, not inline styles: find the rule that sets each value and change it; where several elements share a group they almost certainly share a rule.`, '');
       g.forEach(x => lines.push(`- ${x.prop}: ${x.from}px → ${x.to}px on ${x.els.length} element${x.els.length === 1 ? '' : 's'}`));
-      g.forEach(x => json.push({ op: 'quantize', prop: x.prop, from: x.from, to: x.to, count: x.els.length, els: x.els.slice(0, 20), ...(x.els.length > 20 ? { more: x.els.length - 20 } : {}) }));
+      g.forEach(x => json.push({ op: 'quantize', prop: x.prop, from: x.from, to: x.to, count: x.els.length, els: x.els.slice(0, 20), hints: x.hints.slice(0, 20), ...(x.els.length > 20 ? { more: x.els.length - 20 } : {}) }));   // hints: what each element says, so a selector that's hard to resolve can still be found
     }
     lines.push('', '---', JSON.stringify(json, null, 2));
     const F = state.F;
@@ -1961,7 +1964,7 @@
   function normalizeGroups() {
     const g = new Map();
     // a snap a later fix replaced (a heading stepped up, a button resized) is no longer what the page shows; leave it out of the patch
-    (state.normalize || []).filter(n => n.el.isConnected && Math.abs(px(css(n.el).getPropertyValue(n.prop)) - n.to) < 0.6).forEach(n => { const k = `${n.prop}|${n.from}|${n.to}`; const e = g.get(k) || { prop: n.prop, from: n.from, to: n.to, els: [] }; e.els.push(selectorOf(n.el)); g.set(k, e); });
+    (state.normalize || []).filter(n => n.el.isConnected && Math.abs(px(css(n.el).getPropertyValue(n.prop)) - n.to) < 0.6).forEach(n => { const k = `${n.prop}|${n.from}|${n.to}`; const e = g.get(k) || { prop: n.prop, from: n.from, to: n.to, els: [], hints: [] }; e.els.push(selectorOf(n.el)); e.hints.push(nameOf(n.el)); g.set(k, e); });
     return Array.from(g.values()).sort((a, b) => b.els.length - a.els.length);
   }
 
