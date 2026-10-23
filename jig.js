@@ -1012,6 +1012,7 @@
     #jig-hud .axrow .s .tw { opacity: .5; margin-left: 4px; font-size: 10px; }
     #jig-hud .axitems { margin: 2px 0 6px 34px; }
     #jig-hud .axi { display: flex; gap: 8px; align-items: baseline; padding: 3px 0; cursor: pointer; font-size: 12px; } #jig-hud .axi:hover { color: #fff; }
+    #jig-hud .axi .ign { all: revert; margin-left: auto; flex: none; font: 600 10px ui-monospace, Menlo, monospace; color: #9aa3b8; background: transparent; border: 1px solid #262833; border-radius: 999px; padding: 1px 7px; cursor: pointer; opacity: 0; } #jig-hud .axi:hover .ign, #jig-hud .axi .ign:focus-visible { opacity: 1; } #jig-hud .axi .ign:hover { color: #fff; border-color: #3f6fff; }
     #jig-hud .axi b { flex: none; font: 700 11px ui-monospace, Menlo, monospace; color: #ff2d9b; min-width: 24px; } #jig-hud .axi span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } #jig-hud .axi.fixed { opacity: .45; } #jig-hud .axi.fixed b { color: #35c186; }
     #jig-hud .welcome { margin: 10px 12px 2px; padding: 10px 12px; background: #13141a; border: 1px solid #262833; border-left: 3px solid #3f6fff; border-radius: 8px; font: 12px/1.5 ui-sans-serif, system-ui; color: #c9d1e6; }
     #jig-hud .welcome b { color: #fff; font-weight: 600; } #jig-hud .welcome i { font-style: normal; color: #fff; border: 1px solid #3a3d4a; border-radius: 999px; padding: 0 6px; font-size: 11px; }
@@ -1038,8 +1039,8 @@
     @media (max-width: 640px) { #jig-grid .cols i { background: rgba(63,111,255,.12); border-inline: 1px solid rgba(63,111,255,.5); } }
     #jig-hud { position: fixed; top: 16px; right: 16px; width: 372px; height: auto; max-height: calc(100vh - 32px); min-width: 280px; min-height: 92px; display: flex; flex-direction: column; z-index: 2147483647;
       background: #0b0b0d; color: #f3f4f7; border-radius: 12px; box-shadow: 0 12px 40px rgba(0,0,0,.45); font: 13px/1.45 ui-sans-serif, system-ui, sans-serif; overflow: hidden; resize: both; }
-    #jig-hud.collapsed { resize: none; height: auto !important; }
-    #jig-hud.collapsed .tools, #jig-hud.collapsed .advpanel, #jig-hud.collapsed .list, #jig-hud.collapsed .jigs, #jig-hud.collapsed .hint { display: none; }
+    #jig-hud.jig-collapsed { resize: none; height: auto !important; }
+    #jig-hud.jig-collapsed .tools, #jig-hud.jig-collapsed .advpanel, #jig-hud.jig-collapsed .list, #jig-hud.jig-collapsed .jigs, #jig-hud.jig-collapsed .hint { display: none; }
     #jig-hud header .min { margin-left: 8px; width: 24px; height: 24px; border: 0; border-radius: 6px; background: #262833; color: #fff; cursor: pointer; font: 700 14px/1 ui-sans-serif, system-ui; }
     #jig-hud header .min:hover { background: #3f6fff; }
     #jig-hud select { font: 600 12px ui-sans-serif, system-ui; background: #262833; color: #fff; border: 0; border-radius: 6px; padding: 6px 8px; cursor: pointer; }
@@ -1068,13 +1069,13 @@
     #jig-hud .tools { display: flex; gap: 6px; padding: 8px 12px; border-bottom: 1px solid #262833; align-items: center; }
     #jig-hud .tools .spacer { flex: 1; }
     #jig-hud .advpanel { border-bottom: 1px solid #262833; padding: 6px 12px 8px; }
-    #jig-hud:not(.advanced) .advpanel { display: none; }
+    #jig-hud:not(.jig-advanced) .advpanel { display: none; }
     #jig-hud .arow { display: grid; grid-template-columns: 76px 1fr; align-items: center; gap: 8px; padding: 4px 0; }
     #jig-hud .arow label { font: 11px ui-sans-serif, system-ui; letter-spacing: .12em; text-transform: uppercase; opacity: .55; white-space: nowrap; }
     #jig-hud .arow > div { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
     #jig-hud .arow button, #jig-hud .arow select { font: 600 12px ui-sans-serif, system-ui; background: #262833; color: #fff; border: 0; border-radius: 6px; padding: 6px 10px; cursor: pointer; }
     #jig-hud .arow button:hover { background: #3f6fff; } #jig-hud .arow button.on { background: #3f6fff; }
-    #jig-hud .hint { padding: 6px 12px 8px; font: 11px ui-monospace, Menlo, monospace; opacity: .4; background: #13141a; }
+    #jig-hud .hint { padding: 6px 12px 8px; font: 11px ui-monospace, Menlo, monospace; opacity: .4; background: #13141a; cursor: move; user-select: none; } #jig-hud .hint:hover { opacity: .7; }
     #jig-hud .tools button, #jig-hud footer button, #jig-hud .axb button { font: 600 12px ui-sans-serif, system-ui; background: #262833; color: #fff; border: 0; border-radius: 6px; padding: 6px 10px; cursor: pointer; }
     #jig-hud .tools button.on { background: #2bb673; }
     #jig-hud .devwrap { position: relative; }
@@ -1091,11 +1092,12 @@
     #jig-hud .tools button:hover, #jig-hud footer button:hover, #jig-hud .axb button:hover:not(:disabled) { background: #3f6fff; }
     #jig-hud .axb button.ghost { background: transparent; color: #9aa3b8; border: 1px solid #262833; } #jig-hud .axb button.ghost:hover { color: #fff; }
     #jig-hud .list { overflow: auto; padding: 8px 12px; flex: 1; }
-    #jig-hud .axr { padding: 10px 12px 10px; border-bottom: 1px solid #262833; max-height: 42vh; overflow: auto; flex: none; }
+    #jig-hud .axr { padding: 6px 0 10px; }
+    #jig-hud:not(.jig-frame) h6.fold[data-fold="warn"], #jig-hud:not(.jig-frame) #jig-warn { display: none !important; }
     #jig-hud .axh { display: flex; align-items: baseline; gap: 8px; margin-bottom: 6px; } #jig-hud .axh b { font: 700 26px/1 ui-sans-serif, system-ui; color: #ff2d9b; } #jig-hud .axh b.ok { color: #35c186; } #jig-hud .axh span { font: 12px ui-sans-serif, system-ui; color: #9aa3b8; }
     #jig-hud .axrow { align-items: center; } #jig-hud .axrow .c { flex: 0 0 26px; font: 700 12px ui-monospace, Menlo, monospace; text-align: right; color: #ffb84d; } #jig-hud .axrow .c.wcag { color: #ff2d9b; } #jig-hud .axrow.done .c { color: #35c186; } #jig-hud .axrow.done { opacity: .55; }
     #jig-hud .axrow .s small { display: block; font: 10.5px ui-monospace, Menlo, monospace; opacity: .6; }
-    #jig-hud .axb { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; } #jig-hud .axb button { flex: 1 1 auto; } #jig-hud #jig-axfix.on { background: #35c186; border-color: #35c186; color: #0b0b0d; } #jig-hud .axb button:disabled { opacity: .45; cursor: default; }
+    #jig-hud .axb { display: flex; gap: 6px; flex-wrap: nowrap; margin-top: 8px; } #jig-hud .axb button { flex: 1 1 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 6px 6px !important; font-size: 11.5px !important; } #jig-hud #jig-axfix.on { background: #35c186; border-color: #35c186; color: #0b0b0d; } #jig-hud .axb button:disabled { opacity: .45; cursor: default; }
     #jig-hud h6 { margin: 8px 0 4px; font-size: 11px; letter-spacing: .14em; text-transform: uppercase; opacity: .6; }
     #jig-hud h6.fold { display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; opacity: .85; padding: 4px 0; }
     #jig-hud h6.fold::before { content: "▸"; font-size: 10px; opacity: .7; transition: transform .12s; }
@@ -1413,7 +1415,8 @@
       let bg = null, how = '';
       let busy = 0;
       if (over) {
-        const patches = sampleImage(over.img, t); how = 'over image';
+        let patches = sampleImage(over.img, t); how = 'over image';
+        if (patches && patches.some(pc => pc[3] < 1)) { const under = solidBehind(over.img); patches = patches.map(pc => pc[3] < 1 ? blend(under, pc) : pc); }
         if (!patches) { if ((P.textOverImage || 'warn') === 'warn' && !seen.has(over.img)) { seen.add(over.img); W.push({ kind: 'text-over-image', el: t, msg: 'text over an image; contrast could not be sampled (serve over http to enable)' }); } return; }
         // a scrim (gradient/translucent overlay) or a text-shadow earns some credit; otherwise grade by the WORST patch
         const shadow = css(t).textShadow !== 'none';
@@ -1463,7 +1466,7 @@
       $$('h1,h2,h3,h4,h5,h6').forEach(h => { if (jigUI(h) || !h.offsetParent && css(h).position !== 'fixed') return; if (!(h.textContent || '').trim() && !h.querySelector('img[alt]:not([alt=""]), svg[aria-label], [aria-label]') && !(h.getAttribute('aria-label') || '').trim()) W.push({ kind: 'empty-heading', el: h, msg: `empty ${h.tagName.toLowerCase()}; screen reader users jump between headings and land on nothing` }); });
     }
     const hid = new Map(); const hidden = el => { if (!hid.has(el)) hid.set(el, srOnly(el)); return hid.get(el); };   // visually hidden text is for screen readers; size, contrast and clipping rules don't apply
-    state.warnings = W.filter((w, i) => W.findIndex(x => x.el === w.el && x.kind === w.kind) === i && (/heading|h1|^lang$|^title$/.test(w.kind) || !hidden(w.el)) && (w.page || !w.el.closest(OFF))); axTrackBaseline(); renderHUD(); postToParent(); paintAX();
+    state.warnings = W.filter((w, i) => W.findIndex(x => x.el === w.el && x.kind === w.kind) === i && (/heading|h1|^lang$|^title$/.test(w.kind) || !hidden(w.el)) && (w.page || !w.el.closest(OFF))); state.warnings = splitDismissed(state.warnings); axTrackBaseline(); renderHUD(); postToParent(); paintAX();
   }
   // ax jig: every element with a protection warning gets a pink outline and a chip saying why
   let axTags = null;
@@ -1557,7 +1560,7 @@
       const x0 = clamp((tr.left - br.left - ox) / s, 0, iw), y0 = clamp((tr.top - br.top - oy) / s, 0, ih), x1 = clamp((tr.right - br.left - ox) / s, 0, iw), y1 = clamp((tr.bottom - br.top - oy) / s, 0, ih);
       const N = 8, cv = document.createElement('canvas'); cv.width = N; cv.height = N; const ctx = cv.getContext('2d');
       ctx.drawImage(im, x0, y0, Math.max(1, x1 - x0), Math.max(1, y1 - y0), 0, 0, N, N);
-      const d = ctx.getImageData(0, 0, N, N).data; const patches = []; for (let i = 0; i < d.length; i += 4) patches.push([d[i], d[i + 1], d[i + 2], 1]); return patches;
+      const d = ctx.getImageData(0, 0, N, N).data; const patches = []; for (let i = 0; i < d.length; i += 4) patches.push([d[i], d[i + 1], d[i + 2], d[i + 3] / 255]); return patches;
     } catch (e) { return null; }   // cross-origin image: unmeasured, never guessed
   }
   function sampleImage(img, t) {
@@ -1576,7 +1579,7 @@
       const N = 8; c.width = N; c.height = N; const ctx = c.getContext('2d');
       ctx.imageSmoothingEnabled = true; ctx.drawImage(img, x0, y0, w, h, 0, 0, N, N);
       const d = ctx.getImageData(0, 0, N, N).data; const patches = [];
-      for (let i = 0; i < d.length; i += 4) patches.push([d[i], d[i + 1], d[i + 2], 1]);
+      for (let i = 0; i < d.length; i += 4) patches.push([d[i], d[i + 1], d[i + 2], d[i + 3] / 255]);
       return patches;
     } catch (e) { return null; } // tainted canvas (file://) or cross-origin
   }
@@ -1638,8 +1641,7 @@
       <div class="arow"><label>scales</label><div><button id="jig-found-btn">foundation</button><button id="jig-scan-btn">rescan</button><button id="jig-reset-btn">reset all</button></div></div>
       <div class="src" id="jig-src"></div>
     </div>
-    <div class="axr" id="jig-axr" hidden><div class="axh"><b id="jig-axr-n">0</b><span id="jig-axr-l">accessibility failures</span></div><div id="jig-axr-rules"></div><div class="axb"><button id="jig-axfix" title="fix the accessibility failures the jig knows how to fix; no other changes">Fix what I can</button><button id="jig-axdl" title="a styled report you can share or print to PDF">Download report</button><button id="jig-axmd" class="ghost" title="the same report as markdown, for a ticket">Copy markdown</button></div></div>
-    <div class="list"><h6 class="fold" data-fold="changes" aria-expanded="false"><span>changes</span><em id="jig-ch-n">0</em></h6><div id="jig-changes" hidden></div><h6 class="fold" data-fold="warn" aria-expanded="false"><span>notes</span><em id="jig-wn-n">0</em></h6><div id="jig-warn" hidden></div></div>
+    <div class="list"><h6 class="fold" data-fold="ax" aria-expanded="false"><span>accessibility</span><em id="jig-ax-n">0</em></h6><div id="jig-ax" class="axr" hidden><div class="axh"><b id="jig-axr-n">0</b><span id="jig-axr-l">accessibility failures</span></div><div id="jig-axr-rules"></div><div class="axb"><button id="jig-axfix" title="fix the accessibility failures the jig knows how to fix; no other changes">Fix what I can</button><button id="jig-axdl" title="download a styled report you can share or print to PDF">Report</button><button id="jig-axmd" class="ghost" title="copy the same report as markdown, for a ticket">Markdown</button></div></div><h6 class="fold" data-fold="changes" aria-expanded="false"><span>changes</span><em id="jig-ch-n">0</em></h6><div id="jig-changes" hidden></div><h6 class="fold" data-fold="warn" aria-expanded="false"><span>notes</span><em id="jig-wn-n">0</em></h6><div id="jig-warn" hidden></div></div>
     <footer><button class="primary" id="jig-copy-btn">Copy patch</button><small id="jig-count"></small></footer>
     <div class="hint">page is inert while the jig is on · hold Alt to click through · Esc deselects</div>`;
 
@@ -1694,7 +1696,7 @@
     }
     const total = state.changes.size + state.frame.changes.length + (state.normalize ? state.normalize.length : 0);
     const nW = inFrame ? (state.frame.warnings || []).length : state.warnings.length;
-    $('#jig-count').textContent = `${total} change${total === 1 ? '' : 's'} · ${nW} note${nW === 1 ? '' : 's'}`;
+    $('#jig-count').textContent = `${total} change${total === 1 ? '' : 's'}`;
     const chN = $('#jig-ch-n'), wnN = $('#jig-wn-n'); if (chN) chN.textContent = total; if (wnN) { wnN.textContent = nW; wnN.classList.toggle('warn', nW > 0); }
     if (!state.device) $('#jig-bp').textContent = `${state.bp} · ${window.innerWidth}px`;
     renderAXPanel();
@@ -1733,6 +1735,7 @@
       sg.forEach(list => { const c = list[0]; const tag = c.bp !== 'desktop' ? ` (${c.device ? c.device + ', ' : ''}${c.bp})` : '';
         lines.push(list.length > 2 ? `- ${list.length} × ${c.summary}${tag} (first: ${c.name}; every selector is in the JSON)` : list.map(x => `- ${x.name}: ${x.summary}${tag}`).join('\n')); }); }
     cgrp.forEach(list => { const c = list[0], x = c.contrast; if (list.length === 1) lines.push(`- ${c.name}: ${c.summary}`); else lines.push(`- ${x.prop === 'color' ? 'colour' : 'background'} ${x.from} → ${x.to} on ${list.length} elements (contrast to ${Math.min(...list.map(l => l.contrast.after)).toFixed(1)}+; first: ${c.name}). Change the rule that sets ${x.from}, not each element.`); });
+    if ((state.dismissedWarnings || []).length) lines.push('', `(${state.dismissedWarnings.length} finding${state.dismissedWarnings.length === 1 ? '' : 's'} dismissed by the reviewer on purpose; leave them as they are.)`);
     const warns = [...state.warnings.map(w => ({ kind: w.kind, el: selectorOf(w.el), name: nameOf(w.el), msg: w.msg, value: w.value, min: w.min })), ...state.frame.warnings.map(w => ({ ...w, msg: w.msg + ' (' + (state.frame.device || 'device') + ')' }))];
     if (warns.length) {
       lines.push('', `⚠ ${warns.length} note${warns.length === 1 ? '' : 's'} (accessibility):`);
@@ -1783,7 +1786,7 @@
     'lang':            { t: 'Page language not set', ref: '3.1.1 Language of Page', lvl: 'A', cat: 'wcag', auto: false, fix: 'Add the language to the html element, for example <html lang="en">.' },
     'title':           { t: 'Page has no title', ref: '2.4.2 Page Titled', lvl: 'A', cat: 'wcag', auto: false, fix: 'Give every page a <title> that says what it is; it\'s the first thing a screen reader announces and the name of the tab.' },
     'label':           { t: 'Form fields with no label', ref: '1.3.1 Info and Relationships · 4.1.2', lvl: 'A', cat: 'wcag', auto: false, fix: 'Connect a visible <label for="…"> to each field, or an aria-label when there is truly no room. Placeholders vanish as you type; they aren\'t labels.' },
-    'colour-link':     { t: 'Links marked by colour alone', ref: '1.4.1 Use of Color', lvl: 'A', cat: 'wcag', auto: false, fix: 'Underline links that sit inside running text. If you won\'t underline, make the link colour at least 3:1 against the surrounding words and add an underline on hover and focus.' },
+    'colour-link':     { t: 'Links marked by colour alone', ref: '1.4.1 Use of Color', lvl: 'A', cat: 'wcag', auto: true, fix: 'Underline links that sit inside running text. If you won\'t underline, make the link colour at least 3:1 against the surrounding words and add an underline on hover and focus.' },
     'alt':             { t: 'Missing or placeholder alt text', ref: '1.1.1 Non-text Content', lvl: 'A', cat: 'wcag', auto: false, fix: 'Describe what the image shows in a short phrase. Use alt="" for images that are purely decorative.' },
     'contrast':        { t: 'Text contrast too low', ref: '1.4.3 Contrast (Minimum)', lvl: 'AA', cat: 'wcag', auto: true, fix: 'Move the text colour (or its background) to a shade that reaches 4.5:1, or 3:1 for large text. Over photos, add a scrim or a tint behind the words.' },
     'busy-background': { t: 'Text over a busy image', ref: '1.4.3 Contrast (Minimum)', lvl: 'AA', cat: 'wcag', auto: true, fix: 'Add a scrim or text shadow, or move the words to a calmer part of the image.' },
@@ -1817,6 +1820,16 @@
   const axKey = (el, kind) => { let m = axKey.ids.get(el); if (!m) { m = ++axKey.n; axKey.ids.set(el, m); } return kind + '|' + m; }; axKey.ids = new WeakMap(); axKey.n = 0;
   const axLite = w => ({ kind: w.kind, el: w.el, msg: w.msg });
   // the baseline is what the page had before anyone touched it; it keeps refreshing while the page settles, and freezes at the first change
+  // dismissed findings: the reviewer looked and said "fine, ignore". Remembered per page in this browser, kept out of counts, pink and auto fix, and still listed in the report.
+  const dismissKey = () => 'jig-dismissed:' + location.host + location.pathname;
+  function loadDismissed() { if (!state.axDismissed) { try { state.axDismissed = new Set(JSON.parse(safeGet(dismissKey()) || '[]')); } catch (e) { state.axDismissed = new Set(); } } return state.axDismissed; }
+  const findingId = w => w.kind + '|' + (w.el === document.documentElement ? 'html' : selectorOf(w.el));
+  function setDismissed(w, on) { const D = loadDismissed(); const id = findingId(w); if (on) D.add(id); else D.delete(id); safeSet(dismissKey(), JSON.stringify(Array.from(D))); scanProtection(); renderHUD(); }
+  function splitDismissed(W) {
+    const D = loadDismissed(); state.dismissedWarnings = []; if (!D.size) return W;
+    const kinds = new Set(Array.from(D).map(x => x.split('|')[0]));
+    return W.filter(w => { if (!kinds.has(w.kind) || !w.el || !D.has(findingId(w))) return true; state.dismissedWarnings.push(w); return false; });
+  }
   function axTrackBaseline() {
     const untouched = !state.changes.size && !state.normalize && !state.axFix && !state.frame.changes.length;
     if (untouched || !state.axBase) state.axBase = state.warnings.filter(w => w.el && w.el.isConnected).map(axLite);
@@ -1824,7 +1837,8 @@
   function buildAXReport(detail) {
     const now = state.warnings.filter(w => w.el && w.el.isConnected).map(axLite);
     const nowKeys = new Map(now.map(f => [axKey(f.el, f.kind), f]));
-    const base = (state.axBase || now).filter(f => f.el); const baseKeys = new Set(base.map(f => axKey(f.el, f.kind)));
+    const dis = new Set((state.dismissedWarnings || []).map(w => axKey(w.el, w.kind)));
+    const base = (state.axBase || now).filter(f => f.el && !dis.has(axKey(f.el, f.kind))); const baseKeys = new Set(base.map(f => axKey(f.el, f.kind)));
     const items = base.map(f => { const k = axKey(f.el, f.kind); return nowKeys.has(k) ? { ...nowKeys.get(k), status: 'open' } : { ...f, status: 'fixed' }; })
       .concat(now.filter(f => !baseKeys.has(axKey(f.el, f.kind))).map(f => ({ ...f, status: 'open', fresh: true })));
     const rules = [];
@@ -1841,7 +1855,7 @@
       title: (document.title || location.hostname).trim(), url: (() => { const u = new URL(location.href); u.searchParams.delete('jig'); if (u.hash === '#jig') u.hash = ''; return u.href; })(),
       host: location.hostname, platform: detectPlatform(), when: new Date(), viewport: `${window.innerWidth} × ${window.innerHeight}`, bp: state.bp, version: JIG_VERSION,
       foundation: `${F.name} (${state.foundationSource || F.mode || 'inferred'})`,
-      rules, frame,
+      rules, frame, dismissed: (state.dismissedWarnings || []).filter(w => w.el && w.el.isConnected).map(w => ({ kind: w.kind, t: ruleOf(w.kind).t, sel: w.el === document.documentElement ? 'html' : selectorOf(w.el), snippet: axSnippet(w.el), msg: w.msg })),
       totals: { wcag: count('wcag'), wcagOpen: count('wcag', 'open'), practice: count('practice'), design: count('design'), all: items.length, open: items.filter(i => i.status === 'open').length, fixed: items.filter(i => i.status === 'fixed').length },
       changed: state.changes.size + state.frame.changes.length > 0 || !!state.normalize || !!state.axFix
     };
@@ -1878,6 +1892,7 @@
         });
       });
     }
+    if (R.dismissed && R.dismissed.length) { L.push(`## Dismissed by the reviewer (${R.dismissed.length})`, '', 'Looked at and set aside on purpose; not counted above.', ''); R.dismissed.forEach(d => L.push(`- ${d.t}: \`${d.sel}\`${d.snippet ? ' "' + d.snippet.replace(/"/g, "'") + '"' : ''}: ${d.msg}`)); L.push(''); }
     if (R.frame && R.frame.notes.length) { L.push(`## Also seen on ${R.frame.device}`, ''); R.frame.notes.forEach(n => L.push(`- ${n.name}: ${n.msg}`)); L.push(''); }
     L.push('## How this was checked', ''); AX_METHOD.forEach(m => L.push(`- ${m}`));
     L.push('', `Audited with [Jig Studio](https://capybutz.com/) · foundation: ${R.foundation}`);
@@ -1894,6 +1909,7 @@
         <p class="meta"><span class="lvl l-${e(r.cat)}">${e(r.lvl)}</span> ${e(r.ref)}${r.auto ? ' · <span class="tag auto">jig can fix</span>' : ''}</p><p class="fix">${e(r.fix)}</p>
         <ol>${r.items.slice(0, AX_LIST_CAP).map(i => `<li value="${i.n}" class="${i.status}"><div class="what"><code>${e(i.sel)}</code>${i.status === 'fixed' ? '<span class="tag ok">fixed</span>' : i.fresh ? '<span class="tag">new since load</span>' : ''}</div>${i.snippet ? `<div class="snip">${e(i.snippet)}</div>` : ''}<div class="msg">${e(i.msg)}</div></li>`).join('')}</ol>${r.items.length > AX_LIST_CAP ? `<p class="more">… and ${r.items.length - AX_LIST_CAP} more like these (${r.items.filter(i => i.status === 'open').length} open in total).</p>` : ''}</section>`).join('');
     }).join('');
+    const dismissed = R.dismissed && R.dismissed.length ? `<h2>Dismissed by the reviewer (${R.dismissed.length})</h2><p class="more">Looked at and set aside on purpose; not counted above.</p><ul class="plain">${R.dismissed.map(d => `<li><b>${e(d.t)}</b>: <code>${e(d.sel)}</code>${d.snippet ? ` ${e(d.snippet)}` : ''}<div class="msg">${e(d.msg)}</div></li>`).join('')}</ul>` : '';
     const frame = R.frame && R.frame.notes.length ? `<h2>Also seen on ${e(R.frame.device)}</h2><ul class="plain">${R.frame.notes.map(n => `<li><b>${e(n.name)}</b>: ${e(n.msg)}</li>`).join('')}</ul>` : '';
     const patch = R.changed ? `<details class="patch"><summary>The fixes made in this session, as a jig patch</summary><p>Hand this to your AI or developer to make the changes permanent.</p><pre>${e(buildPatch())}</pre></details>` : '';
     const css = `
@@ -1901,12 +1917,12 @@
       *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.55 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
       main{max-width:920px;margin:0 auto;padding:48px 24px 64px}a{color:#8fb0ff}code{font:12.5px ui-monospace,SFMono-Regular,Menlo,monospace;color:#c9d4ff;word-break:break-all}
       .eyebrow{font:600 11px ui-monospace,Menlo,monospace;letter-spacing:.14em;text-transform:uppercase;color:var(--pink)}
-      h1{font-size:32px;line-height:1.15;margin:8px 0 6px;color:#fff;letter-spacing:-.01em}.sub{color:var(--mute);margin:0;word-break:break-all}.sub a{color:var(--mute)}
+      h1{font-size:32px;line-height:1.15;margin:8px 0 6px;color:#fff;letter-spacing:-.01em}.sub{color:var(--mute);margin:0}.sub.url{word-break:break-all}.sub a{color:var(--mute)}
       .headline{margin:28px 0 8px;font-size:19px;color:#fff;font-weight:600}
       .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:16px 0 36px}
       .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px}.card b{display:block;font-size:30px;line-height:1.1;color:#fff}.card span{color:var(--mute);font-size:13px}
       .card.bad{border-color:var(--pink)}.card.bad b{color:var(--pink)}.card.ok b{color:var(--ok)}
-      table{width:100%;border-collapse:collapse;font-size:14px;margin:0 0 40px}th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:top}th{color:var(--mute);font-weight:500;font-size:12px;text-transform:uppercase;letter-spacing:.06em}td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
+      .tw{overflow-x:auto;margin:0 0 40px}table{width:100%;border-collapse:collapse;font-size:14px;margin:0}th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:top}th{color:var(--mute);font-weight:500;font-size:12px;text-transform:uppercase;letter-spacing:.06em}td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
       h2{font-size:13px;text-transform:uppercase;letter-spacing:.12em;color:var(--mute);margin:44px 0 12px;padding-bottom:8px;border-bottom:1px solid var(--line)}
       .rule{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px 20px;margin:0 0 14px}.rule header,.rule .meta,.rule .fix,h2{break-after:avoid}
       .rule header{display:flex;justify-content:space-between;align-items:baseline;gap:12px}.rule h3{margin:0;font-size:18px;color:#fff}.cnt{font:700 14px ui-monospace,Menlo,monospace;color:var(--pink)}
@@ -1922,12 +1938,13 @@
       @media print{:root{--bg:#fff;--panel:#fff;--line:#d9dbe3;--ink:#16171d;--mute:#5a6072;--blue:#2347c9;--pink:#c4106c;--ok:#167a50;color-scheme:light}
         body{font-size:11pt}main{padding:0;max-width:none}h1,.card b,.rule h3,.headline,.snip,details.patch summary{color:#000}code,details.patch pre{color:#1b2a6b}a{color:inherit;text-decoration:none}
         .rule,.card{border-color:#d9dbe3}details.patch{display:none}.lvl{background:none;border:1px solid #9a9fb0;color:#000}.lvl.l-wcag{border-color:#c4106c;color:#c4106c}.tag{border-color:#9a9fb0}@page{margin:16mm}}
-      @media (max-width:560px){main{padding:28px 16px 48px}h1{font-size:26px}th:nth-child(2),td:nth-child(2),th:nth-child(5),td:nth-child(5){display:none}}`;
+      @media (max-width:560px){main{padding:28px 16px 48px}h1{font-size:26px}th:nth-child(2),td:nth-child(2),th:nth-child(5),td:nth-child(5){display:none}th,td{padding:8px 6px}.tag{white-space:normal}}@media (max-width:400px){th:nth-child(3),td:nth-child(3){display:none}}`;
     return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Accessibility report · ${e(R.host)}</title><style>${css}</style></head><body><main>
-      <div class="eyebrow">Accessibility report</div><h1>${e(R.title)}</h1><p class="sub"><a href="${e(R.url)}">${e(R.url)}</a></p><p class="sub">${e(fmtDate(R.when))}${R.platform ? ' · ' + e(R.platform) : ''} · viewport ${e(R.viewport)} (${e(R.bp)})</p>
+      <div class="eyebrow">Accessibility report</div><h1>${e(R.title)}</h1><p class="sub url"><a href="${e(R.url)}">${e(R.url)}</a></p><p class="sub">${e(fmtDate(R.when))}${R.platform ? ' · ' + e(R.platform) : ''} · viewport ${e(R.viewport)} (${e(R.bp)})</p>
       <p class="headline">${e(axHeadline(R))}</p>
       <div class="cards">${cards.map(([n, l, c]) => `<div class="card ${c}"><b>${n}</b><span>${e(l)}</span></div>`).join('')}</div>
-      ${R.rules.length ? `<table><thead><tr><th>Rule</th><th>WCAG</th><th>Level</th><th class="n">Found</th><th class="n">Open</th><th>Fix</th></tr></thead><tbody>${sum}</tbody></table>${sections}` : '<div class="clean">Nothing flagged on this page at this viewport.</div>'}
+      ${R.rules.length ? `<div class="tw"><table><thead><tr><th>Rule</th><th>WCAG</th><th>Level</th><th class="n">Found</th><th class="n">Open</th><th>Fix</th></tr></thead><tbody>${sum}</tbody></table></div>${sections}` : '<div class="clean">Nothing flagged on this page at this viewport.</div>'}
+      ${dismissed}
       ${frame}
       <h2>How this was checked</h2><ul class="method">${AX_METHOD.map(m => `<li>${e(m)}</li>`).join('')}</ul>
       ${patch}
@@ -1964,9 +1981,9 @@
     clearTimeout(axJump.t); axJump.t = setTimeout(() => { el.classList.remove('jig-ax-focus'); if (tag) tag.classList.remove('focus'); }, 2200);
   }
   function renderAXPanel() {
-    const box = $('#jig-axr'); if (!box) return;
-    const on = state.jigs.has('ax') && !(state.device && deviceEl); box.hidden = !on; if (!on) return;
+    const box = $('#jig-ax'); if (!box) return;
     const R = buildAXReport(); const T = R.totals;
+    { const b = $('#jig-ax-n'); if (b) { b.textContent = T.wcagOpen; b.classList.toggle('warn', T.wcagOpen > 0); b.title = `${T.wcagOpen} WCAG failures open · ${T.practice + T.design} more notes`; } }
     $('#jig-axr-n').textContent = T.wcagOpen; $('#jig-axr-n').classList.toggle('ok', !T.wcagOpen);
     $('#jig-axr-l').textContent = (T.wcagOpen === 1 ? 'accessibility failure' : 'accessibility failures') + (T.practice + T.design ? ` · ${T.practice + T.design} more` : '') + (T.fixed ? ` · ${T.fixed} fixed` : '');
     const list = $('#jig-axr-rules'); list.innerHTML = '';
@@ -1982,12 +1999,21 @@
       r.items.slice(0, AX_LIST_CAP).forEach(it => {
         const d = document.createElement('div'); d.className = 'axi ' + it.status; d.title = it.msg;
         const b = document.createElement('b'); b.textContent = '#' + it.n; const t = document.createElement('span'); t.textContent = (it.el === document.documentElement ? 'the page' : axSnippet(it.el) || nameOf(it.el)) + (it.status === 'fixed' ? ' (fixed)' : '');
-        d.append(b, t); d.onclick = () => axJump(it.el); box.appendChild(d);
+        d.append(b, t); d.onclick = () => axJump(it.el);
+        if (it.status === 'open') { const x = document.createElement('button'); x.className = 'ign'; x.type = 'button'; x.textContent = 'ignore'; x.title = 'dismiss this finding: out of the counts and auto fix, still listed in the report'; x.onclick = ev => { ev.stopPropagation(); setDismissed(it, true); }; d.append(x); }
+        box.appendChild(d);
       });
       if (r.items.length > AX_LIST_CAP) { const m = document.createElement('div'); m.className = 'axi'; m.textContent = `+ ${r.items.length - AX_LIST_CAP} more in the report`; box.appendChild(m); }
       list.appendChild(box);
     });
     if (!R.rules.length) list.innerHTML = '<div class="empty">Nothing flagged on this page.</div>';
+    const dis = state.dismissedWarnings || [];
+    if (dis.length) {
+      const h = document.createElement('div'); h.className = 'row axrow done'; const open = state.axShowDismissed;
+      h.innerHTML = `<span class="c">${dis.length}</span><span class="s">dismissed<span class="tw">${open ? '▾' : '▸'}</span><small>out of the counts · still in the report</small></span>`;
+      h.onclick = () => { state.axShowDismissed = !open; renderAXPanel(); }; list.appendChild(h);
+      if (open) { const box = document.createElement('div'); box.className = 'axitems'; dis.forEach(w => { const d = document.createElement('div'); d.className = 'axi fixed'; const t = document.createElement('span'); t.textContent = ruleOf(w.kind).t + ': ' + (axSnippet(w.el) || nameOf(w.el)); const x = document.createElement('button'); x.className = 'ign'; x.type = 'button'; x.textContent = 'restore'; x.onclick = ev => { ev.stopPropagation(); setDismissed(w, false); }; d.append(t, x); box.appendChild(d); }); list.appendChild(box); }
+    }
     const fb = $('#jig-axfix'); const can = R.rules.some(r => r.auto && r.open);
     fb.textContent = state.normalize ? 'fixed by auto fix' : state.axFix ? 'undo fixes' : 'Fix what I can'; fb.disabled = !!state.normalize || (!state.axFix && !can); fb.classList.toggle('on', !!state.axFix);
   }
@@ -2159,6 +2185,30 @@
               return true;
             } else { undo(); scanProtection(); return false; }
     };
+    // a photo section that already has a dark overlay (a builder's ::before layer): darken that overlay before putting anything behind the words
+    const ovRules = state.ovRules || (state.ovRules = new Map());
+    const ovSheet = () => { let el = document.getElementById('jig-ov-style'); if (!el) { el = document.createElement('style'); el.id = 'jig-ov-style'; document.head.appendChild(el); } el.textContent = Array.from(ovRules.values()).join('\n'); };
+    const overlayFix = w => {
+      let n = w.el, host = null, ps = null, base = null;
+      while (n && n !== document.body && !host) { for (const p of ['::before', '::after']) { const pc = getComputedStyle(n, p); if (pc.content !== 'none' && /absolute|fixed/.test(pc.position)) { const pb = parseColor(pc.backgroundColor); if (pb && pb[3] > 0.05 && pb[3] < 1) { host = n; ps = p; base = pb; break; } } } if (!host) n = n.parentElement; }
+      if (!host) return { found: false };
+      if (seen.has(key(host, 'overlay'))) return { found: true, passed: !!host.__jigOvPassed };
+      seen.add(key(host, 'overlay'));
+      const id = 'o' + (ovRules.size + 1) + '-' + Math.random().toString(36).slice(2, 6); host.setAttribute('data-jig-ov', id);
+      const a0 = Math.round(base[3] * 100) / 100; const rgb = base.slice(0, 3).map(Math.round).join(',');
+      const failing = () => state.warnings.filter(x => host.contains(x.el) && /contrast|busy|text-over/.test(x.kind));
+      const before = failing().length; let a = a0, passed = false;
+      for (let step = Math.round((a0 + 0.1) * 10) / 10; step <= 0.6 + 1e-9; step = Math.round((step + 0.1) * 10) / 10) {
+        ovRules.set(id, `[data-jig-ov="${id}"]${ps}{background-color:rgba(${rgb},${step}) !important}`); ovSheet(); scanProtection(); a = step;
+        if (!failing().length) { passed = true; break; }
+      }
+      if (failing().length >= before) { ovRules.delete(id); ovSheet(); host.removeAttribute('data-jig-ov'); scanProtection(); return { found: true, passed: false, changed: false }; }   // darker didn't help: leave the overlay alone
+      host.__jigOvPassed = passed;
+      record(host, 'text', { overlay: { pseudo: ps, color: `rgb(${rgb})`, from: a0, to: a } }, `overlay ${ps} ${Math.round(a0 * 100)}% → ${Math.round(a * 100)}% (darkens the photo behind the text)`, 'overlay');
+      state.autoFixes.push({ el: host, ctl: 'text', sub: 'overlay', what: `photo overlay ${Math.round(a0 * 100)}% → ${Math.round(a * 100)}%${passed ? ' (text on it now passes)' : ' (helps; some text still short)'}`, undo: () => { ovRules.delete(id); ovSheet(); host.removeAttribute('data-jig-ov'); delete host.__jigOvPassed; } });
+      return { found: true, passed, changed: true };
+    };
+    const isLarge = el => { const fs = px(css(el).fontSize), b = px(css(el).fontWeight) >= 700; return fs >= 24 || (b && fs >= 18.66); };
     const shadeFor = new Map();   // source colour → shade chosen; every later element with that colour reuses it if it passes there too
     for (let pass = 0; pass < 4; pass++) {
       let did = false;
@@ -2166,7 +2216,12 @@
         const plain = w.kind === 'contrast' && /on background/.test(w.msg);
         if (!plain && (w.kind === 'contrast' || w.kind === 'busy-background' || w.kind === 'text-over-image')) {
           const ov = w.el.closest('.jig-el[data-jig-ctl="text"]');
-          if (!ov || !ov.__jigSetScrim) { if (tintFallback(w)) did = true; continue; }
+          if (!ov || !ov.__jigSetScrim) {
+            const o = overlayFix(w); if (o.changed) did = true;
+            if (o.found && (o.passed || !state.warnings.some(x => x.el === w.el && /contrast|busy|text-over/.test(x.kind)))) continue;
+            if (isLarge(w.el)) continue;   // a headline never gets a tint box; if the overlay couldn't carry it, it stays a note
+            if (tintFallback(w)) did = true; continue;
+          }
           if (seen.has(key(ov, 'scrim'))) continue;
           seen.add(key(ov, 'scrim'));
           for (const sc of ['gradient', 'tint', 'glass']) {
@@ -2199,6 +2254,15 @@
         if (w.kind === 'small-text' && w.el.__jigStepType && !seen.has(key(w.el, w.kind))) {
           seen.add(key(w.el, w.kind)); let steps = 0; while (steps < 3 && px(css(w.el).fontSize) < w.min - 0.5) { const b0 = px(css(w.el).fontSize); w.el.__jigStepType(1); if (px(css(w.el).fontSize) <= b0 + 0.1) break; steps++; }
           if (steps) { state.autoFixes.push({ el: w.el, what: `ramp +${steps} (body copy now ${r1(px(css(w.el).fontSize))}px)` }); did = true; }
+        }
+        if (w.kind === 'colour-link' && !seen.has(key(w.el, w.kind))) {
+          // a link told apart by colour alone gets a shape: a light pill in its own colour family (underlining is the strict alternative)
+          seen.add(key(w.el, w.kind)); const el = w.el; const fg = parseColor(css(el).color) || [0, 0, 0, 1]; const under = solidBehind(el.parentElement || el);
+          const tint = lum(under) > 0.5 ? `rgba(${fg.slice(0, 3).map(Math.round).join(',')},0.12)` : 'rgba(255,255,255,0.16)';
+          const keep = ['background-color', 'padding', 'border-radius', 'box-decoration-break', '-webkit-box-decoration-break'].map(k => [k, el.style.getPropertyValue(k), el.style.getPropertyPriority(k)]);
+          el.style.setProperty('background-color', tint, 'important'); el.style.setProperty('padding', '.05em .35em', 'important'); el.style.setProperty('border-radius', '.3em', 'important'); el.style.setProperty('box-decoration-break', 'clone', 'important'); el.style.setProperty('-webkit-box-decoration-break', 'clone', 'important');
+          record(el, 'text', { chip: tint }, `link chip ${tint} (marks the link by shape, not colour alone; an underline also works)`, 'chip');
+          state.autoFixes.push({ el, ctl: 'text', sub: 'chip', what: 'link chip (shape, not colour alone)', undo: () => keep.forEach(([k, v, pr]) => { el.style.removeProperty(k); if (v) el.style.setProperty(k, v, pr); }) }); did = true;
         }
         if (w.kind === 'measure' && w.long && !w.el.__jigSetMaxCols && !seen.has(key(w.el, w.kind))) {
           seen.add(key(w.el, w.kind)); let el = w.el; while (el.parentElement && /^inline/.test(css(el).display) && el.parentElement !== document.body) el = el.parentElement;   // max-width does nothing on an inline span: cap its block
@@ -2363,6 +2427,7 @@
   // ------------------------------------------------------------ device preview
   let deviceEl = null;
   function openDevice(id) {
+    hud.classList.add('jig-frame');
     closeDevice();
     const d = DEVICES.find(x => x.id === id); if (!d) return;
     state.device = d; deselect();
@@ -2395,6 +2460,7 @@
     const back = $('#jig-device-menu .back'); if (back) back.hidden = !d;
   }
   function closeDevice() {
+    hud.classList.remove('jig-frame');
     if (deviceEl) { deviceEl.remove(); deviceEl = null; }
     state.device = null; syncDeviceBtn(); state.frame.warnings = []; paintAX();
     if (state.grid) { gridEl.hidden = false; drawGrid(); }
@@ -2410,7 +2476,7 @@
     resolveFoundation();
     document.body.append(gridEl, badge, toolbar);
     const dev = DEVICES.find(d => d.id === DEVICE);
-    state.bp = dev ? dev.bp : (window.innerWidth <= (state.F.breakpoints && state.F.breakpoints.phone || 480) + 40 ? 'phone' : 'desktop');
+    state.bp = dev ? dev.bp : (window.innerWidth <= 640 ? 'phone' : 'desktop');   // the same line the phone drawer uses; a 440px iPhone is a phone
     if (state.bp === 'phone') {
       // phones get their own grid; the desktop one is kept for the patch header
       const G = state.F.grid; const P = G.phone || { columns: 4, gutter: 16, margin: 16 };
@@ -2444,9 +2510,9 @@
     }
     document.body.append(hud);
     on(window, 'message', e => { if (e.data && e.data.jig === 'frame') { state.frame = { changes: e.data.changes || [], warnings: e.data.warnings || [], device: e.data.device, bp: e.data.bp }; renderHUD(); } });
-    $('#jig-min-btn').onclick = e => { e.stopPropagation(); hud.classList.toggle('collapsed'); $('#jig-min-btn').textContent = hud.classList.contains('collapsed') ? '+' : '–'; };
+    $('#jig-min-btn').onclick = e => { e.stopPropagation(); hud.classList.toggle('jig-collapsed'); $('#jig-min-btn').textContent = hud.classList.contains('jig-collapsed') ? '+' : '–'; };
     // changes / notes fold shut by default; the state is remembered for the session
-    $$('h6.fold', hud).forEach(h => { const body = $('#jig-' + (h.dataset.fold === 'warn' ? 'warn' : 'changes')); const key = 'jig-fold-' + h.dataset.fold; const open = safeGet(key) === '1'; body.hidden = !open; h.setAttribute('aria-expanded', open ? 'true' : 'false');
+    $$('h6.fold', hud).forEach(h => { const body = $('#jig-' + h.dataset.fold); const key = 'jig-fold-' + h.dataset.fold; const open = safeGet(key) === '1'; body.hidden = !open; h.setAttribute('aria-expanded', open ? 'true' : 'false');
       h.onclick = () => { const o = body.hidden; body.hidden = !o; h.setAttribute('aria-expanded', o ? 'true' : 'false'); safeSet(key, o ? '1' : '0'); }; });
     const devBtn = $('#jig-device-btn'), devMenu = $('#jig-device-menu');
     const showDevMenu = show => { devMenu.hidden = !show; devBtn.setAttribute('aria-expanded', show ? 'true' : 'false'); };
@@ -2469,9 +2535,9 @@
     $$('[data-jig-toggle]', hud).forEach(b => b.onclick = () => { const id = b.dataset.jigToggle; if (state.jigs.has(id)) state.jigs.delete(id); else state.jigs.add(id); if (welcome && id !== 'ax') welcome.hidden = true; applyJigs(); });
     applyJigs();
     $('#jig-grid-btn').onclick = () => toggleGrid();
-    const setAdv = on => { hud.classList.toggle('advanced', on); $('#jig-adv-btn').classList.toggle('on', on); safeSet('jig-advanced', on ? '1' : '0'); };
+    const setAdv = on => { hud.classList.toggle('jig-advanced', on); $('#jig-adv-btn').classList.toggle('on', on); safeSet('jig-advanced', on ? '1' : '0'); };
     setAdv(safeGet('jig-advanced') === '1');
-    $('#jig-adv-btn').onclick = () => setAdv(!hud.classList.contains('advanced'));
+    $('#jig-adv-btn').onclick = () => setAdv(!hud.classList.contains('jig-advanced'));
     const colSel = $('#jig-cols-sel'); const colOpts = Array.from(new Set([2, 3, 4, 5, 6, 8, 10, 12, 16, state.F.grid.columns])).sort((a, b) => a - b);
     colSel.innerHTML = colOpts.map(n => `<option value="${n}"${n === state.F.grid.columns ? ' selected' : ''}>${n} col</option>`).join('');
     const origCols = state.F.grid.columns;
@@ -2499,11 +2565,17 @@
     $('#jig-axmd').onclick = async () => { const r = await copyText(reportMarkdown()); const b = $('#jig-axmd'); const t = b.textContent; b.textContent = r === 'ok' ? 'Copied' : 'Press ⌘C'; setTimeout(() => (b.textContent = t), 1600); };
 
     // HUD drag
-    let d = null; const hdr = $('header', hud);
-    on(hdr, 'pointerdown', e => { if (e.target.closest('.min')) return; d = { x: e.clientX - hud.offsetLeft, y: e.clientY - hud.offsetTop }; hdr.setPointerCapture(e.pointerId); });
-    on(hdr, 'pointermove', e => { if (!d || window.innerWidth <= 640) return; hud.style.left = `${e.clientX - d.x}px`; hud.style.top = `${e.clientY - d.y}px`; hud.style.right = 'auto'; });
-    on(hdr, 'pointerup', e => { if (e.target.closest('.min')) { d = null; return; } const moved = d && (Math.abs(e.clientX - d.x - hud.offsetLeft) > 4 || Math.abs(e.clientY - d.y - hud.offsetTop) > 4); d = null; if (window.innerWidth <= 640 && !moved) hud.classList.toggle('collapsed'); });
-    if (window.innerWidth <= 640) hud.classList.add('collapsed');
+    let d = null; const hdr = $('header', hud); const grip = $('.hint', hud);
+    // the panel can be dragged by its title bar or by the hint strip at the bottom, and its title bar never leaves the screen
+    const keepOnScreen = (left, top) => { const r = hud.getBoundingClientRect(); hud.style.left = `${clamp(left, 80 - r.width, window.innerWidth - 80)}px`; hud.style.top = `${clamp(top, 0, Math.max(0, window.innerHeight - 44))}px`; hud.style.right = 'auto'; };
+    [hdr, grip].forEach(h => {
+      if (!h) return;
+      on(h, 'pointerdown', e => { if (e.target.closest('.min')) return; d = { x: e.clientX - hud.offsetLeft, y: e.clientY - hud.offsetTop, sx: e.clientX, sy: e.clientY }; h.setPointerCapture(e.pointerId); });
+      on(h, 'pointermove', e => { if (!d || window.innerWidth <= 640) return; keepOnScreen(e.clientX - d.x, e.clientY - d.y); });
+      on(h, 'pointerup', e => { if (e.target.closest('.min')) { d = null; return; } const moved = d && (Math.abs(e.clientX - d.sx) > 4 || Math.abs(e.clientY - d.sy) > 4); d = null; if (h === hdr && window.innerWidth <= 640 && !moved) hud.classList.toggle('jig-collapsed'); });
+    });
+    on(window, 'resize', () => { if (window.innerWidth > 640 && hud.style.top) keepOnScreen(hud.offsetLeft, hud.offsetTop); });
+    if (window.innerWidth <= 640) hud.classList.add('jig-collapsed');
     // first scan once visible images are in; lazy images below the fold never load until scrolled, so never wait on them, and never wait more than 2.5s
     const wn0 = $('#jig-wn-n'); if (wn0) { wn0.textContent = '…'; wn0.title = 'scanning'; }
     const imgs = $$('img').filter(i => !i.complete && i.loading !== 'lazy' && i.getBoundingClientRect().top < window.innerHeight * 1.5);

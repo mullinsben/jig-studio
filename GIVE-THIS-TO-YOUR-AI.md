@@ -62,6 +62,8 @@ Scrims (content protection for text over images). Implement each as a class on t
 @media (max-width: 900px) { .scrim-glass > .scrim-panel { backdrop-filter: none; -webkit-backdrop-filter: none; background: rgba(10,10,12,.55); } }
 ```
 
+An `overlay` field (`{ "pseudo": "::before", "color": "rgb(0,0,0)", "from": 0.3, "to": 0.4 }`) means the section already darkens its photo with a pseudo-element layer (page builders do this) and the jig made that layer darker so the text on it passes. Change the existing layer's opacity in the theme or builder setting (Bold, Elementor and Divi all have an "overlay" or "background overlay" opacity control on the section); in CSS it's the `background-color` alpha of `selector::before`. Don't add a new layer and don't recolour the text.
+
 `tint` and `glass` need the overlay's children wrapped in a `.scrim-panel` so the panel hugs the text instead of covering the whole image; the jig does that wrap in the browser, you do it in source.
 | `button` | `size`, `variant`, `height` | Swap the size class (`btn-sm` → `btn-lg`) and/or variant class using the foundation's `classPrefix`. Only the keys present changed. On an inferred site there are no classes yet: `height` plus the measured padding/font in the proposed foundation's `buttons.measured` tell you what the size means; create the classes, then apply them. Auto may also send `minHeight` / `minWidth` (a tap-target floor: add `min-height` to the button rule, keeping the label centred) and `whiteSpace: nowrap` (the label wrapped after the button grew; keep it on one line). |
 | `spacing` | `paddingY` | Set the section's `padding-block` to `var(--space-<paddingY>)`. |
