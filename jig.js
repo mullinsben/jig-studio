@@ -1223,7 +1223,9 @@
       const rr = row.getBoundingClientRect(); flagged.push(row); n++;
       const box = document.createElement('div'); box.className = 'offgrid';
       box.style.cssText = `left:${Math.round(rr.left - gr.left)}px;top:${Math.round(rr.top - gr.top)}px;width:${Math.round(rr.width)}px;height:${Math.round(rr.height)}px`;
-      box.innerHTML = `<span>own layout · ${side.map(k => Math.round(k.width)).join(' | ')}px · not on the grid</span>`; gridEl.appendChild(box);
+      const ws = side.map(k => Math.round(k.width)); const uniq = Array.from(new Set(ws));   // a carousel lists twenty identical slides: say "597px × 20"
+      const desc = uniq.length === 1 && ws.length > 2 ? `${uniq[0]}px × ${ws.length}` : (ws.length > 4 ? uniq.slice(0, 4).join(' | ') + ' …' : ws.join(' | ')) + 'px';
+      box.innerHTML = `<span>own layout · ${desc} · not on the grid</span>`; gridEl.appendChild(box);
     }
   }
   function toggleGrid(force) {
@@ -1411,12 +1413,20 @@
     $$('.tag', axTags).forEach(t => { const r = t.__el.getBoundingClientRect(); const off = r.top < 22; t.style.top = `${Math.max(0, off ? r.bottom + 4 : r.top - 20)}px`; t.style.left = `${Math.max(0, r.left)}px`; t.hidden = r.width === 0 || r.bottom < 0 || r.top > window.innerHeight; });
   }
   function imageBehind(t) {
+    const tr = t.getBoundingClientRect(); const ta = Math.max(1, tr.width * tr.height);
+    const overlap = r => Math.max(0, Math.min(tr.right, r.right) - Math.max(tr.left, r.left)) * Math.max(0, Math.min(tr.bottom, r.bottom) - Math.max(tr.top, r.top)) / ta;
     let n = t.parentElement;
     while (n && n !== document.body) {
-      const img = Array.from(n.children).find(c => c.tagName === 'IMG' && c !== t && !c.contains(t));
+      // an <img> counts only if it actually sits under the words (an avatar beside a byline doesn't)
+      const img = Array.from(n.children).find(c => c.tagName === 'IMG' && c !== t && !c.contains(t) && overlap(c.getBoundingClientRect()) >= 0.5);
       if (img && css(n).position !== 'static') return { img, box: n };
-      const bgi = css(n).backgroundImage;
-      if (bgi !== 'none' && /url\(/.test(bgi)) return { img: n, box: n };
+      const c = css(n), bgi = c.backgroundImage;
+      if (bgi !== 'none' && /url\(/.test(bgi)) {
+        // a small no-repeat background is an icon (a bullet, an arrow), not a picture behind the text
+        const pxs = ((c.backgroundSize || '').match(/[\d.]+px/g) || []).map(parseFloat); const icon = /no-repeat/.test(c.backgroundRepeat) && pxs.length > 0 && pxs.every(v => v <= 96);   // 'auto 16px' is an icon too
+        if (!icon && overlap(n.getBoundingClientRect()) >= 0.5) return { img: n, box: n };
+      }
+      const bgc = parseColor(c.backgroundColor); if (bgc && bgc[3] >= 0.95) return null;   // text sits on a solid colour: nothing further up is behind it
       n = n.parentElement;
     }
     return null;
