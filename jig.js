@@ -215,24 +215,25 @@
       const L0 = A.left + (gridInset ? gridInset.l : 0), W = A.width - (gridInset ? gridInset.l + gridInset.r : 0);
       // page-level rows only: siblings side by side, each a real block (≥15% of the content width). A thumbnail beside its text is a card's layout, not the page's.
       const cbox = k => { const r = k.getBoundingClientRect(), c = css(k); const pl = px(c.paddingLeft) + px(c.borderLeftWidth), pr = px(c.paddingRight) + px(c.borderRightWidth); return { left: r.left + pl, right: r.right - pr, width: r.width - pl - pr, top: r.top, bottom: r.bottom, height: r.height }; };
-      const Lset = new Set(), Rset = new Set(), gaps = [];
+      const Lset = new Set(), Rset = new Set(), gaps = [], pairs = new Map();   // pairs: right edge + the next block's left edge, one gutter apart; the strongest evidence a grid leaves
       best.els.forEach(c => $$('*', c).forEach(row => {
         if (row.children.length < 2 || row.closest('#jig-hud, #jig-axtags, .jig-tb')) return;
         const ks = Array.from(row.children).filter(visible).map(cbox).filter(k => k.width >= W * 0.15 && k.height >= 60 && k.left >= L0 - 2 && k.right <= L0 + W + 2);
         const side = ks.filter((k, i) => ks.some((o, j) => j !== i && o.top < k.bottom - 10 && k.top < o.bottom - 10 && (o.left >= k.right - 1 || o.right <= k.left + 1)));
         if (side.length < 2) return;
-        side.sort((x, y) => x.left - y.left).forEach((k, i) => { Lset.add(Math.round(k.left)); Rset.add(Math.round(k.right)); const nx = side[i + 1]; if (nx && Math.abs(nx.top - k.top) < 40) { const g = Math.round(nx.left - k.right); if (g >= 4 && g <= 48) gaps.push(g); } });
+        side.sort((x, y) => x.left - y.left).forEach((k, i) => { Lset.add(Math.round(k.left)); Rset.add(Math.round(k.right)); const nx = side[i + 1]; if (nx && Math.abs(nx.top - k.top) < 40) { const g = Math.round(nx.left - k.right); if (g >= 4 && g <= 48) { gaps.push(g); const pk = Math.round(k.right) + ',' + Math.round(nx.left); pairs.set(pk, (pairs.get(pk) || 0) + 1); } } });
       }));
       const Ls = Array.from(Lset), Rs = Array.from(Rset);   // each distinct edge counts once: twelve identical teasers don't outvote the page
       // fit gutter and column count together; keep the simplest grid (fewest columns) that lands as many real edges on lines as the best fit does
       const edges = Ls.map(x => x - L0).concat(Rs.map(x => x - L0)).filter(e => e > 2 && e < W - 2);   // the outer edges fit every grid; they prove nothing
       const gapCount = new Map(); gaps.forEach(g => gapCount.set(g, (gapCount.get(g) || 0) + 1));
       const gCands = Array.from(new Set([...gapCount.keys(), 12, 16, 20, 24, 30, 32]));
-      if (edges.length >= 3) {
-        const fits = [];
+      const P = Array.from(pairs).map(([k, n]) => { const [r, l] = k.split(',').map(Number); return { r: r - L0, l: l - L0, w: Math.sqrt(n) }; }).filter(p => p.r > 2 && p.l < W - 2);
+      if (P.length >= 2) {
+        const fits = []; const total = P.reduce((a, p) => a + p.w, 0);
         gCands.forEach(g => [3, 4, 5, 6, 8, 9, 10, 12, 16, 24].forEach(N => { const cw = (W - (N - 1) * g) / N; if (cw < 16) return;
-          const lines = []; for (let i = 1; i < N; i++) { lines.push(i * (cw + g)); lines.push(i * (cw + g) - g); }
-          fits.push({ N, g, hit: edges.filter(e => lines.some(x => Math.abs(x - e) <= 2)).length / edges.length }); }));
+          const pitch = cw + g; const onR = x => { const k = Math.round((x + g) / pitch); return k >= 1 && k < N && Math.abs(k * pitch - g - x) <= 2; }, onL = x => { const k = Math.round(x / pitch); return k >= 1 && k < N && Math.abs(k * pitch - x) <= 2; };
+          fits.push({ N, g, hit: P.reduce((a, p) => a + (Math.abs(p.l - p.r - g) <= 2 && onR(p.r) && onL(p.l) ? p.w : 0), 0) / total }); }));
         const top = Math.max(...fits.map(f => f.hit));
         if (top >= 0.3) {
           const pick = fits.filter(f => f.hit >= top - 0.03).sort((a, b) => a.N - b.N || (gapCount.get(b.g) || 0) - (gapCount.get(a.g) || 0) || b.hit - a.hit)[0];
@@ -1120,8 +1121,9 @@
       // pages with an offset or positioned body put the overlay somewhere else than measured: correct by what actually landed
       const off = cols.getBoundingClientRect().left - r.left; if (Math.abs(off) > 0.5) cols.style.marginLeft = `${Math.round(r.left - off)}px`;
       gridEl.style.height = `${document.documentElement.scrollHeight}px`;
-      const meta = document.createElement('b'); meta.className = 'gmeta'; meta.textContent = gridFit != null && gridFit >= 30 ? `${G.columns} col · ${G.gutter}px gutter · measured · ${gridFit}% of edges on lines` : `${G.columns} col · ${G.gutter}px gutter · assumed (not enough side-by-side content to measure)`; cols.appendChild(meta);
-      markOffGrid(cols); return;
+      const meta = document.createElement('b'); meta.className = 'gmeta'; meta.textContent = gridFit != null && gridFit >= 30 ? `${G.columns} col · ${G.gutter}px gutter · measured · ${gridFit}% of column gaps on lines` : `${G.columns} col · ${G.gutter}px gutter · assumed (not enough side-by-side content to measure)`; cols.appendChild(meta);
+      if (gridFit != null && gridFit >= 30) markOffGrid(cols);   // outlines only mean something against a measured grid
+      return;
     } else { cols.style.maxWidth = `${G.maxWidth}px`; cols.style.paddingInline = `${Math.min(G.margin, Math.floor(window.innerWidth * 0.06))}px`; }
     for (let i = 0; i < G.columns; i++) cols.appendChild(document.createElement('i'));
     gridEl.appendChild(cols);
