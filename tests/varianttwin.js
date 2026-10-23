@@ -1,0 +1,11 @@
+const { chromium } = require('playwright');
+(async () => { const b = await chromium.launch(); const p = await b.newPage({ viewport: { width: 1440, height: 900 } }); p.on('pageerror', e => console.log('ERR', e.message));
+await p.goto('http://localhost:8766/lab/capybutz/legacy/index.html?jig', { waitUntil: 'networkidle' }); await p.waitForFunction(() => window.__jig && document.querySelector('#jig-wn-n').textContent !== '…');
+await p.click('#jig-adv-btn'); await p.click('#jig-norm-btn'); await p.waitForTimeout(2500);
+const look = () => p.evaluate(() => [...document.querySelectorAll('#content .left p a')].slice(0, 2).map(a => { const c = getComputedStyle(a); return a.textContent.trim() + ': ' + c.backgroundColor + ' ' + c.fontWeight + ' ' + c.color; }));
+console.log('after auto', await look());
+await p.evaluate(() => { const faq = [...document.querySelectorAll('#content .left p a')][1]; faq.__jigSetVariant('primary'); });
+await p.waitForTimeout(400); console.log('FAQ → primary', await look());
+await p.evaluate(() => { const faq = [...document.querySelectorAll('#content .left p a')][1]; faq.__jigReset(); });
+await p.waitForTimeout(300); console.log('reset', await look());
+await b.close(); })();

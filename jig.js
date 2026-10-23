@@ -182,7 +182,7 @@
     const names = hs.length === 1 ? ['md'] : hs.length === 2 ? ['sm', 'lg'] : ['sm', 'md', 'lg', 'xl', '2xl'];
     const sizes = hs.slice(0, 5).map((c, i) => { const ex = els.find(e => Math.abs(e.getBoundingClientRect().height - c.px) <= c.px * 0.12) || els[0]; const cs = css(ex); return { token: names[i], h: c.px, padX: Math.round(px(cs.paddingLeft)), padY: Math.round(px(cs.paddingTop)), fs: Math.round(px(cs.fontSize)), n: c.n }; });
     const vmap = new Map();
-    els.forEach(e => { const c = css(e); const k = `${c.backgroundColor}|${c.color}|${c.borderTopColor}`; const v = vmap.get(k) || { bg: c.backgroundColor, fg: c.color, border: px(c.borderTopWidth) ? c.borderTopColor : 'transparent', n: 0 }; v.n++; vmap.set(k, v); });
+    els.forEach(e => { const c = css(e); const k = `${c.backgroundColor}|${c.color}|${c.borderTopColor}`; const v = vmap.get(k) || { bg: c.backgroundColor, fg: c.color, border: px(c.borderTopWidth) ? c.borderTopColor : 'transparent', fw: c.fontWeight, n: 0 }; v.n++; vmap.set(k, v); });
     const vnames = ['primary', 'secondary', 'tertiary', 'ghost', 'link'];
     const weight = v => { const bg = parseColor(v.bg) || [255, 255, 255, 0], fg = parseColor(v.fg) || [0, 0, 0, 1]; const mx = Math.max(bg[0], bg[1], bg[2]), mn = Math.min(bg[0], bg[1], bg[2]); const sat = mx ? (mx - mn) / mx : 0; const dark = 1 - lum(bg); return (bg[3] < 0.1 ? 0 : 1) + sat + dark * 0.8 + (lum(fg) > 0.6 ? 0.5 : 0); };
     const variants = Array.from(vmap.values()).sort((a, b) => weight(b) - weight(a) || b.n - a.n).slice(0, 5).map((v, i) => ({ token: vnames[i], ...v }));
@@ -293,11 +293,20 @@
     if (!F.grid) F.grid = inferGrid();
     if (!F.protect) F.protect = DEFAULT_FOUNDATION.protect;
   }
+  // when auto snapped the page to a medium or strict scale, that scale is the proposal: one scale per patch, never two that argue
+  function autoScale() {
+    if (!state.normalize || !state.normalizeRes || state.normalizeRes === '32') return null;
+    const { typeSteps, spaceSteps } = quantizeScales(state.normalizeRes); const names = ['xs', 'sm', 'md', 'lg', 'xl', '2xl', '3xl', '4xl', '5xl'];
+    const ts = Array.from(new Set(typeSteps)).sort((a, b) => a - b); const mdAt = Math.max(0, ts.indexOf(ts.reduce((b, v) => Math.abs(v - 16) < Math.abs(b - 16) ? v : b, ts[0])));
+    const shift = Math.max(0, 2 - mdAt);   // keep md on the body size
+    return { type: ts.map((v, i) => ({ token: names[Math.min(names.length - 1, i + shift)], px: v })), space: spaceSteps.map(v => ({ token: String(v), px: v })) };
+  }
   function proposedTokens() {
     // a :root block + a foundation file the site could adopt
-    const F = state.F; const lines = [':root {'];
-    F.type.steps.forEach(st => lines.push(`  --text-${st.token}: ${st.px}px;${st.observed && st.observed.length > 1 ? `   /* collapsed ${st.observed.join(', ')} */` : ''}`));
-    F.spacingSteps.forEach(st => lines.push(`  --space-${st.token}: ${st.px}px;${st.observed && st.observed.length > 1 ? `   /* collapsed ${st.observed.join(', ')} */` : ''}`));
+    const F = state.F; const lines = [':root {']; const A = autoScale();
+    if (A) lines.push('  /* auto (' + resName(state.normalizeRes) + ') snapped the page to these steps; manual type changes below give px, map each to the nearest step */');
+    (A ? A.type : F.type.steps).forEach(st => lines.push(`  --text-${st.token}: ${st.px}px;${st.observed && st.observed.length > 1 ? `   /* collapsed ${st.observed.join(', ')} */` : ''}`));
+    (A ? A.space : F.spacingSteps).forEach(st => lines.push(`  --space-${st.token}: ${st.px}px;${st.observed && st.observed.length > 1 ? `   /* collapsed ${st.observed.join(', ')} */` : ''}`));
     lines.push('}');
     return { css: lines.join('\n'), json: JSON.stringify(exportFoundation(), null, 2) };
   }
@@ -602,7 +611,10 @@
       const SCRIMS = (state.F.protect && state.F.protect.scrims) || ['none', 'gradient', 'tint', 'glass'];
       // jig-mode only: wrap the overlay's children in a panel so tint/glass hug the text, not the whole image
       let panel = null;
-      if (isAbs) {
+      // a site that already implements the scrim (a .scrim-panel inside a .scrim-* overlay) keeps its own markup: wrapping it would break selectors like .scrim-tint > .scrim-panel
+      const own = isAbs && el.children.length === 1 && /(^|\s)scrim-panel(\s|$)/.test(el.children[0].className) ? el.children[0] : null;
+      if (own) { panel = own; const m = (el.className.match(/(?:^|\s)scrim-(gradient|tint|glass)(?:\s|$)/) || [])[1]; if (m) scrim = m; }
+      else if (isAbs) {
         panel = document.createElement('div'); panel.className = 'jig-scrim-panel';
         while (el.firstChild) panel.appendChild(el.firstChild);
         // a block overlay centred by text-align needs the panel centred too; flex overlays do it through align-items: inherit
@@ -778,7 +790,7 @@
     const sizes = B.sizes, variants = B.variants;
     let si = sizes.indexOf(nearest(sizes, h0, x => x.h)); const si0 = si;
     const k0 = `${c0.backgroundColor}|${c0.color}`; let vi = Math.max(0, variants.findIndex(v => `${v.bg}|${v.fg}` === k0)); const vi0 = vi;
-    const orig = { p: el.style.padding, fs: el.style.fontSize, mh: el.style.minHeight, bg: el.style.background, c: el.style.color, bc: el.style.borderColor };
+    const orig = { p: el.style.padding, fs: el.style.fontSize, mh: el.style.minHeight, bg: el.style.background, c: el.style.color, bc: el.style.borderColor, fw: el.style.fontWeight, bw: el.style.borderWidth, bs: el.style.borderStyle };
     el.__jigToolbar = () => [btn('−', () => cyc('size', -1)), chip(() => sizes[si].token), btn('+', () => cyc('size', 1)), sep(), btn('◐', () => cyc('variant', 1)), chip(() => variants[vi].token)];
     function apply() {
       const sz = sizes[si], v = variants[vi];
@@ -787,7 +799,14 @@
         const d = css(el).display; if (!/flex|grid/.test(d)) el.style.setProperty('display', d === 'block' ? 'flex' : 'inline-flex', 'important');
         el.style.setProperty('align-items', 'center', 'important'); el.style.setProperty('justify-content', 'center', 'important'); el.style.setProperty('box-sizing', 'border-box', 'important');
       } else { ['padding', 'font-size', 'line-height', 'display', 'align-items', 'justify-content', 'box-sizing', 'min-height'].forEach(k => el.style.removeProperty(k)); Object.assign(el.style, { padding: orig.p, fontSize: orig.fs }); }
-      if (vi !== vi0) { el.style.background = v.bg; el.style.color = v.fg; el.style.borderColor = v.border; } else Object.assign(el.style, { background: orig.bg, color: orig.c, borderColor: orig.bc });
+      if (vi !== vi0) {
+        // become a twin of a live button of that variant (it carries any contrast fix auto gave it); else the measured look, weight included
+        const twin = $$('.jig-el[data-jig-ctl="button"]').find(o => o !== el && o.__jigVariant && o.__jigVariant() === v.token);
+        const tc = twin ? css(twin) : null;
+        el.style.background = tc ? tc.backgroundColor : v.bg; el.style.color = tc ? tc.color : v.fg;
+        el.style.borderColor = tc ? tc.borderTopColor : v.border; if (tc) { el.style.borderWidth = tc.borderTopWidth; el.style.borderStyle = tc.borderTopStyle; }
+        el.style.fontWeight = tc ? tc.fontWeight : (v.fw || '');
+      } else Object.assign(el.style, { background: orig.bg, color: orig.c, borderColor: orig.bc, fontWeight: orig.fw, borderWidth: orig.bw, borderStyle: orig.bs });
       setBadge(el, `size ${sz.token} (${sz.h}px) · ${v.token}`);
     }
     function cyc(what, d) {
@@ -1614,7 +1633,7 @@
       const g = normalizeGroups();
       const qs = quantizeScales(state.normalizeRes || '16');
       if ((state.autoFixes || []).length) { lines.push('', `# auto fixes · ${state.autoFixes.length}`, '', 'Protection failures fixed with the same controls a person would use; each is also listed under changes above with its values.', ''); { const g = new Map(); state.autoFixes.forEach(f => { const k = f.what.replace(/\(contrast [\d.]+ → [\d.]+\)/, '').trim(); if (!g.has(k)) g.set(k, []); g.get(k).push(f); }); g.forEach((l, k) => lines.push(l.length > 1 ? `- ${l.length} × ${k} (first: ${nameOf(l[0].el)})` : `- ${nameOf(l[0].el)}: ${l[0].what}`)); } }
-      lines.push('', `# auto · ${resName(state.normalizeRes || '16')} · ${g.reduce((a, x) => a + x.els.length, 0)} snap${g.reduce((a, x) => a + x.els.length, 0) === 1 ? "" : "s"} in ${g.length} group${g.length === 1 ? "" : "s"}`, '', `Every font-size, padding, margin, and gap on the page snapped to the nearest step, like notes to a grid. Type steps: ${qs.typeSteps.join(', ')}px. Spacing steps: ${qs.spaceSteps.join(', ')}px. Apply as rule changes, not inline styles: find the rule that sets each value and change it; where several elements share a group they almost certainly share a rule.`, '');
+      lines.push('', `# auto · ${resName(state.normalizeRes || '16')} · ${g.reduce((a, x) => a + x.els.length, 0)} snap${g.reduce((a, x) => a + x.els.length, 0) === 1 ? "" : "s"} in ${g.length} group${g.length === 1 ? "" : "s"}`, '', `Font sizes, paddings, margins and gaps snapped to the nearest step, like notes to a grid. Deliberately left alone: buttons and links (their padding is their tap target), images, the jig's own wrappers, margins set to auto, and any type snap that would have made a row wrap. Small text only ever rounds up; ties round up. Type steps: ${qs.typeSteps.join(', ')}px. Spacing steps: ${qs.spaceSteps.join(', ')}px. Apply as rule changes, not inline styles: find the rule that sets each value and change it; where several elements share a group they almost certainly share a rule.`, '');
       g.forEach(x => lines.push(`- ${x.prop}: ${x.from}px → ${x.to}px on ${x.els.length} element${x.els.length === 1 ? '' : 's'}`));
       g.forEach(x => json.push({ op: 'quantize', prop: x.prop, from: x.from, to: x.to, count: x.els.length, els: x.els.slice(0, 20), ...(x.els.length > 20 ? { more: x.els.length - 20 } : {}) }));
     }
@@ -1668,13 +1687,22 @@
       if (!(cur >= min && cur <= max)) return;
       let to = nearest(steps, cur);
       if (prop === 'font-size' && cur < 14 && to < cur) to = steps.find(x => x >= cur) || to;   // never shrink text that's already small
+      if (prop === 'font-size') { const up = steps.find(x => x > cur), dn = steps.slice().reverse().find(x => x < cur); if (up != null && dn != null && Math.abs((up - cur) - (cur - dn)) < 0.01) to = up; }   // type ties round up, toward readable
       if (Math.abs(to - cur) < 0.1) return;   // sub-pixel drift counts; it's the most common kind
       out.push({ el, prop, from: Math.round(cur * 10) / 10, to, prev: el.style.getPropertyValue(prop) || '' });
       el.style.setProperty(prop, to + 'px', 'important');
     };
     // 1. type: elements with their own text (and their same-size riders, so headline links follow their headings)
     const texty = d => Array.from(d.childNodes).some(n => n.nodeType === 3 && n.textContent.trim().length > 1);
-    $$('body *').forEach(el => { if (skipEl(el) || !texty(el)) return; snap(el, 'font-size', px(css(el).fontSize), typeSteps, 8, 200); });
+    const texts = $$('body *').filter(el => !skipEl(el) && texty(el));
+    const rowsBefore = new Map(); texts.forEach(el => { const p = el.parentElement; if (p && !rowsBefore.has(p)) rowsBefore.set(p, p.getBoundingClientRect().height); });
+    const typeStart = out.length;
+    texts.forEach(el => snap(el, 'font-size', px(css(el).fontSize), typeSteps, 8, 200));
+    // a snap that makes a row wrap (nine nav links that fit at 13px don't at 15px) made things worse: put that row back
+    out.slice(typeStart).filter(n => n.prop === 'font-size' && n.to > n.from).map(n => n.el.parentElement).filter((p, i, a) => p && a.indexOf(p) === i).forEach(p => {
+      const h0 = rowsBefore.get(p); const h1 = p.getBoundingClientRect().height; if (!h0 || h1 < h0 * 1.35 || h1 - h0 < 10) return;
+      for (let i = out.length - 1; i >= typeStart; i--) { const n = out[i]; if (n.prop === 'font-size' && n.el.parentElement === p && n.to > n.from) { n.el.style.removeProperty('font-size'); if (n.prev) n.el.style.setProperty('font-size', n.prev); out.splice(i, 1); } }
+    });
     // 2. space: paddings, margins, gaps on block-ish boxes (positive, px-sized; negative and huge values are layout, not rhythm)
     $$('body *').forEach(el => {
       if (skipEl(el)) return; const c = css(el); if (!/block|flex|grid|table|list-item/.test(c.display) || c.position === 'fixed') return;
@@ -1994,10 +2022,10 @@
   }
   function flashBtn(b, msg) { const t = b.textContent; b.textContent = msg; setTimeout(() => (b.textContent = t), 1600); }
   function exportFoundation() {
-    const F = state.F; const steps = F.type.steps || [];
+    const F = state.F; const A = autoScale(); const steps = A ? A.type : (F.type.steps || []);
     const G = F.grid.desktop ? { ...F.grid.desktop, maxWidth: F.grid.maxWidth, phone: { columns: F.grid.columns, gutter: F.grid.gutter, margin: F.grid.margin } } : { columns: F.grid.columns, gutter: F.grid.gutter, margin: F.grid.margin, maxWidth: F.grid.maxWidth, phone: F.grid.phone || { columns: 4, gutter: 16, margin: 16 } };
     return { name: F.name, version: 1, grid: G, breakpoints: F.breakpoints || DEFAULT_FOUNDATION.breakpoints,
-      spacing: (F.spacingSteps || []).map(x => x.px), type: { ramp: steps.map(x => x.token), sizes: Object.fromEntries(steps.map(x => [x.token, x.px])) },
+      spacing: (A ? A.space : (F.spacingSteps || [])).map(x => x.px), type: { ramp: steps.map(x => x.token), sizes: Object.fromEntries(steps.map(x => [x.token, x.px])) },
       buttons: F.buttons.mode === 'measured' ? { sizes: F.buttons.sizes.map(x => x.token), variants: F.buttons.variants.map(x => x.token), classPrefix: 'btn-', measured: { sizes: F.buttons.sizes, variants: F.buttons.variants } } : F.buttons, protect: F.protect };
   }
 
