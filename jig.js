@@ -212,6 +212,19 @@
         const l = mode(wide.map(r => Math.round(r.left)))[0], rr = mode(wide.map(r => Math.round(r.right)))[0];
         if (rr - l >= A.width * 0.7) gridInset = { l: l - A.left, r: A.left + A.width - rr };
       }
+      // better evidence for the extent: where full-width rows of content start and end. Rows covering under 70% of the box (inner sections) don't vote.
+      { const cb0 = k => { const r = k.getBoundingClientRect(), c = css(k); const pl = px(c.paddingLeft) + px(c.borderLeftWidth), pr = px(c.paddingRight) + px(c.borderRightWidth); return { left: r.left + pl, right: r.right - pr, width: r.width - pl - pr, top: r.top, bottom: r.bottom, height: r.height }; };
+        const starts = [], ends = [];
+        best.els.forEach(c => $$('*', c).forEach(row => {
+          if (row.children.length < 2 || row.closest('#jig-hud, #jig-axtags, .jig-tb')) return;
+          const ks = Array.from(row.children).filter(visible).map(cb0).filter(k => k.width >= A.width * 0.15 && k.height >= 60 && k.left >= A.left - 2 && k.right <= A.left + A.width + 2);
+          const side = ks.filter((k, i) => ks.some((o, j) => j !== i && o.top < k.bottom - 10 && k.top < o.bottom - 10 && (o.left >= k.right - 1 || o.right <= k.left + 1)));
+          if (side.length < 2) return; const st = Math.round(Math.min(...side.map(k => k.left))), en = Math.round(Math.max(...side.map(k => k.right)));
+          if (en - st >= A.width * 0.7) { starts.push(st); ends.push(en); }
+        }));
+        const modeBy = (arr, outer) => { const m = new Map(); arr.forEach(v => m.set(v, (m.get(v) || 0) + 1)); return Array.from(m).sort((a, b) => b[1] - a[1] || (outer === 'max' ? b[0] - a[0] : a[0] - b[0]))[0]; };   // ties go to the outermost edge
+        if (starts.length >= 2) { const l = modeBy(starts, 'min')[0], rr = modeBy(ends, 'max')[0]; if (rr - l >= A.width * 0.6) gridInset = { l: l - A.left, r: A.left + A.width - rr }; }
+      }
       const L0 = A.left + (gridInset ? gridInset.l : 0), W = A.width - (gridInset ? gridInset.l + gridInset.r : 0);
       // page-level rows only: siblings side by side, each a real block (≥15% of the content width). A thumbnail beside its text is a card's layout, not the page's.
       const cbox = k => { const r = k.getBoundingClientRect(), c = css(k); const pl = px(c.paddingLeft) + px(c.borderLeftWidth), pr = px(c.paddingRight) + px(c.borderRightWidth); return { left: r.left + pl, right: r.right - pr, width: r.width - pl - pr, top: r.top, bottom: r.bottom, height: r.height }; };
@@ -1253,7 +1266,15 @@
     });
     // 1b. visual hierarchy: an h2 rendered larger than the page h1
     const h1 = hs.find(h => h.tagName === 'H1');
-    if (h1) { const h1px = px(css(h1).fontSize); hs.filter(h => h.tagName === 'H2' && px(css(h).fontSize) > h1px).forEach(h => W.push({ kind: 'hierarchy', el: h, msg: `h2 renders at ${r1(px(css(h).fontSize))}px, larger than the h1 (${r1(h1px)}px)` })); }
+    if (h1) {
+      const h1px = px(css(h1).fontSize); const big = hs.filter(h => h.tagName === 'H2' && px(css(h).fontSize) > h1px);
+      const pv = $$('p, li').filter(t => t.offsetParent && (t.textContent || '').trim().length >= 40 && !t.closest('#jig-hud, #jig-found')).map(t => px(css(t).fontSize)).sort((a, b) => a - b); const body0 = pv.length ? pv[pv.length >> 1] : 16;
+      // a logo or hidden h1 isn't a size reference: the h1 is what's wrong, not every headline on the page
+      const weakH1 = srOnly(h1) || !!h1.querySelector('img, svg, picture') || h1.closest('header, nav, [class*="logo"], [class*="brand"]') || h1px <= body0 * 1.1;
+      if (big.length && (weakH1 || big.length > 3)) { const top = big.slice().sort((a, b) => px(css(b).fontSize) - px(css(a).fontSize))[0];
+        W.push({ kind: 'h1-role', el: h1, msg: `the h1 is ${h1.querySelector('img, svg, picture') || h1.closest('header, nav, [class*="logo"], [class*="brand"]') ? 'the logo/site name' : srOnly(h1) ? 'visually hidden' : 'no bigger than body copy'}; the page's real top heading is an h2 at ${r1(px(css(top).fontSize))}px. Make the main headline the h1, or leave the logo h1 and ignore this.` }); }
+      else big.forEach(h => W.push({ kind: 'hierarchy', el: h, msg: `h2 renders at ${r1(px(css(h).fontSize))}px, larger than the h1 (${r1(h1px)}px)` }));
+    }
     // 1c. a heading that renders no larger than body copy isn't reading as a heading
     const bodyPx = (() => { const ps = $$('p, li, dd, td').filter(t => t.offsetParent && (t.textContent || '').trim().length >= 40 && !t.closest('#jig-hud, #jig-found')); if (!ps.length) return 16; const v = ps.map(t => px(css(t).fontSize)).sort((a, b) => a - b); return v[Math.floor(v.length / 2)]; })();
     const localBody = h => {   // the body text this heading sits with: a following sibling text block, else one inside the same parent, else the page's
@@ -1263,6 +1284,7 @@
       return bodyPx;
     };
     hs.forEach(h => {
+      if (h.querySelector("img, svg, picture") && !(h.textContent || "").trim().replace(/\s+/g, "").length) return;   // a logo heading: its size is the image
       const f = px(css(h).fontSize); const bold = px(css(h).fontWeight) >= 600; const lb = localBody(h);
       const distinct = f > lb + 0.5 && (f >= lb * 1.15 - 0.01 || bold);
       if (!distinct) W.push({ kind: 'hierarchy', el: h, msg: `${h.tagName.toLowerCase()} renders at ${r1(f)}px${bold ? '' : ', regular weight'}, next to body copy at ${r1(lb)}px; it doesn't read as a heading`, small: true, bodyPx: lb });
@@ -1367,7 +1389,7 @@
     state.warnings.forEach(w => { if (!w.el || !w.el.isConnected) return; w.el.classList.add('jig-ax'); byEl.set(w.el, (byEl.get(w.el) || []).concat(w)); });
     byEl.forEach((ws, el) => {
       const tag = document.createElement('div'); tag.className = 'tag'; tag.__el = el;
-      tag.textContent = ws.map(w => w.kind === 'contrast' ? `contrast ${w.value} / ${w.min}` : w.kind === 'tap-target' ? `tap ${w.msg.replace(/.*×(\d+)px.*/, '$1')}px tall` : w.kind === 'alt' ? 'no alt' : w.kind === 'small-text' ? 'small text' : w.kind === 'measure' ? `${Math.round(w.cpl)} cpl` : w.kind === 'button-wrap' ? 'label wraps' : w.kind === 'no-name' ? 'no name' : w.kind === 'overflow' ? 'overflows' : w.kind === 'soft' ? 'soft' : w.kind === 'face' ? 'face cropped' : w.kind).join(' · ');
+      tag.textContent = ws.map(w => w.kind === 'contrast' ? `contrast ${w.value} / ${w.min}` : w.kind === 'tap-target' ? `tap ${w.msg.replace(/.*×(\d+)px.*/, '$1')}px tall` : w.kind === 'alt' ? 'no alt' : w.kind === 'small-text' ? 'small text' : w.kind === 'measure' ? `${Math.round(w.cpl)} cpl` : w.kind === 'button-wrap' ? 'label wraps' : w.kind === 'no-name' ? 'no name' : w.kind === 'overflow' ? 'overflows' : w.kind === 'soft' ? 'soft' : w.kind === 'face' ? 'face cropped' : w.kind === 'h1-role' ? 'h1 is the logo?' : w.kind).join(' · ');
       tag.title = ws.map(w => w.msg).join('\n');
       axTags.appendChild(tag);
     });
@@ -1997,10 +2019,13 @@
         scanProtection(); postToParent();
       });
       on(window, 'message', e => { if (e.data && e.data.jig === 'grid') { if (e.data.columns) { state.F.grid.columns = e.data.columns; if (state.grid) drawGrid(); } toggleGrid(!!e.data.on); } });
-      const imgs0 = $$('img').filter(i => !i.complete);
-      await Promise.all(imgs0.map(i => new Promise(r => { i.onload = i.onerror = r; })));
-      scanProtection();
-      window.__jig = { state, patch: buildPatch, scan: scanProtection, Controls, embed: true };
+      // same rule as the desktop: never wait on lazy images (they never load until scrolled), never more than 2.5s
+      window.__jig = { state, patch: buildPatch, scan: scanProtection, Controls, embed: true };   // up first, so the desktop can replay into us while images load
+      const imgs0 = $$('img').filter(i => !i.complete && i.loading !== 'lazy' && i.getBoundingClientRect().top < window.innerHeight * 1.5);
+      await Promise.race([Promise.all(imgs0.map(i => new Promise(r => { i.addEventListener('load', r, { once: true }); i.addEventListener('error', r, { once: true }); }))), new Promise(r => setTimeout(r, 2500))]);
+      scanProtection(); postToParent();
+      if (document.readyState !== 'complete') on(window, 'load', scanSoon);
+      if (document.fonts && document.fonts.ready) document.fonts.ready.then(scanSoon);
       return;
     }
     document.body.append(hud);

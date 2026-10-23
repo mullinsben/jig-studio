@@ -1,6 +1,6 @@
 const { chromium } = require('playwright');
 (async () => { const b = await chromium.launch();
-for (const u of ['mr2.html', 'mr3.html', 'gw3.html', 'shop.html', 'hier.html', 'blog.html']) { const p = await b.newPage({ viewport: { width: 1414, height: 900 } }); p.on('pageerror', e => console.log('ERR', e.message));
+for (const u of ['mr2.html', 'mr3.html', 'gw3.html', 'shop.html', 'hier.html', 'blog.html', 'ars.html']) { const p = await b.newPage({ viewport: { width: 1414, height: 900 } }); p.on('pageerror', e => console.log('ERR', e.message));
 await p.goto('http://localhost:8777/' + u + '?jig'); await p.waitForFunction(() => window.__jig && document.querySelector('#jig-wn-n').textContent !== '…');
 await p.click('#jig-grid-btn'); await p.waitForTimeout(300);
 console.log(u.padEnd(10), await p.evaluate(() => document.querySelector('#jig-grid .gmeta').textContent + ' | modrows ' + document.querySelectorAll('#jig-grid .modrow').length + ' | regions ' + [...document.querySelectorAll('#jig-grid .region')].map(r => r.textContent).join(', ') + ' | offgrid ' + document.querySelectorAll('#jig-grid .offgrid').length));
