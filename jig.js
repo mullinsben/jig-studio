@@ -193,13 +193,20 @@
     // centered containers narrower than the viewport, by how often their width recurs; ties go to the wider one
     const els = $$('body *').filter(el => { if (!visible(el)) return false; const r = el.getBoundingClientRect(); return r.width >= vw * 0.5 && r.width <= vw - 16 && Math.abs(r.left - (vw - r.right)) < 3 && r.height >= 40; });
     const byW = new Map(); els.forEach(el => { const w = Math.round(el.getBoundingClientRect().width / 4) * 4; const e = byW.get(w) || { w, n: 0, el }; e.n++; byW.set(w, e); });
-    const best = Array.from(byW.values()).sort((a, b) => b.n - a.n || b.w - a.w)[0];
-    const maxWidth = best ? best.w : Math.min(1200, vw - 64);
+    // the grid belongs on the edge real content sits on (logo, nav, images, headings), not whichever wrapper width recurs most
+    const marks = $$('img, svg, picture, video, h1, h2, h3, h4, p, a, button, input').filter(m => visible(m) && !m.closest('#jig-hud, #jig-axtags, .jig-tb')).map(m => Math.round(m.getBoundingClientRect().left));
+    const near = x => marks.reduce((n, l) => n + (Math.abs(l - x) <= 2 ? 1 : 0), 0);
+    Array.from(byW.values()).forEach(e => { const r = e.el.getBoundingClientRect(); const pl = px(css(e.el).paddingLeft), pr = px(css(e.el).paddingRight);
+      const outer = near(r.left), inner = pl > 2 ? near(r.left + pl) : 0;
+      e.content = inner > outer; e.aligned = Math.max(outer, inner); e.box = e.content ? { left: r.left + pl, width: r.width - pl - pr } : { left: r.left, width: r.width }; });
+    const cands = Array.from(byW.values()); const onEdge = cands.filter(e => e.aligned >= 1).sort((a, b) => b.box.width - a.box.width);
+    const best = onEdge[0] || cands.sort((a, b) => b.n - a.n || b.w - a.w)[0];   // the widest centred box real content sits on; inner strips are insets
+    const maxWidth = best ? Math.round(best.box.width) : Math.min(1200, vw - 64);
     const margin = best ? 0 : 32;
-    gridAnchor = best ? best.el : null;
+    gridAnchor = best ? best.el : null; gridAnchorContent = !!(best && best.content);
     return { columns: 12, gutter: 24, margin, maxWidth, inferred: true };
   }
-  let gridAnchor = null;   // the element whose edges the inferred grid is drawn on
+  let gridAnchor = null, gridAnchorContent = false;   // the element whose edges the inferred grid is drawn on (its padded content edge when that's where things line up)
   function resolveFoundation() {
     const F = state.F; F.mode = F.mode || 'file';
     // type steps: explicit sizes in the file, else resolve the site's --text-* vars, else infer
@@ -286,6 +293,9 @@
   function rampPx() { return state.F.type.steps.filter(x => x.px > 0); }
   function typeValue(st) { return st.var ? `var(${st.var}, ${st.px}px)` : `${st.px}px`; }
   function spaceValue(st) { return st.var ? `var(${st.var}, ${st.px}px)` : `${st.px}px`; }
+  const srOnly = el => { const r = el.getBoundingClientRect(); if (r.width <= 2 || r.height <= 2) return true; const c = css(el); if (/rect\(0|inset\(50%|inset\(100%/.test(c.clip + ' ' + c.clipPath) || px(c.textIndent) <= -500) return true;
+    for (let p = el.parentElement, d = 0; p && d < 3; p = p.parentElement, d++) { const pc = css(p); if (px(pc.textIndent) <= -500) return true; if (/hidden|clip/.test(pc.overflow + pc.overflowX + pc.overflowY)) { const pr = p.getBoundingClientRect(); const ix = Math.min(r.right, pr.right) - Math.max(r.left, pr.left), iy = Math.min(r.bottom, pr.bottom) - Math.max(r.top, pr.top); if (ix <= 2 || iy <= 2) return true; } }
+    return false; };
   function nearest(list, value, get) {
     let best = list[0], d = Infinity;
     for (const it of list) { const dd = Math.abs((get ? get(it) : it) - value); if (dd < d) { d = dd; best = it; } }
@@ -298,9 +308,10 @@
     const k = keyOf(el, ctl) + (sub ? '::' + sub : '');
     const base = { el: selectorOf(el), name: nameOf(el), ctl, bp: state.bp, ...(DEVICE ? { device: DEVICE } : {}) };
     state.changes.set(k, Object.assign(base, data, { summary }));
+    if (state.batch) return;   // auto is mid-run; it draws once when done
     renderHUD(); postToParent(); scanSoon();
   }
-  function unrecord(el, ctl, sub) { if (state.replaying) return; state.changes.delete(keyOf(el, ctl) + (sub ? '::' + sub : '')); renderHUD(); postToParent(); }
+  function unrecord(el, ctl, sub) { if (state.replaying) return; state.changes.delete(keyOf(el, ctl) + (sub ? '::' + sub : '')); if (state.batch) return; renderHUD(); postToParent(); }
   // Apply a patch entry to this document with the same controls a person would use. Used when a device frame catches up with the desktop.
   function applyChange(c) {
     const el = $(c.el); if (!el) return false;
@@ -1061,8 +1072,14 @@
     cols.style.gridTemplateColumns = `repeat(${G.columns}, 1fr)`; cols.style.gap = `${G.gutter}px`;
     if (gridAnchor && gridAnchor.isConnected && state.bp !== 'phone') {
       // inferred grid: sit exactly on the content container's edges
-      const r = gridAnchor.getBoundingClientRect();
-      cols.style.maxWidth = `${Math.round(r.width)}px`; cols.style.paddingInline = '0'; cols.style.marginLeft = `${Math.round(r.left)}px`;
+      const r0 = gridAnchor.getBoundingClientRect(); const pl = gridAnchorContent ? px(css(gridAnchor).paddingLeft) : 0, pr = gridAnchorContent ? px(css(gridAnchor).paddingRight) : 0;
+      const r = { left: r0.left + pl, width: r0.width - pl - pr };
+      cols.style.maxWidth = `${Math.round(r.width)}px`; cols.style.width = `${Math.round(r.width)}px`; cols.style.paddingInline = '0'; cols.style.marginLeft = `${Math.round(r.left)}px`; cols.style.marginRight = '0'; cols.style.boxSizing = 'border-box';
+      for (let i = 0; i < G.columns; i++) cols.appendChild(document.createElement('i'));
+      gridEl.appendChild(cols);
+      // pages with an offset or positioned body put the overlay somewhere else than measured: correct by what actually landed
+      const off = cols.getBoundingClientRect().left - r.left; if (Math.abs(off) > 0.5) cols.style.marginLeft = `${Math.round(r.left - off)}px`;
+      gridEl.style.height = `${document.documentElement.scrollHeight}px`; return;
     } else { cols.style.maxWidth = `${G.maxWidth}px`; cols.style.paddingInline = `${Math.min(G.margin, Math.floor(window.innerWidth * 0.06))}px`; }
     for (let i = 0; i < G.columns; i++) cols.appendChild(document.createElement('i'));
     gridEl.appendChild(cols);
@@ -1078,7 +1095,7 @@
 
   // ------------------------------------------------------------ protection scan (AX)
   let scanTimer = null;
-  function scanSoon() { clearTimeout(scanTimer); scanTimer = setTimeout(scanProtection, 250); }
+  function scanSoon() { clearTimeout(scanTimer); scanTimer = setTimeout(scanProtection, 600); }
   // faces: detected once per image (where the browser can), then checked against the current crop on every scan
   const faceCache = new Map(); let faceRun = null;
   function checkFaces() {
@@ -1095,7 +1112,8 @@
   function scanProtection() {
     clearTimeout(scanTimer); checkFaces();
     document.documentElement.classList.add('jig-scanning');   // transitions off: read settled values, not a frame of an animation
-    try { scanNow(); } finally { document.documentElement.classList.remove('jig-scanning'); }
+    const ts = performance.now(); scanTimer = null;
+    try { scanNow(); } finally { document.documentElement.classList.remove('jig-scanning'); state.lastScanMs = performance.now() - ts; }
   }
   function scanNow() {
     const P = state.F.protect || {}; const W = [];
@@ -1135,12 +1153,15 @@
       if (r.height < min - 0.5) W.push({ kind: 'tap-target', el: b, msg: `tap target ${Math.round(r.width)}×${Math.round(r.height)}px, min ${min}px tall` });
       else if (r.width < min - 0.5) W.push({ kind: 'tap-target', el: b, narrow: true, msg: `tap target ${Math.round(r.width)}×${Math.round(r.height)}px, min ${min}px wide` });
       // a label that wraps inside a button reads as two buttons
-      if (b.getClientRects().length === 1 && (b.textContent || '').trim()) { const lh = px(css(b).lineHeight) || px(css(b).fontSize) * 1.3; const inner = r.height - px(css(b).paddingTop) - px(css(b).paddingBottom); if (inner > lh * 1.6 && (b.textContent || '').trim().split(/\s+/).length > 1) W.push({ kind: 'button-wrap', el: b, msg: `button label wraps to ${Math.round(inner / lh)} lines` }); }
+      if (b.getClientRects().length === 1 && (b.textContent || '').trim()) { // count the label's real lines (distinct line tops), not height ÷ line-height: a min-height makes a box tall without wrapping anything
+        const rg = document.createRange(); rg.selectNodeContents(b); const tops = new Set(Array.from(rg.getClientRects()).filter(q => q.width > 1).map(q => Math.round(q.top / 4))); const lines = tops.size;
+        if (lines > 1 && (b.textContent || '').trim().split(/\s+/).length > 1) W.push({ kind: 'button-wrap', el: b, msg: `button label wraps to ${lines} lines` }); }
     });
     // 2b. buttons and links with nothing a screen reader can say
     $$('a, button, [role=button]').forEach(b => {
       if (!b.offsetParent || b.closest('#jig-hud, .jig-tb, #jig-found, #jig-device, #jig-axtags')) return;
-      const name = (b.getAttribute('aria-label') || b.getAttribute('title') || b.textContent || '').trim() || Array.from(b.querySelectorAll('img[alt]')).map(i => i.alt.trim()).join(' ').trim() || (b.getAttribute('aria-labelledby') ? 'x' : '');
+      if (b.getAttribute('aria-hidden') === 'true' || b.closest('[aria-hidden="true"]') || b.getAttribute('tabindex') === '-1' || srOnly(b) || (b.tagName === 'A' && !b.hasAttribute('href'))) return;   // not reachable by keyboard or screen reader
+      const name = (b.getAttribute('aria-label') || b.getAttribute('title') || b.textContent || '').trim() || Array.from(b.querySelectorAll('img[alt], [aria-label], svg title')).map(i => (i.getAttribute('alt') || i.getAttribute('aria-label') || i.textContent || '').trim()).join(' ').trim() || (b.getAttribute('aria-labelledby') ? 'x' : '');
       if (!name) W.push({ kind: 'no-name', el: b, msg: `${b.tagName === 'A' ? 'link' : 'button'} has no accessible name (no text, alt, or aria-label)` });
     });
     // 2c. more than one h1
@@ -1161,6 +1182,7 @@
     // 2e. text spilling out of its box
     $$('h1, h2, h3, h4, h5, h6, p, li, a, button, span, div').forEach(t => {
       if (!t.offsetParent || t.closest('#jig-hud, .jig-tb, #jig-found, #jig-device, #jig-axtags, .jig-crop-box') || t.tagName === 'DIV' && !Array.from(t.childNodes).some(n => n.nodeType === 3 && n.textContent.trim())) return;
+      if (srOnly(t)) return;   // visually hidden on purpose (skip links, screen-reader labels)
       const c = css(t); if (c.overflow !== 'visible' && c.overflow !== '') return;
       if (t.scrollWidth > t.clientWidth + 4 && c.whiteSpace !== 'nowrap' && t.clientWidth > 0) W.push({ kind: 'overflow', el: t, msg: `text runs ${Math.round(t.scrollWidth - t.clientWidth)}px past its box` });
       const par = t.parentElement; if (par && /hidden|clip/.test(css(par).overflow + css(par).overflowY)) { const pr = par.getBoundingClientRect(), tr = t.getBoundingClientRect(); if (tr.bottom > pr.bottom + 2 || tr.right > pr.right + 2) W.push({ kind: 'overflow', el: t, msg: 'text is clipped by its container' }); }
@@ -1206,7 +1228,8 @@
       if (ratio < need) W.push({ kind: 'contrast', el: t, msg: `contrast ${ratio.toFixed(1)} ${how}${over ? ' (worst patch)' : ''}, min ${need}${large ? ' (large text)' : ''}`, value: +ratio.toFixed(1), min: need });
     });
     W.forEach(w => { if (w.el && w.el.classList && w.el.classList.contains('jig-scrim-panel') && w.el.parentElement) w.el = w.el.parentElement; });
-    state.warnings = W.filter((w, i) => W.findIndex(x => x.el === w.el && x.kind === w.kind) === i); renderHUD(); postToParent(); paintAX();
+    const hid = new Map(); const hidden = el => { if (!hid.has(el)) hid.set(el, srOnly(el)); return hid.get(el); };   // visually hidden text is for screen readers; size, contrast and clipping rules don't apply
+    state.warnings = W.filter((w, i) => W.findIndex(x => x.el === w.el && x.kind === w.kind) === i && (/heading|h1/.test(w.kind) || !hidden(w.el))); renderHUD(); postToParent(); paintAX();
   }
   // ax jig: every element with a protection warning gets a pink outline and a chip saying why
   let axTags = null;
@@ -1296,7 +1319,7 @@
   }
   // Fix a plain-background contrast failure on `el` by moving ITS colour (or its own background, if it paints one) to the nearest passing shade.
   // Text over images is the scrim's job, not this.
-  function fixContrast(el) {
+  function fixContrast(el, shared) {
     if (imageBehind(el)) return null;
     const c = css(el); const fg = parseColor(c.color); if (!fg) return null;
     const own = parseColor(c.backgroundColor); const hasOwnBg = own && own[3] > 0.9;
@@ -1305,12 +1328,19 @@
     const need = (fs >= 24 || (bold && fs >= 18.66)) ? Math.min(3, P.minContrast || 4.5) : (P.minContrast || 4.5);
     const before = contrast(fg, bg); if (before >= need) return { already: true, ratio: before };
     const prop = hasOwnBg ? 'background-color' : 'color';
-    const to = hasOwnBg ? passingShade(own, fg, need) : passingShade(fg, bg, need); if (!to) return null;
+    let to = hasOwnBg ? passingShade(own, fg, need) : passingShade(fg, bg, need); if (!to) return null;
+    let group = null;
+    if (shared) { const k = prop + hex(hasOwnBg ? own : fg); group = shared.get(k) || { to: null, fixes: [] }; shared.set(k, group);
+      if (group.to && (hasOwnBg ? contrast(fg, group.to) : contrast(group.to, bg)) >= need) to = group.to;   // one colour, one fix
+      else if (group.to) { group.to = to; group.fixes.forEach(f => f.reapply(to)); }   // this one needs it darker: bring the earlier ones along
+      else group.to = to; }
     const prev = el.style.getPropertyValue(prop);
     el.style.setProperty(prop, hex(to), 'important');
     const after = hasOwnBg ? contrast(fg, to) : contrast(to, bg);
     const from = hex(hasOwnBg ? own : fg);
     record(el, 'type', { contrast: { prop, from, to: hex(to), before: +before.toFixed(1), after: +after.toFixed(1), min: need } }, `${prop === 'color' ? 'colour' : 'background'} ${from} → ${hex(to)} (contrast ${before.toFixed(1)} → ${after.toFixed(1)})`, 'contrast');
+    if (group) { const fgC = fg, bgC = bg, ownBg = hasOwnBg, nd = need, bf = before;
+      group.fixes.push({ reapply: t => { el.style.setProperty(prop, hex(t), 'important'); const af = ownBg ? contrast(fgC, t) : contrast(t, bgC); record(el, 'type', { contrast: { prop, from, to: hex(t), before: +bf.toFixed(1), after: +af.toFixed(1), min: nd } }, `${prop === 'color' ? 'colour' : 'background'} ${from} → ${hex(t)} (contrast ${bf.toFixed(1)} → ${af.toFixed(1)})`, 'contrast'); } }); }
     return { prop, from, to: hex(to), before, after, undo: () => { el.style.removeProperty(prop); if (prev) el.style.setProperty(prop, prev); unrecord(el, 'type', 'contrast'); } };
   }
 
@@ -1338,11 +1368,14 @@
     <div class="hint">page is inert while the jig is on · hold Alt to click through · Esc deselects</div>`;
 
   function renderHUD() {
-    if (EMBED || !hud.isConnected) return;
+    if (EMBED || !hud.isConnected || state.batch) return;
+    const CAP = 150; const more = (box, n) => { if (n > 0) { const m = document.createElement('div'); m.className = 'empty'; m.textContent = `+ ${n} more in the patch`; box.appendChild(m); } };
     const ch = $('#jig-changes'), wn = $('#jig-warn');
     ch.innerHTML = ''; wn.innerHTML = '';
     if (!state.changes.size) ch.innerHTML = state.jigs.size ? '<div class="empty">Nothing changed yet. Hover anything outlined; drag, pinch, or click it.</div>' : '<div class="empty">Switch on a jig above. Only that kind of thing becomes adjustable, so the page stays readable.</div>';
+    let shown = 0;
     for (const [k, c] of state.changes) {
+      if (++shown > CAP) { more(ch, state.changes.size - CAP); break; }
       const row = document.createElement('div'); row.className = 'row';
       row.innerHTML = `<span class="n">${esc(c.name)}</span><span class="s">${esc(c.summary)}</span><span class="x" title="reset">×</span>`;
       row.querySelector('.x').onclick = e => { e.stopPropagation(); const el = $(c.el); if (el && el.__jigReset) el.__jigReset(); else state.changes.delete(k); renderHUD(); };
@@ -1351,7 +1384,7 @@
     }
     if (state.normalize) {
       const g = normalizeGroups(); const h = document.createElement('h6'); h.textContent = `auto ${resName(state.normalizeRes)} · ${g.reduce((a, x) => a + x.els.length, 0)} snaps · ${(state.autoFixes || []).length} fixes`; ch.appendChild(h);
-      (state.autoFixes || []).forEach(f => { const row = document.createElement('div'); row.className = 'row'; row.innerHTML = `<span class="n">${esc(nameOf(f.el))}</span><span class="s">${esc(f.what)}</span>`; ch.appendChild(row); });
+      (state.autoFixes || []).slice(0, CAP).forEach(f => { const row = document.createElement('div'); row.className = 'row'; row.innerHTML = `<span class="n">${esc(nameOf(f.el))}</span><span class="s">${esc(f.what)}</span>`; ch.appendChild(row); });
       g.slice(0, 12).forEach(x => { const row = document.createElement('div'); row.className = 'row'; row.innerHTML = `<span class="n">${esc(x.prop)}</span><span class="s">${x.from}px → ${x.to}px · ${x.els.length} element${x.els.length === 1 ? '' : 's'}</span>`; ch.appendChild(row); });
       if (g.length > 12) { const m = document.createElement('div'); m.className = 'empty'; m.textContent = `+ ${g.length - 12} more groups in the patch`; ch.appendChild(m); }
     }
@@ -1368,12 +1401,16 @@
         row.onclick = () => { const fr = $('iframe', deviceEl); if (fr && fr.contentWindow) fr.contentWindow.postMessage({ jig: 'reveal', el: w.el }, '*'); }; wn.appendChild(row); });
     } else {
       if (!state.warnings.length) wn.innerHTML = '<div class="empty">No notes. The page passes.</div>';
-      state.warnings.forEach(w => {
+      const grp = new Map(); state.warnings.forEach(w => { const k = w.kind + '|' + w.msg.replace(/\d+(\.\d+)?/g, '#'); if (!grp.has(k)) grp.set(k, []); grp.get(k).push(w); });
+      let rows = 0;
+      for (const list of grp.values()) {
+        if (++rows > CAP) { more(wn, grp.size - CAP); break; }
+        const w = list[0]; let i = 0;
         const row = document.createElement('div'); row.className = 'row warn';
-        row.innerHTML = `<span class="n">${esc(nameOf(w.el))}</span><span class="s">${esc(w.msg)}</span>`;
-        row.onclick = () => { w.el.scrollIntoView({ block: 'center', behavior: 'smooth' }); if (w.el.classList.contains('jig-el')) select(w.el); };
+        row.innerHTML = list.length > 1 ? `<span class="n">${list.length} ×</span><span class="s">${esc(w.msg)} · click to step through</span>` : `<span class="n">${esc(nameOf(w.el))}</span><span class="s">${esc(w.msg)}</span>`;
+        row.onclick = () => { const t = list[i++ % list.length].el; t.scrollIntoView({ block: 'center', behavior: 'smooth' }); if (t.classList.contains('jig-el')) select(t); };
         wn.appendChild(row);
-      });
+      }
     }
     const total = state.changes.size + state.frame.changes.length + (state.normalize ? state.normalize.length : 0);
     const nW = inFrame ? (state.frame.warnings || []).length : state.warnings.length;
@@ -1391,16 +1428,24 @@
     const lines = [`# jig patch · ${state.F.name} · ${location.pathname} · ${stamp}`, ''];
     const all = [...state.changes.values(), ...state.frame.changes];
     if (!all.length) lines.push('- (no changes)');
-    all.forEach(c => lines.push(`- ${c.name}: ${c.summary}${c.bp !== 'desktop' ? ` (${c.device ? c.device + ', ' : ''}${c.bp})` : ''}`));
+    // colour fixes share a rule on almost every site: one line per colour change, not one per link
+    const cgrp = new Map(); const rest = [];
+    all.forEach(c => { if (c.contrast && !c.step && !c.size) { const k = c.contrast.prop + c.contrast.from + c.contrast.to + c.bp; if (!cgrp.has(k)) cgrp.set(k, []); cgrp.get(k).push(c); } else rest.push(c); });
+    rest.forEach(c => lines.push(`- ${c.name}: ${c.summary}${c.bp !== 'desktop' ? ` (${c.device ? c.device + ', ' : ''}${c.bp})` : ''}`));
+    cgrp.forEach(list => { const c = list[0], x = c.contrast; if (list.length === 1) lines.push(`- ${c.name}: ${c.summary}`); else lines.push(`- ${x.prop === 'color' ? 'colour' : 'background'} ${x.from} → ${x.to} on ${list.length} elements (contrast to ${Math.min(...list.map(l => l.contrast.after)).toFixed(1)}+; first: ${c.name}). Change the rule that sets ${x.from}, not each element.`); });
     const warns = [...state.warnings.map(w => ({ kind: w.kind, el: selectorOf(w.el), name: nameOf(w.el), msg: w.msg, value: w.value, min: w.min })), ...state.frame.warnings.map(w => ({ ...w, msg: w.msg + ' (' + (state.frame.device || 'device') + ')' }))];
-    if (warns.length) { lines.push('', `⚠ ${warns.length} note${warns.length === 1 ? '' : 's'} (accessibility):`); warns.forEach(w => lines.push(`- ${w.name}: ${w.msg}`)); }
+    if (warns.length) {
+      lines.push('', `⚠ ${warns.length} note${warns.length === 1 ? '' : 's'} (accessibility):`);
+      const grp = new Map(); warns.forEach(w => { const k = w.kind + '|' + w.msg.replace(/\d+(\.\d+)?/g, '#'); if (!grp.has(k)) grp.set(k, []); grp.get(k).push(w); });
+      grp.forEach(list => { if (list.length === 1) lines.push(`- ${list[0].name}: ${list[0].msg}`); else lines.push(`- ${list.length} × ${list[0].msg}${/no accessible name/.test(list[0].msg) ? ' (first: ' + list[0].el + ')' : ''}`); });
+    }
     const json = [];
     all.forEach(c => { const { name, summary, ...rest } = c; json.push(rest); });
     warns.forEach(w => json.push({ warn: w.kind, el: w.el, msg: w.msg, ...(w.value ? { value: w.value, min: w.min } : {}) }));
     if (state.normalize) {
       const g = normalizeGroups();
       const qs = quantizeScales(state.normalizeRes || '16');
-      if ((state.autoFixes || []).length) { lines.push('', `# auto fixes · ${state.autoFixes.length}`, '', 'Protection failures fixed with the same controls a person would use; each is also listed under changes above with its values.', ''); state.autoFixes.forEach(f => lines.push(`- ${nameOf(f.el)}: ${f.what}`)); }
+      if ((state.autoFixes || []).length) { lines.push('', `# auto fixes · ${state.autoFixes.length}`, '', 'Protection failures fixed with the same controls a person would use; each is also listed under changes above with its values.', ''); { const g = new Map(); state.autoFixes.forEach(f => { const k = f.what.replace(/\(contrast [\d.]+ → [\d.]+\)/, '').trim(); if (!g.has(k)) g.set(k, []); g.get(k).push(f); }); g.forEach((l, k) => lines.push(l.length > 1 ? `- ${l.length} × ${k} (first: ${nameOf(l[0].el)})` : `- ${nameOf(l[0].el)}: ${l[0].what}`)); } }
       lines.push('', `# auto · ${resName(state.normalizeRes || '16')} · ${g.reduce((a, x) => a + x.els.length, 0)} snap${g.reduce((a, x) => a + x.els.length, 0) === 1 ? "" : "s"} in ${g.length} group${g.length === 1 ? "" : "s"}`, '', `Every font-size, padding, margin, and gap on the page snapped to the nearest step, like notes to a grid. Type steps: ${qs.typeSteps.join(', ')}px. Spacing steps: ${qs.spaceSteps.join(', ')}px. Apply as rule changes, not inline styles: find the rule that sets each value and change it; where several elements share a group they almost certainly share a rule.`, '');
       g.forEach(x => lines.push(`- ${x.prop}: ${x.from}px → ${x.to}px on ${x.els.length} element${x.els.length === 1 ? '' : 's'}`));
       g.forEach(x => json.push({ op: 'quantize', prop: x.prop, from: x.from, to: x.to, count: x.els.length, els: x.els.slice(0, 20), ...(x.els.length > 20 ? { more: x.els.length - 20 } : {}) }));
@@ -1414,26 +1459,37 @@
     }
     return lines.join('\n');
   }
+  // copy that survives sites whose policy blocks the async clipboard: fall back to execCommand, then to a selected box
+  async function copyText(text) {
+    try { await navigator.clipboard.writeText(text); return 'ok'; } catch (e) {}
+    const ta = document.createElement('textarea'); ta.value = text; ta.setAttribute('readonly', ''); ta.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0';
+    hud.appendChild(ta); ta.select(); let ok = false; try { ok = document.execCommand('copy'); } catch (e) {} ta.remove();
+    if (ok) return 'ok';
+    const box = document.createElement('textarea'); box.value = text; box.id = 'jig-copybox'; box.style.cssText = 'position:fixed;inset:16px;z-index:2147483647;width:min(720px,calc(100vw - 32px));height:60vh;font:12px ui-monospace,monospace;padding:12px;border:2px solid #3f6fff;border-radius:12px;background:#111;color:#eee';
+    document.body.appendChild(box); box.focus(); box.select(); on(box, 'blur', () => box.remove()); on(box, 'keydown', e => { if (e.key === 'Escape') box.remove(); });
+    return 'manual';
+  }
   async function copyPatch() {
-    const text = buildPatch();
-    try { await navigator.clipboard.writeText(text); flash('Patch copied. Paste it to your AI.'); }
-    catch (e) { const ta = document.createElement('textarea'); ta.value = text; ta.style.cssText = 'position:fixed;inset:16px;z-index:2147483647;width:60vw;height:60vh;font:12px monospace'; document.body.appendChild(ta); ta.select(); flash('Clipboard blocked; select the text manually.'); on(ta, 'blur', () => ta.remove()); }
+    const r = await copyText(buildPatch());
+    flash(r === 'ok' ? 'Patch copied. Paste it to your AI.' : 'Selected; press ⌘C (this site blocks auto-copy).');
   }
   function flash(msg) { const b = $('#jig-copy-btn'); const t = b.textContent; b.textContent = msg; setTimeout(() => (b.textContent = t), 1800); }
 
   // ------------------------------------------------------------ normalize: snap the whole page to the scales
   function normalizePage(on) {
     if (!on) {
+      state.batch = true;
       (state.normalize || []).forEach(n => { n.el.style.removeProperty(n.prop); if (n.prev) n.el.style.setProperty(n.prop, n.prev); });
       (state.autoFixes || []).forEach(f => { if (f.undo) { f.undo(); unrecord(f.el, f.ctl || 'grid', f.sub); } else if (f.el.__jigReset) f.el.__jigReset(); });
-      state.normalize = null; state.autoFixes = []; { const nb = $('#jig-norm-btn'); if (nb) nb.classList.remove('on'); } renderHUD(); scanSoon(); return;
+      state.normalize = null; state.autoFixes = []; state.batch = false; { const nb = $('#jig-norm-btn'); if (nb) nb.classList.remove('on'); } renderHUD(); postToParent(); scanSoon(); return;
     }
+    state.batch = true;
     const F = state.F; const out = [];
     const res = state.autoRes || ($('#jig-q-res') && $('#jig-q-res').value) || '16';
     const { typeSteps, spaceSteps } = quantizeScales(res);
     state.normalizeRes = res;
     // buttons are left to the button control (their padding IS their size); snapping them would shrink tap targets the scan then has to grow back
-    const skipEl = el => el.closest('#jig-hud, .jig-tb, #jig-found, #jig-device, .jig-badge, #jig-axtags, #jig-grid, script, style, svg') || el === document.body || el === document.documentElement || !visible(el) || el.dataset.jigCtl === 'button' || el.closest('.jig-el[data-jig-ctl="button"]');
+    const skipEl = el => el.closest('#jig-hud, .jig-tb, #jig-found, #jig-device, .jig-badge, #jig-axtags, #jig-grid, script, style, svg') || el === document.body || el === document.documentElement || !visible(el) || el.dataset.jigCtl === 'button' || el.closest('.jig-el[data-jig-ctl="button"]') || srOnly(el);
     const autoMargin = (() => {   // margins authored as auto compute to px; snapping that number would break the layout
       const rules = []; for (const sh of Array.from(document.styleSheets)) { try { for (const r of Array.from(sh.cssRules || [])) if (r.style && /auto/.test(r.style.margin + r.style.marginTop + r.style.marginBottom + r.style.marginLeft + r.style.marginRight + r.style.marginBlock + r.style.marginInline)) rules.push(r); } catch (e) {} }
       return (el, prop) => { if (/auto/.test(el.style.getPropertyValue(prop) + el.style.margin)) return true; const side = prop.replace('margin-', ''); return rules.some(r => { try { if (!el.matches(r.selectorText)) return false; } catch (e) { return false; } const st = r.style; const v = st.getPropertyValue(prop) || ((side === 'top' || side === 'bottom') ? st.marginBlock : st.marginInline) || ''; if (/auto/.test(v)) return true; const m = (st.margin || '').split(/\s+/); if (!m[0]) return false; const idx = { top: 0, right: 1, bottom: m.length > 2 ? 2 : 0, left: m.length > 3 ? 3 : (m.length > 1 ? 1 : 0) }[side]; return /auto/.test(m[idx] || ''); }); };
@@ -1442,7 +1498,9 @@
       if (el.classList.contains('jig-scrim-panel') || el.classList.contains('jig-crop-box')) return;   // the jig's own wrappers are never the site's
       if (/^margin/.test(prop) && autoMargin(el, prop)) return;
       if (!(cur >= min && cur <= max)) return;
-      const to = nearest(steps, cur); if (Math.abs(to - cur) < 0.1) return;   // sub-pixel drift counts; it's the most common kind
+      let to = nearest(steps, cur);
+      if (prop === 'font-size' && cur < 14 && to < cur) to = steps.find(x => x >= cur) || to;   // never shrink text that's already small
+      if (Math.abs(to - cur) < 0.1) return;   // sub-pixel drift counts; it's the most common kind
       out.push({ el, prop, from: Math.round(cur * 10) / 10, to, prev: el.style.getPropertyValue(prop) || '' });
       el.style.setProperty(prop, to + 'px', 'important');
     };
@@ -1452,14 +1510,16 @@
     // 2. space: paddings, margins, gaps on block-ish boxes (positive, px-sized; negative and huge values are layout, not rhythm)
     $$('body *').forEach(el => {
       if (skipEl(el)) return; const c = css(el); if (!/block|flex|grid|table|list-item/.test(c.display) || c.position === 'fixed') return;
-      ['padding-top', 'padding-bottom', 'padding-left', 'padding-right', 'margin-top', 'margin-bottom'].forEach(prop => snap(el, prop, px(c[prop]), spaceSteps, 2, 160));
+      const interactive = /^(A|BUTTON|INPUT|SELECT|TEXTAREA|LABEL|SUMMARY)$/.test(el.tagName) || el.getAttribute('role') === 'button';
+      (interactive ? ['margin-top', 'margin-bottom'] : ['padding-top', 'padding-bottom', 'padding-left', 'padding-right', 'margin-top', 'margin-bottom']).forEach(prop => snap(el, prop, px(c[prop]), spaceSteps, 2, 160));
       if (/flex|grid/.test(c.display)) ['row-gap', 'column-gap'].forEach(prop => snap(el, prop, px(c[prop]), spaceSteps, 2, 160));
     });
     state.normalize = out; { const nb = $('#jig-norm-btn'); if (nb) nb.classList.add('on'); }
     autoFixAX();
     autoHarmonizeButtons();
     autoAlignRows();
-    return autoFocusImages().then(() => { renderHUD(); scanSoon(); });
+    const done = () => { state.batch = false; renderHUD(); postToParent(); scanSoon(); };
+    return autoFocusImages().then(done, done);
   }
   // Where is the subject? Faces when the browser can find them; otherwise the centroid of the image's high-detail region.
   async function focalPoint(img) {
@@ -1498,7 +1558,7 @@
     const byParent = new Map(); blocks.forEach(el => { const p0 = el.parentElement; if (!byParent.has(p0)) byParent.set(p0, []); byParent.get(p0).push(el); });
     byParent.forEach(kids => {
       if (kids.length < 3) return;
-      const lefts = kids.map(k => Math.round(k.getBoundingClientRect().left));
+      const lefts = kids.map(k => Math.round(k.getBoundingClientRect().left - Math.min(0, px(css(k).marginLeft))));
       const counts = {}; lefts.forEach(l => counts[l] = (counts[l] || 0) + 1);
       const [edge, n] = Object.entries(counts).sort((a, b) => b[1] - a[1])[0]; if (n < 2 || n < kids.length / 2) return;   // no clear shared edge
       kids.forEach((el, i) => {
@@ -1506,7 +1566,7 @@
         if (el.getBoundingClientRect().width < 60) return;
         const cur = px(css(el).marginLeft); const before = el.style.getPropertyValue('margin-left');
         el.style.setProperty('margin-left', `${Math.round(cur - delta)}px`, 'important');
-        if (Math.abs(el.getBoundingClientRect().left - +edge) > 1) { el.style.removeProperty('margin-left'); if (before) el.style.setProperty('margin-left', before); return; }
+        if (Math.abs(el.getBoundingClientRect().left - Math.min(0, px(css(el).marginLeft)) - +edge) > 1 && Math.abs(el.getBoundingClientRect().left - +edge) > 1) { el.style.removeProperty('margin-left'); if (before) el.style.setProperty('margin-left', before); return; }
         done.add(el);
         state.autoFixes.push({ el, ctl: 'grid', what: `back in line (was ${Math.round(delta)}px off the edge its neighbours share)`, undo: () => { el.style.removeProperty('margin-left'); if (before) el.style.setProperty('margin-left', before); } });
         record(el, 'grid', { marginLeft: Math.round(cur - delta), wasOffBy: Math.round(delta) }, `inline offset ${Math.round(cur)}px → ${Math.round(cur - delta)}px (in line with its neighbours)`);
@@ -1549,6 +1609,7 @@
     state.autoFixes = [];
     scanProtection();
     const seen = new Set(); const ids = new WeakMap(); let nid = 0; const key = (el, k) => { if (!ids.has(el)) ids.set(el, ++nid); return k + ':' + ids.get(el); };
+    const shadeFor = new Map();   // source colour → shade chosen; every later element with that colour reuses it if it passes there too
     for (let pass = 0; pass < 4; pass++) {
       let did = false;
       for (const w of state.warnings.slice()) {
@@ -1563,8 +1624,8 @@
           }
         }
         if (plain && !seen.has(key(w.el, w.kind))) {
-          seen.add(key(w.el, w.kind)); const r = fixContrast(w.el);
-          if (r && !r.already) { state.autoFixes.push({ el: w.el, ctl: 'type', sub: 'contrast', what: `${r.prop === 'color' ? 'colour' : 'background'} ${r.from} → ${r.to} (contrast ${r.before.toFixed(1)} → ${r.after.toFixed(1)})`, undo: r.undo }); did = true; }
+          seen.add(key(w.el, w.kind)); const r = fixContrast(w.el, shadeFor);
+          if (r && !r.already) { state.autoFixes.push({ el: w.el, ctl: 'type', sub: 'contrast', get what() { const c = (state.changes.get(keyOf(this.el, 'type') + '::contrast') || {}).contrast; return c ? `${c.prop === 'color' ? 'colour' : 'background'} ${c.from} → ${c.to} (contrast ${c.before} → ${c.after})` : `${r.prop} ${r.from} → ${r.to}`; }, undo: r.undo }); did = true; }
         }
         if (w.kind === 'small-text' && !w.el.__jigStepType && !seen.has(key(w.el, w.kind))) {
           // not wired as a type target (a span, an inline-styled div): set it straight to the first ramp step that clears the floor
@@ -1586,6 +1647,12 @@
         if (w.kind === 'small-text' && w.el.__jigStepType && !seen.has(key(w.el, w.kind))) {
           seen.add(key(w.el, w.kind)); let steps = 0; while (steps < 3 && px(css(w.el).fontSize) < w.min - 0.5) { const b0 = px(css(w.el).fontSize); w.el.__jigStepType(1); if (px(css(w.el).fontSize) <= b0 + 0.1) break; steps++; }
           if (steps) { state.autoFixes.push({ el: w.el, what: `ramp +${steps} (body copy now ${r1(px(css(w.el).fontSize))}px)` }); did = true; }
+        }
+        if (w.kind === 'measure' && w.long && !w.el.__jigSetMaxCols && !seen.has(key(w.el, w.kind))) {
+          seen.add(key(w.el, w.kind)); const el = w.el; const prev = el.style.getPropertyValue('max-width');
+          el.style.setProperty('max-width', '68ch', 'important');
+          record(el, 'type', { maxWidth: '68ch', wasCpl: Math.round(w.cpl) }, `max-width 68ch (measure was ~${Math.round(w.cpl)} characters)`, 'measure');
+          state.autoFixes.push({ el, ctl: 'type', sub: 'measure', what: `max-width 68ch (measure was ~${Math.round(w.cpl)} characters)`, undo: () => { el.style.removeProperty('max-width'); if (prev) el.style.setProperty('max-width', prev); } }); did = true;
         }
         if (w.kind === 'measure' && w.long && w.el.__jigSetMaxCols && !seen.has(key(w.el, w.kind))) {
           seen.add(key(w.el, w.kind)); const G = state.F.grid; const colW = w.el.getBoundingClientRect().width / Math.max(1, Math.round(w.el.getBoundingClientRect().width / colWidth(w.el.parentElement || document.body)));
@@ -1609,6 +1676,18 @@
           seen.add(key(w.el, w.kind)); let steps = 0;
           while (steps < 2 && w.el.getBoundingClientRect().height < ((state.F.protect || {}).minTapTarget || 44) - 0.5 && w.el.__jigStepSize(1)) steps++;
           if (steps) { state.autoFixes.push({ el: w.el, what: `size +${steps} (tap target now ${Math.round(w.el.getBoundingClientRect().height)}px)` }); did = true; }
+        }
+        if (w.kind === 'tap-target' && !seen.has(key(w.el, 'tap-min'))) {
+          // still short (no bigger size in the system, or not a wired button): give it the height directly, label centred
+          const min = (state.F.protect || {}).minTapTarget || 44; const el = w.el; const r0 = el.getBoundingClientRect();
+          if ((w.narrow ? r0.width : r0.height) < min - 0.5) {
+            seen.add(key(el, 'tap-min')); const prop = w.narrow ? 'min-width' : 'min-height'; const prev = el.style.getPropertyValue(prop); const prevD = el.style.getPropertyValue('display');
+            const cs = css(el); const pad = cs.boxSizing === 'border-box' ? 0 : (w.narrow ? px(cs.paddingLeft) + px(cs.paddingRight) + px(cs.borderLeftWidth) + px(cs.borderRightWidth) : px(cs.paddingTop) + px(cs.paddingBottom) + px(cs.borderTopWidth) + px(cs.borderBottomWidth));
+            el.style.setProperty(prop, Math.max(0, min - pad) + 'px', 'important');   // the box lands on 44px outside, padding included
+            if (!/flex|grid/.test(css(el).display)) { el.style.setProperty('display', css(el).display === 'block' ? 'flex' : 'inline-flex', 'important'); el.style.setProperty('align-items', 'center', 'important'); el.style.setProperty('justify-content', 'center', 'important'); }
+            record(el, 'button', { [w.narrow ? 'minWidth' : 'minHeight']: min }, `${prop} ${min}px (tap target)`, 'tap');
+            state.autoFixes.push({ el, ctl: 'button', sub: 'tap', what: `${prop} ${min}px (tap target was ${Math.round(w.narrow ? r0.width : r0.height)}px)`, undo: () => { ['min-height', 'min-width', 'display', 'align-items', 'justify-content'].forEach(k => el.style.removeProperty(k)); if (prev) el.style.setProperty(prop, prev); if (prevD) el.style.setProperty('display', prevD); } }); did = true;
+          }
         }
         if (w.kind === 'hierarchy' && w.el.__jigStepType && !seen.has(key(w.el, w.kind))) {
           seen.add(key(w.el, w.kind)); let steps = 0;
@@ -1696,7 +1775,7 @@
       if (b.id === 'jf-apply') { readBack(); rewire(); renderFoundationPanel(); flashBtn(b, 'Applied'); }
       if (b.id === 'jf-remember') { readBack(); safeSet('jig-foundation:' + location.host, JSON.stringify(exportFoundation())); state.foundationSource = 'edited in the jig (saved for this site)'; renderHUD(); flashBtn(b, 'Saved'); }
       if (b.id === 'jf-forget') { try { localStorage.removeItem('__jig-foundation:' + location.host); } catch (x) {} flashBtn(b, 'Forgotten; reload to re-infer'); }
-      if (b.id === 'jf-copy') { readBack(); navigator.clipboard.writeText(JSON.stringify(exportFoundation(), null, 2)).then(() => flashBtn(b, 'Copied')).catch(() => flashBtn(b, 'Clipboard blocked')); }
+      if (b.id === 'jf-copy') { readBack(); copyText(JSON.stringify(exportFoundation(), null, 2)).then(r => flashBtn(b, r === 'ok' ? 'Copied' : 'Selected; press ⌘C')); }
       if (b.id === 'jf-reinfer') { try { localStorage.removeItem('__jig-foundation:' + location.host); } catch (x) {} state.F = inferFromPage(); state.foundationSource = 'inferred from this page'; rewire(); renderFoundationPanel(); }
     };
   }
@@ -1830,7 +1909,10 @@
     };
     $('#jig-scan-btn').onclick = scanProtection;
     $('#jig-found-btn').onclick = toggleFoundationPanel;
-    $('#jig-norm-btn').onclick = () => normalizePage(!state.normalize);
+    $('#jig-norm-btn').onclick = () => {   // auto can take a few seconds on huge pages: say so, and let the label paint before the work starts
+      const nb = $('#jig-norm-btn'); if (nb.dataset.busy) return; nb.dataset.busy = '1'; const label = nb.textContent; nb.textContent = 'working…';
+      setTimeout(() => { Promise.resolve().then(() => normalizePage(!state.normalize)).finally(() => { nb.textContent = label; delete nb.dataset.busy; }); }, 30);
+    };
     $('#jig-q-res').onchange = () => { if (state.normalize) { normalizePage(false); normalizePage(true); } };
     if (state.F.mode && state.F.mode !== 'inferred') $('#jig-q-res').value = '32';   // the site has tokens: light = its own steps; medium/strict stay on offer
     $('#jig-reset-btn').onclick = () => { normalizePage(false); $$('.jig-el').forEach(el => el.__jigReset && el.__jigReset()); state.changes.clear(); state.frame = { changes: [], warnings: [] }; closeDevice(); scanProtection(); };
@@ -1842,10 +1924,20 @@
     on(hdr, 'pointermove', e => { if (!d || window.innerWidth <= 640) return; hud.style.left = `${e.clientX - d.x}px`; hud.style.top = `${e.clientY - d.y}px`; hud.style.right = 'auto'; });
     on(hdr, 'pointerup', e => { if (e.target.closest('.min')) { d = null; return; } const moved = d && (Math.abs(e.clientX - d.x - hud.offsetLeft) > 4 || Math.abs(e.clientY - d.y - hud.offsetTop) > 4); d = null; if (window.innerWidth <= 640 && !moved) hud.classList.toggle('collapsed'); });
     if (window.innerWidth <= 640) hud.classList.add('collapsed');
-    // first scan once images are in
-    const imgs = $$('img').filter(i => !i.complete);
-    await Promise.all(imgs.map(i => new Promise(r => { i.onload = i.onerror = r; })));
-    scanProtection();
+    // first scan once visible images are in; lazy images below the fold never load until scrolled, so never wait on them, and never wait more than 2.5s
+    const wn0 = $('#jig-wn-n'); if (wn0) { wn0.textContent = '…'; wn0.title = 'scanning'; }
+    const imgs = $$('img').filter(i => !i.complete && i.loading !== 'lazy' && i.getBoundingClientRect().top < window.innerHeight * 1.5);
+    await Promise.race([Promise.all(imgs.map(i => new Promise(r => { i.addEventListener('load', r, { once: true }); i.addEventListener('error', r, { once: true }); }))), new Promise(r => setTimeout(r, 2500))]);
+    scanProtection(); if (wn0) wn0.title = '';
+    // pages keep settling (web fonts, late scripts, ads, lazy sections): rescan quietly while they do, for the first 20s
+    if (document.readyState !== 'complete') on(window, 'load', scanSoon);
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(scanSoon);
+    const t0 = Date.now(); let settles = 0;
+    const mo = new MutationObserver(ms => {
+      if (Date.now() - t0 > 20000 || settles >= 4 || state.lastScanMs > 250) { mo.disconnect(); return; }   // busy pages (ads, carousels) don't get to keep the jig rescanning
+      if (!scanTimer && ms.some(m => !(m.target.closest && m.target.closest('#jig-hud, #jig-axtags, #jig-device, .jig-tb, #jig-found, .jig-scrim-panel')) && Array.from(m.addedNodes).some(n => n.nodeType === 1 && !(n.id || '').startsWith('jig-') && !(n.className && String(n.className).includes('jig-'))))) { settles++; scanSoon(); }
+    });
+    mo.observe(document.body, { childList: true, subtree: true });
     window.__jig = { state, patch: buildPatch, scan: scanProtection, Controls };
     console.log('%cjig studio%c ready · ' + $$('.jig-el').length + ' elements · foundation ' + state.F.name, 'color:#3f6fff;font-weight:700', '');
   }

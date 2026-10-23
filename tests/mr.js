@@ -1,0 +1,11 @@
+const { chromium } = require('playwright');
+(async () => { const b = await chromium.launch(); const p = await b.newPage({ viewport: { width: 1440, height: 900 } });
+p.on('pageerror', e => console.log('ERR', e.message));
+const t = Date.now(); await p.goto('http://localhost:8777/mr.html?jig'); await p.waitForFunction(() => window.__jig && document.querySelector('#jig-wn-n').textContent !== '…', null, { timeout: 20000 });
+console.log('ready ms', Date.now() - t, await p.evaluate(() => ({ scanMs: Math.round(__jig.state.lastScanMs), notes: __jig.state.warnings.length, badge: document.querySelector('#jig-wn-n').textContent })));
+await p.click('#jig-grid-btn'); await p.waitForTimeout(300);
+console.log(await p.evaluate(() => ({ grid: Math.round(document.querySelector('#jig-grid .cols i').getBoundingClientRect().left), logo: Math.round(document.querySelector('header img').getBoundingClientRect().left), strip: Math.round(document.querySelector('.strip').getBoundingClientRect().left) })));
+const ta = Date.now(); await p.click('#jig-adv-btn'); await p.click('#jig-norm-btn'); await p.waitForTimeout(500);
+await p.waitForFunction(() => !document.documentElement.classList.contains('jig-busy'), null, { timeout: 60000 });
+console.log('auto ms', Date.now() - ta, await p.evaluate(() => ({ scanMs: Math.round(__jig.state.lastScanMs), notes: __jig.state.warnings.length })));
+await b.close(); })();

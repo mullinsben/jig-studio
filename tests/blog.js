@@ -1,0 +1,10 @@
+const { chromium } = require('playwright');
+(async () => { const b = await chromium.launch(); const p = await b.newPage({ viewport: { width: 1440, height: 900 } });
+p.on('pageerror', e => console.log('ERR', e.message));
+await p.goto('http://localhost:8777/blog.html?jig'); await p.waitForFunction(() => window.__jig && document.querySelector('#jig-wn-n').textContent !== '…');
+console.log('before', await p.evaluate(() => __jig.state.warnings.map(w => w.kind + ':' + w.el.textContent.slice(0, 20))));
+await p.click('#jig-adv-btn'); await p.click('#jig-norm-btn'); await p.waitForTimeout(1500);
+const t = await p.evaluate(() => { const r = __jig.patch(); return typeof r === 'string' ? r : (r.human || JSON.stringify(r)); });
+console.log(t.split('---')[0]);
+console.log('colours', await p.evaluate(() => [...new Set([...document.querySelectorAll('a')].map(a => getComputedStyle(a).color))]));
+await b.close(); })();
