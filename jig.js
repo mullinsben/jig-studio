@@ -32,7 +32,7 @@
     spacing: [4, 8, 12, 16, 24, 32, 48, 64, 96],
     type: { ramp: ['xs', 'sm', 'md', 'lg', 'xl', '2xl', '3xl'] },
     buttons: { sizes: ['sm', 'md', 'lg'], variants: ['primary', 'secondary', 'ghost'], classPrefix: 'btn-' },
-    protect: { safeInset: 24, minContrast: 4.5, minTapTarget: 44, textOverImage: 'warn' }
+    protect: { safeInset: 24, minContrast: 4.5, minTapTarget: 24, textOverImage: 'warn' }   // 24px = WCAG 2.2 AA (2.5.8); a foundation can ask for 44 (AAA / Apple HIG)
   };
 
   // jig toggles: nothing is live until the person switches a jig on
@@ -244,12 +244,14 @@
       const gapCount = new Map(); gaps.forEach(g => gapCount.set(g, (gapCount.get(g) || 0) + 1));
       const gCands = Array.from(new Set([...gapCount.keys(), 12, 16, 20, 24, 30, 32]));
       const P = Array.from(pairs).map(([k, n]) => { const [r, l] = k.split(',').map(Number); return { r: r - L0, l: l - L0, w: Math.sqrt(n) }; }).filter(p => p.r > 2 && p.l < W - 2);
+      gridDebug = { box: [Math.round(A.left), Math.round(A.width)], inset: gridInset, L0: Math.round(L0), W: Math.round(W), pairs: P.length, gaps: gaps.length, els: best.els.length };
       if (P.length >= 2) {
         const fits = []; const total = P.reduce((a, p) => a + p.w, 0);
         gCands.forEach(g => [3, 4, 5, 6, 8, 9, 10, 12, 16, 24].forEach(N => { const cw = (W - (N - 1) * g) / N; if (cw < 16) return;
           const pitch = cw + g; const onR = x => { const k = Math.round((x + g) / pitch); return k >= 1 && k < N && Math.abs(k * pitch - g - x) <= 2; }, onL = x => { const k = Math.round(x / pitch); return k >= 1 && k < N && Math.abs(k * pitch - x) <= 2; };
           fits.push({ N, g, hit: P.reduce((a, p) => a + (Math.abs(p.l - p.r - g) <= 2 && onR(p.r) && onL(p.l) ? p.w : 0), 0) / total }); }));
         const top = Math.max(...fits.map(f => f.hit));
+        gridDebug = { box: [Math.round(A.left), Math.round(A.width)], inset: gridInset, L0: Math.round(L0), W: Math.round(W), pairs: P.map(p => [Math.round(p.r), Math.round(p.l), +p.w.toFixed(2)]), top: +top.toFixed(2), best: fits.slice().sort((x, y) => y.hit - x.hit).slice(0, 4) };
         if (top >= 0.3) {
           const pick = fits.filter(f => f.hit >= top - 0.03).sort((a, b) => a.N - b.N || (gapCount.get(b.g) || 0) - (gapCount.get(a.g) || 0) || b.hit - a.hit)[0];
           columns = pick.N; gutter = pick.g; gridFit = Math.round(pick.hit * 100);
@@ -259,7 +261,7 @@
     }
     return { columns, gutter, margin: best ? 0 : 32, maxWidth, inferred: true };
   }
-  let gridAnchor = null, gridAnchorContent = false, gridInset = null, gridFit = null;   // gridFit: % of measured content edges on the inferred lines   // the element whose edges the inferred grid is drawn on (its padded content edge when that's where things line up)
+  let gridAnchor = null, gridAnchorContent = false, gridInset = null, gridFit = null, gridDebug = null;   // gridFit: % of measured content edges on the inferred lines   // the element whose edges the inferred grid is drawn on (its padded content edge when that's where things line up)
   function resolveFoundation() {
     const F = state.F; F.mode = F.mode || 'file';
     // type steps: explicit sizes in the file, else resolve the site's --text-* vars, else infer
@@ -1290,12 +1292,12 @@
       if (!distinct) W.push({ kind: 'hierarchy', el: h, msg: `${h.tagName.toLowerCase()} renders at ${r1(f)}px${bold ? '' : ', regular weight'}, next to body copy at ${r1(lb)}px; it doesn't read as a heading`, small: true, bodyPx: lb });
     });
     // 2. tap targets
-    const min = P.minTapTarget || 44;
+    const min = P.minTapTarget || 24;
     const taps = new Set($$('button, [role=button], [data-jig=button], .jig-el[data-jig-ctl="button"], input[type=submit], input[type=button]'));
     $$('a').forEach(a => { if (looksLikeButton(a)) taps.add(a); });
     taps.forEach(b => {
       if (!b.offsetParent || b.closest('#jig-hud, .jig-tb, #jig-found, #jig-device')) return; const r = b.getBoundingClientRect();
-      if (r.height < min - 0.5) W.push({ kind: 'tap-target', el: b, msg: `tap target ${Math.round(r.width)}×${Math.round(r.height)}px, min ${min}px tall` });
+      if (r.height < min - 0.5) W.push({ kind: 'tap-target', el: b, msg: `tap target ${Math.round(r.width)}×${Math.round(r.height)}px, min ${min}px tall${min <= 24 ? ' (WCAG 2.2 AA)' : ''}` });
       else if (r.width < min - 0.5) W.push({ kind: 'tap-target', el: b, narrow: true, msg: `tap target ${Math.round(r.width)}×${Math.round(r.height)}px, min ${min}px wide` });
       // a label that wraps inside a button reads as two buttons
       if (b.getClientRects().length === 1 && (b.textContent || '').trim()) { // count the label's real lines (distinct line tops), not height ÷ line-height: a min-height makes a box tall without wrapping anything
@@ -1307,7 +1309,13 @@
       if (!b.offsetParent || b.closest('#jig-hud, .jig-tb, #jig-found, #jig-device, #jig-axtags')) return;
       if (b.getAttribute('aria-hidden') === 'true' || b.closest('[aria-hidden="true"]') || b.getAttribute('tabindex') === '-1' || srOnly(b) || (b.tagName === 'A' && !b.hasAttribute('href'))) return;   // not reachable by keyboard or screen reader
       const name = (b.getAttribute('aria-label') || b.getAttribute('title') || b.textContent || '').trim() || Array.from(b.querySelectorAll('img[alt], [aria-label], svg title')).map(i => (i.getAttribute('alt') || i.getAttribute('aria-label') || i.textContent || '').trim()).join(' ').trim() || (b.getAttribute('aria-labelledby') ? 'x' : '');
-      if (!name) W.push({ kind: 'no-name', el: b, msg: `${b.tagName === 'A' ? 'link' : 'button'} has no accessible name (no text, alt, or aria-label)` });
+      if (!name) {
+        // the common case: a thumbnail link to the same page as the headline link beside it. The headline already names it; the thumbnail should step out of the way.
+        const href = b.tagName === 'A' && b.getAttribute('href');
+        const twin = href && $$('a[href]').find(x => x !== b && x.getAttribute('href') === href && (x.textContent || '').trim().length > 2 && !x.closest('#jig-hud'));
+        if (twin) W.push({ kind: 'dup-link', el: b, msg: 'image link repeats the headline link beside it; hide it from keyboard and screen readers (aria-hidden="true" tabindex="-1")' });
+        else W.push({ kind: 'no-name', el: b, msg: `${b.tagName === 'A' ? 'link' : 'button'} has no accessible name (no text, alt, or aria-label)` });
+      }
     });
     // 2c. more than one h1
     const h1s = hs.filter(h => h.tagName === 'H1'); if (h1s.length > 1) h1s.slice(1).forEach(h => W.push({ kind: 'heading-order', el: h, msg: `${h1s.length} h1s on the page; one is the convention` }));
@@ -1389,7 +1397,7 @@
     state.warnings.forEach(w => { if (!w.el || !w.el.isConnected) return; w.el.classList.add('jig-ax'); byEl.set(w.el, (byEl.get(w.el) || []).concat(w)); });
     byEl.forEach((ws, el) => {
       const tag = document.createElement('div'); tag.className = 'tag'; tag.__el = el;
-      tag.textContent = ws.map(w => w.kind === 'contrast' ? `contrast ${w.value} / ${w.min}` : w.kind === 'tap-target' ? `tap ${w.msg.replace(/.*×(\d+)px.*/, '$1')}px tall` : w.kind === 'alt' ? 'no alt' : w.kind === 'small-text' ? 'small text' : w.kind === 'measure' ? `${Math.round(w.cpl)} cpl` : w.kind === 'button-wrap' ? 'label wraps' : w.kind === 'no-name' ? 'no name' : w.kind === 'overflow' ? 'overflows' : w.kind === 'soft' ? 'soft' : w.kind === 'face' ? 'face cropped' : w.kind === 'h1-role' ? 'h1 is the logo?' : w.kind).join(' · ');
+      tag.textContent = ws.map(w => w.kind === 'contrast' ? `contrast ${w.value} / ${w.min}` : w.kind === 'tap-target' ? `tap ${w.msg.replace(/.*×(\d+)px.*/, '$1')}px tall` : w.kind === 'alt' ? 'no alt' : w.kind === 'small-text' ? 'small text' : w.kind === 'measure' ? `${Math.round(w.cpl)} cpl` : w.kind === 'button-wrap' ? 'label wraps' : w.kind === 'no-name' ? 'no name' : w.kind === 'overflow' ? 'overflows' : w.kind === 'soft' ? 'soft' : w.kind === 'face' ? 'face cropped' : w.kind === 'h1-role' ? 'h1 is the logo?' : w.kind === 'dup-link' ? 'duplicate link' : w.kind).join(' · ');
       tag.title = ws.map(w => w.msg).join('\n');
       axTags.appendChild(tag);
     });
@@ -1576,7 +1584,9 @@
     // colour fixes share a rule on almost every site: one line per colour change, not one per link
     const cgrp = new Map(); const rest = [];
     all.forEach(c => { if (c.contrast && !c.step && !c.size) { const k = c.contrast.prop + c.contrast.from + c.contrast.to + c.bp; if (!cgrp.has(k)) cgrp.set(k, []); cgrp.get(k).push(c); } else rest.push(c); });
-    rest.forEach(c => lines.push(`- ${c.name}: ${c.summary}${c.bp !== 'desktop' ? ` (${c.device ? c.device + ', ' : ''}${c.bp})` : ''}`));
+    { const sg = new Map(); rest.forEach(c => { const k = c.summary + '|' + c.bp; if (!sg.has(k)) sg.set(k, []); sg.get(k).push(c); });   // identical changes on many elements: one line
+      sg.forEach(list => { const c = list[0]; const tag = c.bp !== 'desktop' ? ` (${c.device ? c.device + ', ' : ''}${c.bp})` : '';
+        lines.push(list.length > 2 ? `- ${list.length} × ${c.summary}${tag} (first: ${c.name}; every selector is in the JSON)` : list.map(x => `- ${x.name}: ${x.summary}${tag}`).join('\n')); }); }
     cgrp.forEach(list => { const c = list[0], x = c.contrast; if (list.length === 1) lines.push(`- ${c.name}: ${c.summary}`); else lines.push(`- ${x.prop === 'color' ? 'colour' : 'background'} ${x.from} → ${x.to} on ${list.length} elements (contrast to ${Math.min(...list.map(l => l.contrast.after)).toFixed(1)}+; first: ${c.name}). Change the rule that sets ${x.from}, not each element.`); });
     const warns = [...state.warnings.map(w => ({ kind: w.kind, el: selectorOf(w.el), name: nameOf(w.el), msg: w.msg, value: w.value, min: w.min })), ...state.frame.warnings.map(w => ({ ...w, msg: w.msg + ' (' + (state.frame.device || 'device') + ')' }))];
     if (warns.length) {
@@ -1722,7 +1732,7 @@
   function autoHarmonizeButtons() {
     const groups = new Map();
     $$('.jig-el[data-jig-ctl="button"]').forEach(b => { if (!b.offsetParent || !b.__jigSizeIndex) return; const k = b.parentElement; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(b); });
-    const min = (state.F.protect || {}).minTapTarget || 44;
+    const min = (state.F.protect || {}).minTapTarget || 24;
     groups.forEach(list => {
       if (list.length < 2) return;
       const idx = list.map(b => b.__jigSizeIndex()); if (new Set(idx).size === 1) return;
@@ -1794,7 +1804,8 @@
           if (steps) { state.autoFixes.push({ el: w.el, what: `ramp +${steps} (body copy now ${r1(px(css(w.el).fontSize))}px)` }); did = true; }
         }
         if (w.kind === 'measure' && w.long && !w.el.__jigSetMaxCols && !seen.has(key(w.el, w.kind))) {
-          seen.add(key(w.el, w.kind)); const el = w.el; const prev = el.style.getPropertyValue('max-width');
+          seen.add(key(w.el, w.kind)); let el = w.el; while (el.parentElement && /^inline/.test(css(el).display) && el.parentElement !== document.body) el = el.parentElement;   // max-width does nothing on an inline span: cap its block
+          if (seen.has(key(el, 'measure-cap'))) continue; seen.add(key(el, 'measure-cap')); const prev = el.style.getPropertyValue('max-width');
           el.style.setProperty('max-width', '68ch', 'important');
           record(el, 'type', { maxWidth: '68ch', wasCpl: Math.round(w.cpl) }, `max-width 68ch (measure was ~${Math.round(w.cpl)} characters)`, 'measure');
           state.autoFixes.push({ el, ctl: 'type', sub: 'measure', what: `max-width 68ch (measure was ~${Math.round(w.cpl)} characters)`, undo: () => { el.style.removeProperty('max-width'); if (prev) el.style.setProperty('max-width', prev); } }); did = true;
@@ -1805,13 +1816,13 @@
           w.el.__jigSetMaxCols(want); state.autoFixes.push({ el: w.el, what: `max-width ${want} cols (measure was ~${Math.round(w.cpl)} characters)` }); did = true;
         }
         if (w.kind === 'tap-target' && w.narrow && w.el.__jigStepSize && !seen.has(key(w.el, w.kind))) {
-          seen.add(key(w.el, w.kind)); let steps = 0; const min = (state.F.protect || {}).minTapTarget || 44;
+          seen.add(key(w.el, w.kind)); let steps = 0; const min = (state.F.protect || {}).minTapTarget || 24;
           while (steps < 2 && w.el.getBoundingClientRect().width < min - 0.5 && w.el.__jigStepSize(1)) steps++;
           if (steps) { state.autoFixes.push({ el: w.el, what: `size +${steps} (tap target now ${Math.round(w.el.getBoundingClientRect().width)}px wide)` }); did = true; }
         }
         if (w.kind === 'button-wrap' && !seen.has(key(w.el, w.kind))) {
           // a wrapped label: step the size down only if that keeps the tap target; otherwise keep the size and stop the wrap
-          seen.add(key(w.el, w.kind)); const el = w.el; const minTap = (state.F.protect || {}).minTapTarget || 44;
+          seen.add(key(w.el, w.kind)); const el = w.el; const minTap = (state.F.protect || {}).minTapTarget || 24;
           const lines = () => { const rg = document.createRange(); rg.selectNodeContents(el); return new Set(Array.from(rg.getClientRects()).filter(q => q.width > 1).map(q => Math.round(q.top / 4))).size; };
           const grown = seen.has(key(el, 'tap-target')) || seen.has(key(el, 'tap-min'));
           let steps = 0;
@@ -1827,17 +1838,23 @@
             } else { el.style.removeProperty('white-space'); if (prev) el.style.setProperty('white-space', prev); }   // no room: leave the note for a person
           }
         }
+        if (w.kind === 'dup-link' && !seen.has(key(w.el, w.kind))) {
+          seen.add(key(w.el, w.kind)); const el = w.el; const pa = el.getAttribute('aria-hidden'), pt = el.getAttribute('tabindex');
+          el.setAttribute('aria-hidden', 'true'); el.setAttribute('tabindex', '-1');
+          record(el, 'a11y', { ariaHidden: 'true', tabindex: '-1', reason: 'duplicate of the headline link' }, 'aria-hidden="true" tabindex="-1" (duplicate of the headline link)', 'dup');
+          state.autoFixes.push({ el, ctl: 'a11y', sub: 'dup', what: 'aria-hidden + tabindex -1 (image link duplicates the headline link)', undo: () => { pa == null ? el.removeAttribute('aria-hidden') : el.setAttribute('aria-hidden', pa); pt == null ? el.removeAttribute('tabindex') : el.setAttribute('tabindex', pt); } }); did = true;
+        }
         if (w.kind === 'face' && w.el.__jigSetFocal && w.el.__jigFace && !seen.has(key(w.el, w.kind))) {
           seen.add(key(w.el, w.kind)); if (w.el.__jigSetFocal(w.el.__jigFace.fx, w.el.__jigFace.fy)) { state.autoFixes.push({ el: w.el, what: 'crop re-centred on the face' }); did = true; }
         }
         if (w.kind === 'tap-target' && !w.narrow && w.el.__jigStepSize && !seen.has(key(w.el, w.kind))) {
           seen.add(key(w.el, w.kind)); let steps = 0;
-          while (steps < 2 && w.el.getBoundingClientRect().height < ((state.F.protect || {}).minTapTarget || 44) - 0.5 && w.el.__jigStepSize(1)) steps++;
+          while (steps < 2 && w.el.getBoundingClientRect().height < ((state.F.protect || {}).minTapTarget || 24) - 0.5 && w.el.__jigStepSize(1)) steps++;
           if (steps) { state.autoFixes.push({ el: w.el, what: `size +${steps} (tap target now ${Math.round(w.el.getBoundingClientRect().height)}px)` }); did = true; }
         }
         if (w.kind === 'tap-target' && !seen.has(key(w.el, 'tap-min'))) {
           // still short (no bigger size in the system, or not a wired button): give it the height directly, label centred
-          const min = (state.F.protect || {}).minTapTarget || 44; const el = w.el; const r0 = el.getBoundingClientRect();
+          const min = (state.F.protect || {}).minTapTarget || 24; const el = w.el; const r0 = el.getBoundingClientRect();
           if ((w.narrow ? r0.width : r0.height) < min - 0.5) {
             seen.add(key(el, 'tap-min')); const prop = w.narrow ? 'min-width' : 'min-height'; const prev = el.style.getPropertyValue(prop); const prevD = el.style.getPropertyValue('display');
             const cs = css(el); const pad = cs.boxSizing === 'border-box' ? 0 : (w.narrow ? px(cs.paddingLeft) + px(cs.paddingRight) + px(cs.borderLeftWidth) + px(cs.borderRightWidth) : px(cs.paddingTop) + px(cs.paddingBottom) + px(cs.borderTopWidth) + px(cs.borderBottomWidth));
@@ -2099,7 +2116,7 @@
       if (!scanTimer && ms.some(m => !(m.target.closest && m.target.closest('#jig-hud, #jig-axtags, #jig-device, .jig-tb, #jig-found, .jig-scrim-panel')) && Array.from(m.addedNodes).some(n => n.nodeType === 1 && !(n.id || '').startsWith('jig-') && !(n.className && String(n.className).includes('jig-'))))) { settles++; scanSoon(); }
     });
     mo.observe(document.body, { childList: true, subtree: true });
-    window.__jig = { state, patch: buildPatch, scan: scanProtection, Controls };
+    window.__jig = { state, patch: buildPatch, scan: scanProtection, Controls, get gridDebug() { return gridDebug; } };   // gridDebug: what the grid measuring saw
     console.log('%cjig studio%c ready · ' + $$('.jig-el').length + ' elements · foundation ' + state.F.name, 'color:#3f6fff;font-weight:700', '');
   }
   function r1(v) { return Math.round(v * 10) / 10; }
