@@ -221,7 +221,9 @@
         const ks = Array.from(row.children).filter(visible).map(cbox).filter(k => k.width >= W * 0.15 && k.height >= 60 && k.left >= L0 - 2 && k.right <= L0 + W + 2);
         const side = ks.filter((k, i) => ks.some((o, j) => j !== i && o.top < k.bottom - 10 && k.top < o.bottom - 10 && (o.left >= k.right - 1 || o.right <= k.left + 1)));
         if (side.length < 2) return;
-        side.sort((x, y) => x.left - y.left).forEach((k, i) => { Lset.add(Math.round(k.left)); Rset.add(Math.round(k.right)); const nx = side[i + 1]; if (nx && Math.abs(nx.top - k.top) < 40) { const g = Math.round(nx.left - k.right); if (g >= 4 && g <= 48) { gaps.push(g); const pk = Math.round(k.right) + ',' + Math.round(nx.left); pairs.set(pk, (pairs.get(pk) || 0) + 1); } } });
+        side.forEach(k => { Lset.add(Math.round(k.left)); Rset.add(Math.round(k.right));
+          const nx = side.filter(o => o !== k && o.left >= k.right - 1 && o.top < k.bottom - 10 && k.top < o.bottom - 10).sort((x, y) => x.left - y.left)[0];   // the neighbour to the right in the same row (grids wrap)
+          if (nx) { const g = Math.round(nx.left - k.right); if (g >= 4 && g <= 48) { gaps.push(g); const pk = Math.round(k.right) + ',' + Math.round(nx.left); pairs.set(pk, (pairs.get(pk) || 0) + 1); } } });
       }));
       const Ls = Array.from(Lset), Rs = Array.from(Rset);   // each distinct edge counts once: twelve identical teasers don't outvote the page
       // fit gutter and column count together; keep the simplest grid (fewest columns) that lands as many real edges on lines as the best fit does
@@ -965,6 +967,11 @@
     #jig-grid .cols { position: sticky; top: 0; height: 100vh; margin: 0 auto; display: grid; }
     #jig-grid .cols i { background: rgba(63,111,255,.08); border-inline: 1px solid rgba(63,111,255,.35); }
     #jig-grid .cols { position: sticky; } #jig-grid .gmeta { position: absolute; left: 0; bottom: 8px; font: 600 11px/1 ui-monospace, monospace; background: #3f6fff; color: #fff; padding: 4px 6px; border-radius: 4px; white-space: nowrap; }
+    #jig-grid .cols.none i { visibility: hidden; }
+    #jig-grid .cols.faint i { background: transparent; border-inline: 1px dashed rgba(63,111,255,.25); }
+    #jig-grid .modrow { position: absolute; background: rgba(63,111,255,.06); border-block: 1px solid rgba(63,111,255,.45); box-sizing: border-box; }
+    #jig-grid .region { position: absolute; border: 2px solid rgba(155,93,229,.75); background: rgba(155,93,229,.05); border-radius: 6px; box-sizing: border-box; }
+    #jig-grid .region span { position: absolute; top: 6px; left: 6px; font: 600 11px/1 ui-monospace, monospace; background: #9b5de5; color: #fff; padding: 3px 6px; border-radius: 4px; white-space: nowrap; }
     #jig-grid .offgrid { position: absolute; border: 2px dashed #f5a524; border-radius: 4px; box-sizing: border-box; }
     #jig-grid .offgrid span { position: absolute; top: -1px; left: -1px; transform: translateY(-100%); font: 600 11px/1 ui-monospace, monospace; background: #f5a524; color: #111; padding: 3px 6px; border-radius: 4px 4px 0 0; white-space: nowrap; }
     @media (max-width: 640px) { #jig-grid .cols i { background: rgba(63,111,255,.12); border-inline: 1px solid rgba(63,111,255,.5); } }
@@ -1121,13 +1128,66 @@
       // pages with an offset or positioned body put the overlay somewhere else than measured: correct by what actually landed
       const off = cols.getBoundingClientRect().left - r.left; if (Math.abs(off) > 0.5) cols.style.marginLeft = `${Math.round(r.left - off)}px`;
       gridEl.style.height = `${document.documentElement.scrollHeight}px`;
-      const meta = document.createElement('b'); meta.className = 'gmeta'; meta.textContent = gridFit != null && gridFit >= 30 ? `${G.columns} col · ${G.gutter}px gutter · measured · ${gridFit}% of column gaps on lines` : `${G.columns} col · ${G.gutter}px gutter · assumed (not enough side-by-side content to measure)`; cols.appendChild(meta);
-      if (gridFit != null && gridFit >= 30) markOffGrid(cols);   // outlines only mean something against a measured grid
+      // three kinds of grid: column (gap pairs fit), modular (columns plus repeating equal-height rows), hierarchical (no shared columns; regions ranked by importance)
+      const measured = gridFit != null && gridFit >= 30;
+      const meta = document.createElement('b'); meta.className = 'gmeta';
+      if (measured) {
+        const mods = markModules(cols);
+        meta.textContent = `${mods ? 'modular' : 'column'} grid · ${G.columns} col · ${G.gutter}px gutter${mods ? ` · ${mods} module block${mods === 1 ? '' : 's'}` : ''} · ${gridFit}% of column gaps on lines`;
+        markOffGrid(cols); state.gridType = mods ? 'modular' : 'column';
+      } else {
+        cols.classList.add('faint'); const n = markRegions(r);
+        meta.textContent = n >= 2 ? `hierarchical · ${n} regions ranked by size · no shared column grid` : `${G.columns} col · ${G.gutter}px gutter · assumed (not enough side-by-side content to measure)`;
+        state.gridType = n >= 2 ? 'hierarchical' : 'assumed'; if (n >= 2) cols.classList.add('none');   // no shared columns: don't draw any
+      }
+      cols.appendChild(meta);
       return;
     } else { cols.style.maxWidth = `${G.maxWidth}px`; cols.style.paddingInline = `${Math.min(G.margin, Math.floor(window.innerWidth * 0.06))}px`; }
     for (let i = 0; i < G.columns; i++) cols.appendChild(document.createElement('i'));
     gridEl.appendChild(cols);
     gridEl.style.height = `${document.documentElement.scrollHeight}px`;
+  }
+  // modular: containers whose children repeat as rows of equal-height modules get horizontal module lines
+  function markModules(cols) {
+    const ci = Array.from(cols.querySelectorAll('i')).map(i => i.getBoundingClientRect()); if (ci.length < 2) return 0;
+    const L = ci[0].left, R = ci[ci.length - 1].right, W = R - L; const gr = gridEl.getBoundingClientRect(); let n = 0; const done = [];
+    for (const box of $$('body *')) {
+      if (n >= 8) break; if (box.closest('#jig-hud, #jig-grid, #jig-axtags, .jig-tb, #jig-device') || done.some(d => d.contains(box))) continue;
+      const fit = k => k.width >= W * 0.12 && k.height >= 60 && k.left >= L - 2 && k.right <= R + 2;
+      const test = ks => {
+        if (ks.length < 4) return null;
+        const tops = Array.from(new Set(ks.map(k => Math.round(k.top / 4) * 4))).sort((a, b) => a - b); const lefts = new Set(ks.map(k => Math.round(k.left / 4)));
+        if (tops.length < 2 || lefts.size < 2) return null;
+        const hs = ks.map(k => k.height); const hMed = hs.slice().sort((a, b) => a - b)[hs.length >> 1];
+        if (hs.filter(h => Math.abs(h - hMed) <= 4).length < ks.length * 0.8) return null;   // modules share a height
+        const ws = ks.map(k => k.width); const wMed = ws.slice().sort((a, b) => a - b)[ws.length >> 1];
+        if (ws.filter(w => Math.abs(w - wMed) <= wMed * 0.1).length < ks.length * 0.8) return null;   // and a width (a thumbnail beside its text is a list, not modules)
+        const steps = tops.slice(1).map((t, i) => t - tops[i]); if (Math.max(...steps) - Math.min(...steps) > 8) return null;   // and a row rhythm
+        return { tops, hMed };
+      };
+      const kids = Array.from(box.children).filter(visible);
+      let hitM = test(kids.map(k => k.getBoundingClientRect()).filter(fit));
+      if (!hitM && kids.length >= 2 && kids.every(c => /flex|grid/.test(css(c).display))) hitM = test(kids.flatMap(c => Array.from(c.children)).filter(visible).map(k => k.getBoundingClientRect()).filter(fit));   // rows wrapped one container each
+      if (!hitM) continue; const { tops, hMed } = hitM;
+      done.push(box); n++; const br = box.getBoundingClientRect();
+      tops.forEach(t => { const band = document.createElement('div'); band.className = 'modrow'; band.style.cssText = `left:${Math.round(br.left - gr.left)}px;width:${Math.round(br.width)}px;top:${Math.round(t - gr.top)}px;height:${Math.round(hMed)}px`; gridEl.appendChild(band); });
+    }
+    return n;
+  }
+  // hierarchical: no shared column grid, so show the regions the page is built from, ranked by how much of it they take
+  function markRegions(r) {
+    const gr = gridEl.getBoundingClientRect(); const L = r.left, W = r.width; const regs = [];
+    for (const row of $$('body *')) {
+      if (row.closest('#jig-hud, #jig-grid, #jig-axtags, .jig-tb, #jig-device') || regs.some(g => g.el.contains(row) || row.contains(g.el))) continue;
+      const ks = Array.from(row.children).filter(visible).map(k => ({ k, b: k.getBoundingClientRect() })).filter(o => o.b.width >= W * 0.2 && o.b.height >= 120 && o.b.left >= L - 40 && o.b.right <= L + W + 40);
+      const side = ks.filter((o, i) => ks.some((p, j) => j !== i && p.b.top < o.b.bottom - 10 && o.b.top < p.b.bottom - 10 && (p.b.left >= o.b.right - 1 || p.b.right <= o.b.left + 1)));
+      if (side.length < 2) continue;
+      side.forEach(o => { if (regs.length < 10 && !regs.some(g => g.el.contains(o.k) || o.k.contains(g.el))) regs.push({ el: o.k, b: o.b, a: o.b.width * Math.min(o.b.height, 1600) }); });
+    }
+    const ranked = regs.slice().sort((a, b) => b.a - a.a); const names = ['primary', 'secondary', 'tertiary'];
+    ranked.forEach((g, i) => { const box = document.createElement('div'); box.className = 'region'; box.style.cssText = `left:${Math.round(g.b.left - gr.left)}px;top:${Math.round(g.b.top - gr.top)}px;width:${Math.round(g.b.width)}px;height:${Math.round(g.b.height)}px`;
+      box.innerHTML = `<span>${names[i] || 'region ' + (i + 1)} · ${Math.round(g.b.width)}px</span>`; gridEl.appendChild(box); });
+    return ranked.length;
   }
   // rows whose blocks don't sit on the grid get a dashed outline: real sites hand-build heroes and sidebars, and pretending they fit helps nobody
   function markOffGrid(cols) {
