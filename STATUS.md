@@ -35,3 +35,20 @@ While a frame is open it owns the view: grid, pink chips and the notes list all 
 
 ## Ben's standing rules for this project
 No em-dashes (semicolons). Contractions in copy. Headless sweep before handing back. Edit in place, tell him to refresh. Keep the demo broken. Always update memory when assumptions change.
+
+## Oct 22 2026, evening session (Opus)
+
+Done and pushed:
+- First scan no longer hangs on lazy images (desktop and device frames); "…" badge while scanning; settle rescans capped.
+- Auto: batched rendering (no freezes on huge pages), "working…" label; type snaps that make a row wrap are undone; small text only rounds up; type ties round up.
+- AX: tap targets default to WCAG 2.2 AA (24px; a foundation can ask for 44); duplicate image links fixed with aria-hidden + tabindex -1; logo/hidden h1 gets one h1-role note instead of shrinking every headline; tint fallback for text over images (45/60/75%, "unverified" when the image can't be sampled); icons, side images and solid backgrounds no longer count as text-over-image; measure cap goes on the block when text is inline.
+- Grid: measured from content (gap pairs, sqrt-weighted, ≥2 gaps per candidate, 3 exact gaps counts as measured, repeated structure wins near-ties, simplest grid after that); extent from full-width rows; types: column, modular (equal-size modules on a row rhythm), hierarchical (regions ranked by size), assumed; off-grid sections outlined; __jig.gridDebug readout; tests/realfit.js replays live-captured gaps (GeekWire 12/30, Ars 3/20).
+- Buttons: variant switch makes a true twin (colour incl. contrast fix, weight, border); one colour one fix across text and background.
+- Patch: identical changes grouped; selectors prefer sibling-unique classes; snap groups carry text hints; one type scale when auto snapped (medium/strict); auto section says what it skipped; jig adopts a site's own .scrim-panel instead of wrapping it.
+- GIVE-THIS-TO-YOUR-AI.md: a11y ctl, tint/maxWidth/minHeight/whiteSpace fields, 24px bar, quantize hints.
+- Round trips: two fresh incognito AIs applied Dave's legacy patch. Round 2 had nothing to reconcile; 32 notes → 4 (2 expected + 2 misses caused by sibling-count selectors, since fixed).
+- Bookmarklet is "🦆 Jig this page".
+
+Sweep notes: GOV.UK and Stripe block injection (CSP) → browser extension matters. Stale tests to fix: scr.js, scrimc.js (predate second banner and scrim panels).
+
+Next: optional round 3 round trip; AX report as a "copy as report" mode on the copy button; section grids for hierarchical pages; extension.
