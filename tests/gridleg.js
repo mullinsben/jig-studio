@@ -1,0 +1,4 @@
+const { chromium } = require('playwright');
+(async () => { const b = await chromium.launch(); for (const [u, w] of [['http://localhost:8766/lab/capybutz/legacy/?jig', 1440], ['http://localhost:8766/lab/capybutz/?jig', 1440]]) { const p = await b.newPage({ viewport: { width: w, height: 900 } });
+await p.goto(u); await p.waitForFunction(() => window.__jig); await p.click('#jig-grid-btn'); await p.waitForTimeout(300);
+console.log(u, JSON.stringify(await p.evaluate(() => { const G = __jig.state.F.grid; const ls = [...document.querySelectorAll('#jig-grid .cols i')]; return { mode: __jig.state.F.mode, cols: G.columns, gutter: G.gutter, maxWidth: G.maxWidth, first: Math.round(ls[0].getBoundingClientRect().left), last: Math.round(ls[ls.length-1].getBoundingClientRect().right) }; }))); await p.close(); } await b.close(); })();

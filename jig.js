@@ -192,7 +192,7 @@
     const vw = document.documentElement.clientWidth;
     // centered containers narrower than the viewport, by how often their width recurs; ties go to the wider one
     const els = $$('body *').filter(el => { if (!visible(el)) return false; const r = el.getBoundingClientRect(); return r.width >= vw * 0.5 && r.width <= vw - 16 && Math.abs(r.left - (vw - r.right)) < 3 && r.height >= 40; });
-    const byW = new Map(); els.forEach(el => { const w = Math.round(el.getBoundingClientRect().width / 4) * 4; const e = byW.get(w) || { w, n: 0, el }; e.n++; byW.set(w, e); });
+    const byW = new Map(); els.forEach(el => { const w = Math.round(el.getBoundingClientRect().width / 4) * 4; const e = byW.get(w) || { w, n: 0, el, els: [] }; e.n++; e.els.push(el); byW.set(w, e); });
     // the grid belongs on the edge real content sits on (logo, nav, images, headings), not whichever wrapper width recurs most
     const marks = $$('img, svg, picture, video, h1, h2, h3, h4, p, a, button, input').filter(m => visible(m) && !m.closest('#jig-hud, #jig-axtags, .jig-tb')).map(m => Math.round(m.getBoundingClientRect().left));
     const near = x => marks.reduce((n, l) => n + (Math.abs(l - x) <= 2 ? 1 : 0), 0);
@@ -201,12 +201,36 @@
       e.content = inner > outer; e.aligned = Math.max(outer, inner); e.box = e.content ? { left: r.left + pl, width: r.width - pl - pr } : { left: r.left, width: r.width }; });
     const cands = Array.from(byW.values()); const onEdge = cands.filter(e => e.aligned >= 1).sort((a, b) => b.box.width - a.box.width);
     const best = onEdge[0] || cands.sort((a, b) => b.n - a.n || b.w - a.w)[0];   // the widest centred box real content sits on; inner strips are insets
-    const maxWidth = best ? Math.round(best.box.width) : Math.min(1200, vw - 64);
-    const margin = best ? 0 : 32;
-    gridAnchor = best ? best.el : null; gridAnchorContent = !!(best && best.content);
-    return { columns: 12, gutter: 24, margin, maxWidth, inferred: true };
+    gridAnchor = best ? best.el : null; gridAnchorContent = !!(best && best.content); gridInset = null;
+    let columns = 12, gutter = 24, maxWidth = best ? Math.round(best.box.width) : Math.min(1200, vw - 64);
+    if (best) {
+      // measure the grid the content actually uses: where the blocks start and end, the gap between neighbours, and the column count that puts the most block edges on lines
+      const A = best.box; const kids = Array.from(new Set(best.els.flatMap(c => $$('*', c)))).filter(k => { if (!visible(k) || k.closest('#jig-hud, #jig-axtags, .jig-tb')) return false; const r = k.getBoundingClientRect(); return r.height >= 60 && r.width >= 60 && r.left >= A.left - 1 && r.right <= A.left + A.width + 1; }).map(k => k.getBoundingClientRect());
+      const mode = arr => { const m = new Map(); arr.forEach(v => m.set(v, (m.get(v) || 0) + 1)); return Array.from(m).sort((a, b) => b[1] - a[1] || a[0] - b[0])[0]; };
+      const wide = kids.filter(r => r.width >= A.width * 0.5);
+      if (wide.length >= 2) {
+        const l = mode(wide.map(r => Math.round(r.left)))[0], rr = mode(wide.map(r => Math.round(r.right)))[0];
+        if (rr - l >= A.width * 0.7) gridInset = { l: l - A.left, r: A.left + A.width - rr };
+      }
+      const L0 = A.left + (gridInset ? gridInset.l : 0), W = A.width - (gridInset ? gridInset.l + gridInset.r : 0);
+      const parts = kids.filter(r => r.width < W * 0.7 && r.width >= W * 0.08 && r.left >= L0 - 1 && r.right <= L0 + W + 1);
+      const Ls = parts.map(r => Math.round(r.left)), Rs = parts.map(r => Math.round(r.right));
+      const gaps = []; Rs.forEach(rv => Ls.forEach(lv => { const g = lv - rv; if (g >= 4 && g <= 48) gaps.push(g); }));
+      if (gaps.length >= 2) gutter = mode(gaps)[0];
+      const edges = Ls.map(x => x - L0).concat(Rs.map(x => x - L0));
+      if (edges.length >= 4) {
+        let bestN = 12, bestScore = -1;
+        [12, 16, 8, 6, 4, 10, 24].forEach(N => { const cw = (W - (N - 1) * gutter) / N; if (cw < 16) return;
+          const lines = []; for (let i = 0; i <= N; i++) { lines.push(i * (cw + gutter)); lines.push(i * (cw + gutter) - gutter); }
+          const hit = edges.filter(e => lines.some(x => Math.abs(x - e) <= 2)).length / edges.length;
+          if (hit > bestScore + 0.05 || (Math.abs(hit - bestScore) <= 0.05 && N === 12)) { bestScore = hit; bestN = N; } });
+        columns = bestN;
+      }
+      maxWidth = Math.round(W);
+    }
+    return { columns, gutter, margin: best ? 0 : 32, maxWidth, inferred: true };
   }
-  let gridAnchor = null, gridAnchorContent = false;   // the element whose edges the inferred grid is drawn on (its padded content edge when that's where things line up)
+  let gridAnchor = null, gridAnchorContent = false, gridInset = null;   // the element whose edges the inferred grid is drawn on (its padded content edge when that's where things line up)
   function resolveFoundation() {
     const F = state.F; F.mode = F.mode || 'file';
     // type steps: explicit sizes in the file, else resolve the site's --text-* vars, else infer
@@ -1073,7 +1097,7 @@
     if (gridAnchor && gridAnchor.isConnected && state.bp !== 'phone') {
       // inferred grid: sit exactly on the content container's edges
       const r0 = gridAnchor.getBoundingClientRect(); const pl = gridAnchorContent ? px(css(gridAnchor).paddingLeft) : 0, pr = gridAnchorContent ? px(css(gridAnchor).paddingRight) : 0;
-      const r = { left: r0.left + pl, width: r0.width - pl - pr };
+      const r = { left: r0.left + pl + (gridInset ? gridInset.l : 0), width: r0.width - pl - pr - (gridInset ? gridInset.l + gridInset.r : 0) };
       cols.style.maxWidth = `${Math.round(r.width)}px`; cols.style.width = `${Math.round(r.width)}px`; cols.style.paddingInline = '0'; cols.style.marginLeft = `${Math.round(r.left)}px`; cols.style.marginRight = '0'; cols.style.boxSizing = 'border-box';
       for (let i = 0; i < G.columns; i++) cols.appendChild(document.createElement('i'));
       gridEl.appendChild(cols);
@@ -1664,10 +1688,23 @@
           while (steps < 2 && w.el.getBoundingClientRect().width < min - 0.5 && w.el.__jigStepSize(1)) steps++;
           if (steps) { state.autoFixes.push({ el: w.el, what: `size +${steps} (tap target now ${Math.round(w.el.getBoundingClientRect().width)}px wide)` }); did = true; }
         }
-        if (w.kind === 'button-wrap' && w.el.__jigStepSize && !seen.has(key(w.el, w.kind))) {
-          seen.add(key(w.el, w.kind)); const lines = () => { const lh = px(css(w.el).lineHeight) || px(css(w.el).fontSize) * 1.3; const r = w.el.getBoundingClientRect(); return (r.height - px(css(w.el).paddingTop) - px(css(w.el).paddingBottom)) / lh; };
-          let steps = 0; while (steps < 2 && lines() > 1.6 && w.el.__jigStepSize(-1)) steps++;
-          if (lines() <= 1.6 && steps) { state.autoFixes.push({ el: w.el, what: `size −${steps} (label on one line)` }); did = true; } else while (steps-- > 0) w.el.__jigStepSize(1);
+        if (w.kind === 'button-wrap' && !seen.has(key(w.el, w.kind))) {
+          // a wrapped label: step the size down only if that keeps the tap target; otherwise keep the size and stop the wrap
+          seen.add(key(w.el, w.kind)); const el = w.el; const minTap = (state.F.protect || {}).minTapTarget || 44;
+          const lines = () => { const rg = document.createRange(); rg.selectNodeContents(el); return new Set(Array.from(rg.getClientRects()).filter(q => q.width > 1).map(q => Math.round(q.top / 4))).size; };
+          const grown = seen.has(key(el, 'tap-target')) || seen.has(key(el, 'tap-min'));
+          let steps = 0;
+          if (!grown && el.__jigStepSize) { while (steps < 2 && lines() > 1 && el.__jigStepSize(-1)) { steps++; if (el.getBoundingClientRect().height < minTap - 0.5) { el.__jigStepSize(1); steps--; break; } } }
+          if (lines() <= 1 && steps) { state.autoFixes.push({ el, what: `size −${steps} (label on one line)` }); did = true; }
+          else {
+            while (steps-- > 0) el.__jigStepSize(1);
+            const prev = el.style.getPropertyValue('white-space'); el.style.setProperty('white-space', 'nowrap', 'important');
+            const par = el.parentElement, r = el.getBoundingClientRect(), pr = par ? par.getBoundingClientRect() : null;
+            if (lines() <= 1 && (!pr || r.right <= pr.right + 1)) {
+              record(el, 'button', { whiteSpace: 'nowrap' }, 'white-space nowrap (label on one line)', 'nowrap');
+              state.autoFixes.push({ el, ctl: 'button', sub: 'nowrap', what: 'white-space nowrap (label on one line, size kept)', undo: () => { el.style.removeProperty('white-space'); if (prev) el.style.setProperty('white-space', prev); } }); did = true;
+            } else { el.style.removeProperty('white-space'); if (prev) el.style.setProperty('white-space', prev); }   // no room: leave the note for a person
+          }
         }
         if (w.kind === 'face' && w.el.__jigSetFocal && w.el.__jigFace && !seen.has(key(w.el, w.kind))) {
           seen.add(key(w.el, w.kind)); if (w.el.__jigSetFocal(w.el.__jigFace.fx, w.el.__jigFace.fy)) { state.autoFixes.push({ el: w.el, what: 'crop re-centred on the face' }); did = true; }
