@@ -411,7 +411,7 @@
 
   // --- crop: drag to pan, wheel/pinch to zoom -------------------------------
   Controls.crop = {
-    match: el => el.matches('img, picture > img') || css(el).backgroundImage !== 'none',
+    match: el => (el.matches('img, picture > img') || css(el).backgroundImage !== 'none') && !isLogo(el),
     label: 'crop · drag to pan · pinch or ⌘-wheel to zoom · click for zoom buttons · arrows nudge',
     init(el) {
       const isImg = el.tagName === 'IMG';
@@ -426,7 +426,7 @@
         // paint over them, so the jig wraps the image in a tight block that clips. The wrapper is removed on unwire.
         const siblings = Array.from(parent.children).filter(c => c !== el && css(c).position !== 'absolute');
         const loose = parent.getBoundingClientRect().height > el.getBoundingClientRect().height + 6;
-        if ((siblings.length || loose) && !/^(PICTURE|A)$/.test(parent.tagName)) {
+        if ((siblings.length || loose) && !/^(PICTURE|A)$/.test(parent.tagName) && !/absolute|fixed/.test(css(el).position)) {   // a positioned image is already its own layer; wrapping it would collapse it to nothing
           const w = document.createElement('div'); w.className = 'jig-crop-box';
           const d = css(el).display; w.style.cssText = `display:${d === 'inline' || d === 'inline-block' ? 'inline-block' : 'block'};overflow:hidden;position:relative;line-height:0;width:${d === 'inline' || d === 'inline-block' ? 'auto' : '100%'};`;
           ['margin', 'float', 'border-radius'].forEach(k => { const v = el.style.getPropertyValue(k); if (v) w.style.setProperty(k, v); });
@@ -436,7 +436,8 @@
         if (css(parent).overflow === 'visible') parent.style.overflow = 'hidden';
       }
       // a plain <img> (fill / scale-down) has nothing to pan; in jig mode it becomes a cover crop
-      const upgraded = isImg && !/cover|none/.test(orig.fit);
+      const aspectSame = isImg && el.naturalWidth && el.offsetHeight && Math.abs((el.offsetWidth / el.offsetHeight) / (el.naturalWidth / el.naturalHeight) - 1) < 0.03;
+      const upgraded = isImg && orig.fit === 'fill' && aspectSame;   // contain and scale-down are the site's choice (logos, product shots): never forced to cover
       if (upgraded) el.style.setProperty('object-fit', 'cover', 'important');
       let [ox, oy] = parsePos(orig.op);
       const zoom0 = (() => { const m = orig.tr.match(/scale\(\s*([\d.]+)/); return m ? clamp(+m[1], 1, 4) : 1; })();   // a site can ship a baked-in zoom
@@ -547,6 +548,13 @@
   function parsePos(s) {
     const m = (s || '50% 50%').split(/\s+/).map(v => px(v));
     return [isFinite(m[0]) ? m[0] : 50, isFinite(m[1]) ? m[1] : 50];
+  }
+  // a logo or brand mark: SVGs and images named, classed or placed like one. They are never cropped.
+  function isLogo(el) {
+    if (el.tagName !== 'IMG') return false;
+    const src = (el.currentSrc || el.src || '').toLowerCase(), hint = (el.className + ' ' + el.id + ' ' + (el.alt || '') + ' ' + src).toLowerCase();
+    if (/\.svg(\?|$)/.test(src) || /logo|brand|wordmark|site-?title/.test(hint)) return true;
+    return !!el.closest('[class*="logo" i], [id*="logo" i], .custom-logo-link, .site-branding, .navbar-brand');
   }
   function naturalFit(img, zoom) {
     // overflow in px for object-fit: cover at a given zoom (box = the untransformed layout box)
@@ -1430,12 +1438,14 @@
       let bg = null, how = '';
       let busy = 0;
       if (over) {
-        let patches = sampleImage(over.img, t); how = 'over image';
+        let patches = sampleImage(over.img, t, over); how = over.gradient ? 'over gradient' : 'over image';
+        if (patches && !over.gradient) patches = applyFilters(patches, over.img, over.box);
         if (patches && patches.some(pc => pc[3] < 1)) { const under = solidBehind(over.img); patches = patches.map(pc => pc[3] < 1 ? blend(under, pc) : pc); }
         if (!patches) { if ((P.textOverImage || 'warn') === 'warn' && !seen.has(over.img)) { seen.add(over.img); W.push({ kind: 'text-over-image', el: t, msg: 'text over an image; contrast could not be sampled (serve over http to enable)' }); } return; }
         // a scrim (gradient/translucent overlay) or a text-shadow earns some credit; otherwise grade by the WORST patch
         const shadow = css(t).textShadow !== 'none';
-        const scrim = scrimBehind(t);
+        const scrim = scrimBehind(t); const extra = overlaysAbove(t, over);   // translucent layers between the picture and the words: sibling overlay boxes, inset shadows, a gradient listed over the photo
+        if (extra.length) patches = patches.map(pc => extra.reduce((c, o) => blend(c, o), pc));
         let pool = patches;
         if (scrim && scrim.blur) { const m = patches.reduce((a, pc) => [a[0] + pc[0] / patches.length, a[1] + pc[1] / patches.length, a[2] + pc[2] / patches.length, 1], [0, 0, 0, 1]); pool = patches.map(() => m); }
         const ratios = pool.map(pc => contrast(fg, scrim ? blend(pc, scrim) : pc)).sort((a, b) => a - b);
@@ -1517,13 +1527,16 @@
       const img = Array.from(n.children).find(c => c.tagName === 'IMG' && c !== t && !c.contains(t) && overlap(c.getBoundingClientRect()) >= 0.5);
       if (img && css(n).position !== 'static') return { img, box: n };
       // page builders (Bold, Elementor, Divi) put the photo in an absolutely positioned layer beside the content, not behind it in the tree
+      for (const ps of ['::before', '::after']) { const pc = getComputedStyle(n, ps); if (pc.content !== 'none' && /absolute|fixed/.test(pc.position) && /url\(/.test(pc.backgroundImage) && overlap(n.getBoundingClientRect()) >= 0.5) return { img: n, pseudo: ps, box: n }; }   // a photo painted by a pseudo-element
       for (const c of n.children) {
-        if (c === t || c.contains(t) || /^(SCRIPT|STYLE|TEMPLATE|svg)$/i.test(c.tagName) || (c.id || '').startsWith('jig-') || !/absolute|fixed/.test(css(c).position) || overlap(c.getBoundingClientRect()) < 0.5) continue;
+        const cropBox = c.classList.contains('jig-crop-box');
+        if (c === t || c.contains(t) || /^(SCRIPT|STYLE|TEMPLATE|svg)$/i.test(c.tagName) || (c.id || '').startsWith('jig-') || !(/absolute|fixed/.test(css(c).position) || cropBox) || (!cropBox && overlap(c.getBoundingClientRect()) < 0.5)) continue;
         const cand = [c, ...c.querySelectorAll('*')].slice(0, 40);
         const src = cand.find(e => (/^(IMG|VIDEO|CANVAS)$/.test(e.tagName) || /url\(/.test(css(e).backgroundImage)) && overlap(e.getBoundingClientRect()) >= 0.5);
         if (src) return { img: src, box: n };
       }
       const c = css(n), bgi = c.backgroundImage;
+      if (/gradient\(/.test(bgi) && !/url\(/.test(bgi) && gradientStops(bgi).length && gradientStops(bgi).every(g => g[3] >= 0.9) && overlap(n.getBoundingClientRect()) >= 0.5) return { img: n, gradient: true, box: n };   // an opaque gradient is a background in its own right
       if (bgi !== 'none' && /url\(/.test(bgi)) {
         // a small no-repeat background is an icon (a bullet, an arrow), not a picture behind the text
         const pxs = ((c.backgroundSize || '').match(/[\d.]+px/g) || []).map(parseFloat); const icon = /no-repeat/.test(c.backgroundRepeat) && pxs.length > 0 && pxs.every(v => v <= 96);   // 'auto 16px' is an icon too
@@ -1549,6 +1562,21 @@
     }
     return null;
   }
+  // overlays a builder stacks between a photo and the words, beyond the ones scrimBehind sees on the text's own parents
+  function overlaysAbove(t, over) {
+    const out = []; const tr = t.getBoundingClientRect(); const ta = Math.max(1, tr.width * tr.height);
+    const covers = r => Math.max(0, Math.min(tr.right, r.right) - Math.max(tr.left, r.left)) * Math.max(0, Math.min(tr.bottom, r.bottom) - Math.max(tr.top, r.top)) / ta >= 0.5;
+    const insetOf = el => { const bs = css(el).boxShadow || ''; const m = bs.match(/(rgba?\([^)]+\))[^,]*inset|inset[^,]*?(rgba?\([^)]+\))/); if (!m) return null; const nums = (bs.match(/(-?[\d.]+)px/g) || []).map(parseFloat); if (!nums.length || Math.max(...nums.map(Math.abs)) < 200) return null; const c = parseColor(m[1] || m[2]); return c && c[3] > 0.05 && c[3] < 1 ? c : null; };   // the giant inset shadow trick
+    // a gradient listed before the url in the photo's own background paints over the photo
+    if (over && !over.gradient && !over.pseudo && over.img.tagName !== 'IMG') { const bgi = css(over.img).backgroundImage; const i = bgi.indexOf('url('); if (i > 0) { const st = gradientStops(bgi.slice(0, i)).filter(c => c[3] < 1); if (st.length) { const a = st.reduce((x, c) => x + c[3], 0) / st.length; out.push([st.reduce((x, c) => x + c[0], 0) / st.length, st.reduce((x, c) => x + c[1], 0) / st.length, st.reduce((x, c) => x + c[2], 0) / st.length, a]); } } }
+    for (let n = over ? over.img : null; n && n !== document.body; n = n.parentElement) { const s = insetOf(n); if (s) { out.push(s); break; } if (n === (over && over.box)) break; }
+    // sibling overlay boxes (Elementor's .elementor-background-overlay, Divi's overlays) on the way up from the text
+    for (let n = t.parentElement; n && n !== document.body; n = n.parentElement) {
+      for (const c of n.children) { if (c.contains(t) || (over && (c === over.img || c.contains(over.img))) || !/absolute|fixed/.test(css(c).position) || !covers(c.getBoundingClientRect())) continue; const bg = parseColor(css(c).backgroundColor); if (bg && bg[3] > 0.05 && bg[3] < 1) out.push([bg[0], bg[1], bg[2], bg[3] * (+css(c).opacity || 1)]); else { const st = gradientStops(css(c).backgroundImage); if (st.length && !/url\(/.test(css(c).backgroundImage) && st.some(x => x[3] < 1)) { const a = st.reduce((x, k) => x + k[3], 0) / st.length; out.push([st.reduce((x, k) => x + k[0], 0) / st.length, st.reduce((x, k) => x + k[1], 0) / st.length, st.reduce((x, k) => x + k[2], 0) / st.length, a]); } } }
+      if (over && n === over.box) break; if (n.contains(over && over.img)) break;
+    }
+    return out;
+  }
   function blend(under, over) { const a = over[3]; return [over[0] * a + under[0] * (1 - a), over[1] * a + under[1] * (1 - a), over[2] * a + under[2] * (1 - a), 1]; }
   // everything on the page that paints a box: an opaque colour or a picture. Built once per scan.
   let painters = null;
@@ -1556,7 +1584,7 @@
     if (painters) return painters; painters = [];
     for (const e of document.body.querySelectorAll('*')) {
       if (e.closest('#jig-hud, #jig-axtags, .jig-tb, .jig-badge, #jig-grid, #jig-found, #jig-device') || /^(SCRIPT|STYLE|TEMPLATE|LINK|META)$/.test(e.tagName)) continue;
-      const c = css(e); const bg = parseColor(c.backgroundColor); const pic = /^(IMG|VIDEO|CANVAS)$/.test(e.tagName) || /url\(/.test(c.backgroundImage);
+      const c = css(e); const bg = parseColor(c.backgroundColor); const pic = /^(IMG|VIDEO|CANVAS)$/.test(e.tagName) || /url\(/.test(c.backgroundImage) || (/gradient\(/.test(c.backgroundImage) && gradientStops(c.backgroundImage).every(g => g[3] >= 0.9));
       if (!(bg && bg[3] > 0.9) && !pic) continue;
       const r = e.getBoundingClientRect(); if (r.width < 8 || r.height < 8 || c.visibility === 'hidden' || +c.opacity === 0) continue;
       let fx = false; for (let a = e, i = 0; a && a !== document.body && i < 14; a = a.parentElement, i++) if (/fixed|sticky/.test(css(a).position)) { fx = true; break; }   // fixed and sticky layers move with the scroll; they only count for text that moves with them
@@ -1580,30 +1608,41 @@
     if (h && h[3] > 0.9) return h;
     return [255, 255, 255, 1];   // the canvas: browsers paint white under a transparent html/body
   }
+  // colour stops of every gradient in a background-image list (rgb/rgba and hex), in order
+  function gradientStops(bgi) {
+    const out = []; (bgi.match(/(rgba?\([^)]+\)|#[0-9a-f]{3,8}\b)/gi) || []).forEach(s => { const c = s[0] === '#' ? hexColor(s) : parseColor(s); if (c) out.push(c); }); return out;
+  }
+  function hexColor(h) { h = h.slice(1); if (h.length === 3) h = h.split('').map(x => x + x).join(''); const n = parseInt(h.slice(0, 6), 16); if (isNaN(n)) return null; return [n >> 16 & 255, n >> 8 & 255, n & 255, h.length === 8 ? parseInt(h.slice(6), 16) / 255 : 1]; }
   const bgImgs = new Map();
-  function bgImage(el) {
-    const m = (css(el).backgroundImage || '').match(/url\(["']?([^"')]+)["']?\)/); if (!m) return null;
+  function bgImage(el, pseudo) {
+    const m = ((pseudo ? getComputedStyle(el, pseudo) : css(el)).backgroundImage || '').match(/url\(["']?([^"')]+)["']?\)/); if (!m) return null;
     let im = bgImgs.get(m[1]); if (!im) { im = new Image(); im.decoding = 'async'; im.onload = () => scanSoon(); im.src = m[1]; bgImgs.set(m[1], im); }
     return im.complete && im.naturalWidth ? im : null;
   }
   // where a CSS background image lands inside its box: background-size cover/contain/auto/px, background-position in % or px
-  function sampleBg(el, t) {
-    const im = bgImage(el); if (!im) return null;
+  function sampleBg(el, t, pseudo) {
+    const im = bgImage(el, pseudo); if (!im) return null;
     try {
-      const c = css(el), br = el.getBoundingClientRect(), tr = t.getBoundingClientRect(); const iw = im.naturalWidth, ih = im.naturalHeight;
+      const c = pseudo ? getComputedStyle(el, pseudo) : css(el), tr = t.getBoundingClientRect(); let br = el.getBoundingClientRect();
+      const iw = im.naturalWidth, ih = im.naturalHeight;
+      const fixedBg = c.backgroundAttachment === 'fixed';   // parallax: which slice sits under the words depends on scroll, so grade on the whole picture const iw = im.naturalWidth, ih = im.naturalHeight;
       const size = (c.backgroundSize || 'auto').split(' '); let s;
       if (size[0] === 'cover') s = Math.max(br.width / iw, br.height / ih); else if (size[0] === 'contain') s = Math.min(br.width / iw, br.height / ih);
       else if (/%$/.test(size[0])) s = br.width * parseFloat(size[0]) / 100 / iw; else if (/px$/.test(size[0])) s = parseFloat(size[0]) / iw; else s = 1;
       const rw = iw * s, rh = ih * s; const pos = (c.backgroundPosition || '50% 50%').split(/\s+/);
       const off = (v, room) => /%$/.test(v) ? room * parseFloat(v) / 100 : /px$/.test(v) ? parseFloat(v) : room / 2;
       const ox = off(pos[0] || '50%', br.width - rw), oy = off(pos[1] || '50%', br.height - rh);
-      const x0 = clamp((tr.left - br.left - ox) / s, 0, iw), y0 = clamp((tr.top - br.top - oy) / s, 0, ih), x1 = clamp((tr.right - br.left - ox) / s, 0, iw), y1 = clamp((tr.bottom - br.top - oy) / s, 0, ih);
+      let x0 = clamp((tr.left - br.left - ox) / s, 0, iw), y0 = clamp((tr.top - br.top - oy) / s, 0, ih), x1 = clamp((tr.right - br.left - ox) / s, 0, iw), y1 = clamp((tr.bottom - br.top - oy) / s, 0, ih);
+      if (fixedBg) { x0 = 0; y0 = 0; x1 = iw; y1 = ih; }
       const N = 8, cv = document.createElement('canvas'); cv.width = N; cv.height = N; const ctx = cv.getContext('2d');
       ctx.drawImage(im, x0, y0, Math.max(1, x1 - x0), Math.max(1, y1 - y0), 0, 0, N, N);
       const d = ctx.getImageData(0, 0, N, N).data; const patches = []; for (let i = 0; i < d.length; i += 4) patches.push([d[i], d[i + 1], d[i + 2], d[i + 3] / 255]); return patches;
     } catch (e) { return null; }   // cross-origin image: unmeasured, never guessed
   }
-  function sampleImage(img, t) {
+  function sampleImage(img, t, over) {
+    if (over && over.gradient) { const st = gradientStops(css(img).backgroundImage); return st.length ? st.map(c => [c[0], c[1], c[2], c[3]]) : null; }   // every stop is a candidate patch; the worst one grades it
+    if (over && over.pseudo) return sampleBg(img, t, over.pseudo);
+    if (img.tagName === 'VIDEO') return sampleVideo(img, t);
     if (img.tagName !== 'IMG') return /url\(/.test(css(img).backgroundImage) ? sampleBg(img, t) : null;
     if (!img.complete || !img.naturalWidth) return null;
     try {
@@ -1622,6 +1661,24 @@
       for (let i = 0; i < d.length; i += 4) patches.push([d[i], d[i + 1], d[i + 2], d[i + 3] / 255]);
       return patches;
     } catch (e) { return null; } // tainted canvas (file://) or cross-origin
+  }
+  // the frame a background video is showing right now, read like an <img> (same-origin only; otherwise unmeasured)
+  function sampleVideo(v, t) {
+    if (!v.videoWidth || v.readyState < 2) return null;
+    try {
+      const ir = v.getBoundingClientRect(), tr = t.getBoundingClientRect(); const s = Math.max(ir.width / v.videoWidth, ir.height / v.videoHeight);
+      const ox = (ir.width - v.videoWidth * s) / 2, oy = (ir.height - v.videoHeight * s) / 2;
+      const x0 = clamp((tr.left - ir.left - ox) / s, 0, v.videoWidth), y0 = clamp((tr.top - ir.top - oy) / s, 0, v.videoHeight), x1 = clamp((tr.right - ir.left - ox) / s, 0, v.videoWidth), y1 = clamp((tr.bottom - ir.top - oy) / s, 0, v.videoHeight);
+      const N = 8, cv = document.createElement('canvas'); cv.width = N; cv.height = N; const ctx = cv.getContext('2d'); ctx.drawImage(v, x0, y0, Math.max(1, x1 - x0), Math.max(1, y1 - y0), 0, 0, N, N);
+      const d = ctx.getImageData(0, 0, N, N).data; const out = []; for (let i = 0; i < d.length; i += 4) out.push([d[i], d[i + 1], d[i + 2], d[i + 3] / 255]); return out;
+    } catch (e) { return null; }
+  }
+  // CSS filters on the picture (and its wrappers up to the box) change what the eye sees: brightness() darkens or lightens, opacity lets the colour behind through
+  function applyFilters(patches, img, box) {
+    let k = 1, op = 1; for (let n = img; n && n !== box && n !== document.body; n = n.parentElement) { const f = css(n).filter || ''; const m = f.match(/brightness\(([\d.]+)(%?)\)/); if (m) k *= m[2] ? parseFloat(m[1]) / 100 : parseFloat(m[1]); if (n === img) op *= +css(n).opacity; }
+    if (k === 1 && op >= 1) return patches;
+    const under = solidBehind(img.parentElement || img);
+    return patches.map(pc => { let c = [Math.min(255, pc[0] * k), Math.min(255, pc[1] * k), Math.min(255, pc[2] * k), 1]; if (op < 1) c = blend(under, [c[0], c[1], c[2], op]); return c; });
   }
   function parseColor(s) { const m = (s || '').match(/rgba?\(([^)]+)\)/); if (!m) return null; const p = m[1].split(',').map(parseFloat); return [p[0], p[1], p[2], p.length > 3 ? p[3] : 1]; }
   function lum([r, g, b]) { const f = v => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }; return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b); }

@@ -1,0 +1,35 @@
+<!doctype html><html lang="en"><head><title>Text over backgrounds: the catalogue</title><style>
+body{margin:0;background:#fffcf9;font:600 20px/1.3 sans-serif;color:#222}
+.case{position:relative;height:150px;margin:0 0 12px;overflow:hidden}.case .t{position:relative;z-index:3;color:#fff;padding:56px 32px;margin:0}
+.c1 img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.c2{background:url(layers-dark.jpg) center/cover}
+.c3 .layer{position:absolute;inset:0;background:url(layers-dark.jpg) center/cover}
+.c4wrap{position:relative;margin:0 0 12px}.c4wrap header{position:absolute;top:0;left:0;right:0;z-index:5;padding:56px 32px;color:#fff}.c4wrap section{height:150px;background:url(layers-dark.jpg) center/cover}
+.c5::before{content:"";position:absolute;inset:0;background:url(layers-dark.jpg) center/cover}
+.c6 .bgimg{position:absolute;inset:0;background:url(layers-bright.jpg) center/cover}.c6 .ov{position:absolute;inset:0;background:rgba(0,0,0,.65)}
+.c7{background:url(layers-bright.jpg) center/cover;box-shadow:inset 0 0 0 2000px rgba(0,0,0,.65)}
+.c8{background:linear-gradient(rgba(0,0,0,.65),rgba(0,0,0,.65)),url(layers-bright.jpg) center/cover}
+.c9{background:linear-gradient(135deg,#1d2b64,#5b2a86)}
+.c10 img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;filter:brightness(.3)}
+.c11{background:url(layers-dark.jpg) center/cover fixed}
+.c12 video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.c13{background:url(layers-bright.jpg) center/cover}
+.c14{background:linear-gradient(#ffffff,#eeeeee)}
+</style></head><body>
+<div class="case c1" data-expect="pass"><img src="layers-dark.jpg" alt="dark texture"><p class="t">1 img behind</p></div>
+<div class="case c2" data-expect="pass"><p class="t">2 parent background</p></div>
+<div class="case c3" data-expect="pass"><div class="layer"></div><p class="t">3 sibling photo layer</p></div>
+<div class="c4wrap" data-expect="pass"><header class="t">4 header over neighbour</header><section></section></div>
+<div class="case c5" data-expect="pass"><p class="t">5 pseudo-element photo</p></div>
+<div class="case c6" data-expect="pass"><div class="bgimg"></div><div class="ov"></div><p class="t">6 sibling overlay layer</p></div>
+<div class="case c7" data-expect="pass"><p class="t">7 inset shadow overlay</p></div>
+<div class="case c8" data-expect="pass"><p class="t">8 gradient over photo, one background</p></div>
+<div class="case c9" data-expect="pass"><p class="t">9 gradient only</p></div>
+<div class="case c10" data-expect="pass"><img src="layers-bright.jpg" alt="bright texture"><p class="t">10 photo dimmed with filter</p></div>
+<div class="case c11" data-expect="pass"><p class="t">11 parallax background</p></div>
+<div class="case c12" data-expect="pass"><video src="layers-dark.webm" autoplay muted loop playsinline></video><p class="t">12 background video</p></div>
+<div class="case c13" data-expect="fail"><p class="t">13 bright photo, nothing over it</p></div>
+<div class="case c14" data-expect="fail"><p class="t">14 light gradient</p></div>
+<a class="custom-logo-link" id="logo-test"><img src="layers-bright.jpg" alt="Three Seasons logo" style="width:97px;height:100px;object-fit:contain"></a>
+<img id="plain-fill" src="layers-dark.jpg" alt="plain" style="width:240px;height:200px">
+<script src="../jig.js"></script></body></html>
