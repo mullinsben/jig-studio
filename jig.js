@@ -201,7 +201,7 @@
       e.content = inner > outer; e.aligned = Math.max(outer, inner); e.box = e.content ? { left: r.left + pl, width: r.width - pl - pr } : { left: r.left, width: r.width }; });
     const cands = Array.from(byW.values()); const onEdge = cands.filter(e => e.aligned >= 1).sort((a, b) => b.box.width - a.box.width);
     const best = onEdge[0] || cands.sort((a, b) => b.n - a.n || b.w - a.w)[0];   // the widest centred box real content sits on; inner strips are insets
-    gridAnchor = best ? best.el : null; gridAnchorContent = !!(best && best.content); gridInset = null; gridFit = null;
+    gridAnchor = best ? best.el : null; gridAnchorContent = !!(best && best.content); gridInset = null; gridFit = null; gridMeasured = false;
     let columns = 12, gutter = 24, maxWidth = best ? Math.round(best.box.width) : Math.min(1200, vw - 64);
     if (best) {
       // measure the grid the content actually uses: where the blocks start and end, the gap between neighbours, and the column count that puts the most block edges on lines
@@ -251,19 +251,20 @@
           const pitch = cw + g; const onR = x => { const k = Math.round((x + g) / pitch); return k >= 1 && k < N && Math.abs(k * pitch - g - x) <= 2; }, onL = x => { const k = Math.round(x / pitch); return k >= 1 && k < N && Math.abs(k * pitch - x) <= 2; };
           const ok = p => Math.abs(p.l - p.r - g) <= 2 && onR(p.r) && onL(p.l);
           fits.push({ N, g, hit: P.reduce((a, p) => a + (ok(p) ? p.w : 0), 0) / total, n: P.filter(ok).length }); }));
-        const top = Math.max(...fits.map(f => f.hit));
+        const cand = fits.filter(f => f.n >= 2);   // one gap can't define a grid: a dozen column counts explain any single gap
+        const top = cand.length ? Math.max(...cand.map(f => f.hit)) : 0;
         gridDebug = { box: [Math.round(A.left), Math.round(A.width)], inset: gridInset, L0: Math.round(L0), W: Math.round(W), pairs: P.map(p => [Math.round(p.r), Math.round(p.l), +p.w.toFixed(2)]), top: +top.toFixed(2), best: fits.slice().sort((x, y) => y.hit - x.hit).slice(0, 4) };
-        const strong = fits.filter(f => f.n >= 3 && f.hit >= 0.15);   // three exact column gaps don't happen by accident: a grid exists, even if other sections do their own thing
+        const strong = cand.filter(f => f.n >= 3 && f.hit >= 0.15);   // three exact column gaps don't happen by accident: a grid exists, even if other sections do their own thing
         if (top >= 0.3 || strong.length) {
-          const pick = fits.filter(f => f.hit >= top - 0.03 && (top >= 0.3 || f.n >= 3)).sort((a, b) => a.N - b.N || (gapCount.get(b.g) || 0) - (gapCount.get(a.g) || 0) || b.hit - a.hit)[0];
-          columns = pick.N; gutter = pick.g; gridFit = Math.round(pick.hit * 100);
+          const pick = cand.filter(f => f.hit >= top - 0.03 && (top >= 0.3 || f.n >= 3)).sort((a, b) => a.N - b.N || (gapCount.get(b.g) || 0) - (gapCount.get(a.g) || 0) || b.hit - a.hit)[0];
+          columns = pick.N; gutter = pick.g; gridFit = Math.round(pick.hit * 100); gridMeasured = true;
         } else if (gaps.length >= 2) { gutter = mode(gaps)[0]; gridFit = Math.round(top * 100); }
       } else if (gaps.length >= 2) gutter = mode(gaps)[0];
       maxWidth = Math.round(W);
     }
     return { columns, gutter, margin: best ? 0 : 32, maxWidth, inferred: true };
   }
-  let gridAnchor = null, gridAnchorContent = false, gridInset = null, gridFit = null, gridDebug = null;   // gridFit: % of measured content edges on the inferred lines   // the element whose edges the inferred grid is drawn on (its padded content edge when that's where things line up)
+  let gridAnchor = null, gridAnchorContent = false, gridInset = null, gridFit = null, gridDebug = null, gridMeasured = false;   // gridFit: % of measured content edges on the inferred lines   // the element whose edges the inferred grid is drawn on (its padded content edge when that's where things line up)
   function resolveFoundation() {
     const F = state.F; F.mode = F.mode || 'file';
     // type steps: explicit sizes in the file, else resolve the site's --text-* vars, else infer
@@ -1146,7 +1147,7 @@
       const off = cols.getBoundingClientRect().left - r.left; if (Math.abs(off) > 0.5) cols.style.marginLeft = `${Math.round(r.left - off)}px`;
       gridEl.style.height = `${document.documentElement.scrollHeight}px`;
       // three kinds of grid: column (gap pairs fit), modular (columns plus repeating equal-height rows), hierarchical (no shared columns; regions ranked by importance)
-      const measured = gridFit != null && gridFit >= 30;
+      const measured = gridMeasured;
       const meta = document.createElement('b'); meta.className = 'gmeta';
       if (measured) {
         const mods = markModules(cols);
