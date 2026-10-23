@@ -215,8 +215,8 @@
       // better evidence for the extent: where full-width rows of content start and end. Rows covering under 70% of the box (inner sections) don't vote.
       { const cb0 = k => { const r = k.getBoundingClientRect(), c = css(k); const pl = px(c.paddingLeft) + px(c.borderLeftWidth), pr = px(c.paddingRight) + px(c.borderRightWidth); return { left: r.left + pl, right: r.right - pr, width: r.width - pl - pr, top: r.top, bottom: r.bottom, height: r.height }; };
         const starts = [], ends = [];
-        best.els.forEach(c => $$('*', c).forEach(row => {
-          if (row.children.length < 2 || row.closest('#jig-hud, #jig-axtags, .jig-tb')) return;
+        [document.body].forEach(c => $$('*', c).forEach(row => {   // rows anywhere on the page within the grid's range; content often lives outside the box that set the edges
+          if (row.children.length < 2 || row.closest('#jig-hud, #jig-axtags, .jig-tb, #jig-grid, #jig-device')) return;
           const ks = Array.from(row.children).filter(visible).map(cb0).filter(k => k.width >= A.width * 0.15 && k.height >= 60 && k.left >= A.left - 2 && k.right <= A.left + A.width + 2);
           const side = ks.filter((k, i) => ks.some((o, j) => j !== i && o.top < k.bottom - 10 && k.top < o.bottom - 10 && (o.left >= k.right - 1 || o.right <= k.left + 1)));
           if (side.length < 2) return; const st = Math.round(Math.min(...side.map(k => k.left))), en = Math.round(Math.max(...side.map(k => k.right)));
@@ -229,8 +229,8 @@
       // page-level rows only: siblings side by side, each a real block (≥15% of the content width). A thumbnail beside its text is a card's layout, not the page's.
       const cbox = k => { const r = k.getBoundingClientRect(), c = css(k); const pl = px(c.paddingLeft) + px(c.borderLeftWidth), pr = px(c.paddingRight) + px(c.borderRightWidth); return { left: r.left + pl, right: r.right - pr, width: r.width - pl - pr, top: r.top, bottom: r.bottom, height: r.height }; };
       const Lset = new Set(), Rset = new Set(), gaps = [], pairs = new Map();   // pairs: right edge + the next block's left edge, one gutter apart; the strongest evidence a grid leaves
-      best.els.forEach(c => $$('*', c).forEach(row => {
-        if (row.children.length < 2 || row.closest('#jig-hud, #jig-axtags, .jig-tb')) return;
+      [document.body].forEach(c => $$('*', c).forEach(row => {   // rows anywhere on the page within the grid's range; content often lives outside the box that set the edges
+        if (row.children.length < 2 || row.closest('#jig-hud, #jig-axtags, .jig-tb, #jig-grid, #jig-device')) return;
         const ks = Array.from(row.children).filter(visible).map(cbox).filter(k => k.width >= W * 0.15 && k.height >= 60 && k.left >= L0 - 2 && k.right <= L0 + W + 2);
         const side = ks.filter((k, i) => ks.some((o, j) => j !== i && o.top < k.bottom - 10 && k.top < o.bottom - 10 && (o.left >= k.right - 1 || o.right <= k.left + 1)));
         if (side.length < 2) return;
@@ -249,11 +249,13 @@
         const fits = []; const total = P.reduce((a, p) => a + p.w, 0);
         gCands.forEach(g => [3, 4, 5, 6, 8, 9, 10, 12, 16, 24].forEach(N => { const cw = (W - (N - 1) * g) / N; if (cw < 16) return;
           const pitch = cw + g; const onR = x => { const k = Math.round((x + g) / pitch); return k >= 1 && k < N && Math.abs(k * pitch - g - x) <= 2; }, onL = x => { const k = Math.round(x / pitch); return k >= 1 && k < N && Math.abs(k * pitch - x) <= 2; };
-          fits.push({ N, g, hit: P.reduce((a, p) => a + (Math.abs(p.l - p.r - g) <= 2 && onR(p.r) && onL(p.l) ? p.w : 0), 0) / total }); }));
+          const ok = p => Math.abs(p.l - p.r - g) <= 2 && onR(p.r) && onL(p.l);
+          fits.push({ N, g, hit: P.reduce((a, p) => a + (ok(p) ? p.w : 0), 0) / total, n: P.filter(ok).length }); }));
         const top = Math.max(...fits.map(f => f.hit));
         gridDebug = { box: [Math.round(A.left), Math.round(A.width)], inset: gridInset, L0: Math.round(L0), W: Math.round(W), pairs: P.map(p => [Math.round(p.r), Math.round(p.l), +p.w.toFixed(2)]), top: +top.toFixed(2), best: fits.slice().sort((x, y) => y.hit - x.hit).slice(0, 4) };
-        if (top >= 0.3) {
-          const pick = fits.filter(f => f.hit >= top - 0.03).sort((a, b) => a.N - b.N || (gapCount.get(b.g) || 0) - (gapCount.get(a.g) || 0) || b.hit - a.hit)[0];
+        const strong = fits.filter(f => f.n >= 3 && f.hit >= 0.15);   // three exact column gaps don't happen by accident: a grid exists, even if other sections do their own thing
+        if (top >= 0.3 || strong.length) {
+          const pick = fits.filter(f => f.hit >= top - 0.03 && (top >= 0.3 || f.n >= 3)).sort((a, b) => a.N - b.N || (gapCount.get(b.g) || 0) - (gapCount.get(a.g) || 0) || b.hit - a.hit)[0];
           columns = pick.N; gutter = pick.g; gridFit = Math.round(pick.hit * 100);
         } else if (gaps.length >= 2) { gutter = mode(gaps)[0]; gridFit = Math.round(top * 100); }
       } else if (gaps.length >= 2) gutter = mode(gaps)[0];
