@@ -1052,8 +1052,8 @@
     #jig-hud .tools .spacer { flex: 1; }
     #jig-hud .advpanel { border-bottom: 1px solid #262833; padding: 6px 12px 8px; }
     #jig-hud:not(.advanced) .advpanel { display: none; }
-    #jig-hud .arow { display: grid; grid-template-columns: 64px 1fr; align-items: center; gap: 8px; padding: 4px 0; }
-    #jig-hud .arow label { font: 11px ui-sans-serif, system-ui; letter-spacing: .12em; text-transform: uppercase; opacity: .55; }
+    #jig-hud .arow { display: grid; grid-template-columns: 76px 1fr; align-items: center; gap: 8px; padding: 4px 0; }
+    #jig-hud .arow label { font: 11px ui-sans-serif, system-ui; letter-spacing: .12em; text-transform: uppercase; opacity: .55; white-space: nowrap; }
     #jig-hud .arow > div { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
     #jig-hud .arow button, #jig-hud .arow select { font: 600 12px ui-sans-serif, system-ui; background: #262833; color: #fff; border: 0; border-radius: 6px; padding: 6px 10px; cursor: pointer; }
     #jig-hud .arow button:hover { background: #3f6fff; } #jig-hud .arow button.on { background: #3f6fff; }
@@ -1420,16 +1420,18 @@
     W.forEach(w => { if (w.el && w.el.classList && w.el.classList.contains('jig-scrim-panel') && w.el.parentElement) w.el = w.el.parentElement; });
     // 9. page and form basics, links and empty headings: the first things a screen reader user runs into
     { const root = document.documentElement; const jigUI = x => x.closest('#jig-hud, .jig-tb, #jig-found, #jig-device, #jig-axtags, .jig-badge');
+      // out of everyone's reach: hidden from assistive tech, or parked off the page (spam traps like Mailchimp's sit at left: -5000px)
+      const unreachable = x => { if (x.closest('[aria-hidden="true"], [inert]')) return true; const r = x.getBoundingClientRect(); return r.right <= 0 || r.bottom + window.scrollY <= 0 || r.left >= document.documentElement.scrollWidth; };
       if (!(root.getAttribute('lang') || '').trim()) W.push({ kind: 'lang', el: root, page: true, msg: 'no lang attribute on <html>; screen readers have to guess the language and may read every word with the wrong accent' });
       if (!(document.title || '').trim()) W.push({ kind: 'title', el: root, page: true, msg: 'the page has no <title>' });
       $$('input, select, textarea').forEach(f => {
-        if (jigUI(f) || !visible(f)) return; const type = (f.getAttribute('type') || '').toLowerCase(); if (/^(hidden|submit|button|reset|image)$/.test(type)) return;
+        if (jigUI(f) || !visible(f) || unreachable(f) || f.getAttribute('tabindex') === '-1') return; const type = (f.getAttribute('type') || '').toLowerCase(); if (/^(hidden|submit|button|reset|image)$/.test(type)) return;
         const named = (f.getAttribute('aria-label') || '').trim() || (f.getAttribute('aria-labelledby') || '').split(/\s+/).some(id => { const n = id && document.getElementById(id); return n && n.textContent.trim(); }) || (f.labels && Array.from(f.labels).some(l => l.textContent.trim())) || (f.getAttribute('title') || '').trim();
         if (!named) W.push({ kind: 'label', el: f, msg: `${f.tagName === 'INPUT' ? (type || 'text') + ' field' : f.tagName.toLowerCase()} has no label${f.placeholder ? ` (the placeholder "${f.placeholder.slice(0, 30)}" disappears as you type; it isn't a label)` : ''}` });
       });
       const VAGUE = /^(click here|click|here|read more|more|learn more|find out more|details|more info|more details|link|this|go|continue|see more|view more|see all)$/i;
       $$('a[href]').forEach(a => {
-        if (jigUI(a) || !visible(a)) return;
+        if (jigUI(a) || !visible(a) || unreachable(a)) return;
         const name = ((a.getAttribute('aria-label') || '').trim() || (a.textContent || '').trim().replace(/\s+/g, ' ').replace(/[\s›»→>….]+$/, '').trim());
         if (VAGUE.test(name) && !a.getAttribute('aria-describedby')) W.push({ kind: 'vague-link', el: a, msg: `link text "${name}" doesn't say where it goes` });
         // colour-only link: sits in a sentence, no underline/border/background/weight cue, and under 3:1 against the words around it
@@ -1735,12 +1737,13 @@
   };
   const AX_CATS = [['wcag', 'Accessibility failures (WCAG A/AA)'], ['practice', 'Best practice'], ['design', 'Design quality']];
   const ruleOf = k => AX_RULES[k] || { t: k, ref: '', lvl: '', cat: 'design', auto: false, fix: '' };
+  const fileOf = u => { const f = (u || '').split('/').pop().split('?')[0]; try { return decodeURIComponent(f); } catch (e) { return f; } };
   function axSnippet(el) {
     if (!el) return ''; if (el === document.documentElement) return '';
-    if (el.tagName === 'IMG') { const a = el.getAttribute('alt'); const f = (el.currentSrc || el.src || '').split('/').pop().split('?')[0]; return (a ? 'alt "' + a.slice(0, 50) + '" · ' : '') + f.slice(0, 60); }
+    if (el.tagName === 'IMG') { const a = el.getAttribute('alt'); const f = fileOf(el.currentSrc || el.src); return (a ? 'alt "' + a.slice(0, 50) + '" · ' : '') + f.slice(0, 60); }
     const t = (el.innerText || el.textContent || el.getAttribute('aria-label') || '').trim().replace(/\s+/g, ' ');
     if (t) return t.length > 80 ? t.slice(0, 79) + '…' : t;
-    const img = el.querySelector && el.querySelector('img'); return img ? 'image: ' + (img.currentSrc || img.src || '').split('/').pop().split('?')[0].slice(0, 60) : '';
+    const img = el.querySelector && el.querySelector('img'); return img ? 'image: ' + fileOf(img.currentSrc || img.src).slice(0, 60) : '';
   }
   // findings are matched by element + rule (cheap); selectors and snippets are only worked out for what a report actually lists
   const AX_LIST_CAP = 50;
