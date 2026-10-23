@@ -1600,7 +1600,7 @@
     </div>
     <div class="advpanel">
       <div class="arow"><label>columns</label><div><select id="jig-cols-sel" title="grid columns"></select></div></div>
-      <div class="arow"><label>auto fix</label><div><button id="jig-norm-btn" title="snap every size and space to the scales, and fix what protection flagged">auto fix</button><select id="jig-q-res" title="how many steps to snap to"><option value="32">light</option><option value="16" selected>medium</option><option value="8">strict</option></select></div></div>
+      <div class="arow"><label>auto fix</label><div><button id="jig-norm-btn" title="snap every size and space to the scales, and fix what protection flagged" aria-pressed="false">off</button><select id="jig-q-res" title="how many steps to snap to"><option value="32">light</option><option value="16" selected>medium</option><option value="8">strict</option></select></div></div>
       <div class="arow"><label>scales</label><div><button id="jig-found-btn">foundation</button><button id="jig-scan-btn">rescan</button><button id="jig-reset-btn">reset all</button></div></div>
       <div class="src" id="jig-src"></div>
     </div>
@@ -1670,9 +1670,26 @@
   function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
 
   // ------------------------------------------------------------ patch
+  // which CMS or builder made this page, so the patch can tell the AI where changes go (GIVE-THIS-TO-YOUR-AI.md, section 6)
+  function detectPlatform() {
+    const gen = ((document.querySelector('meta[name="generator" i]') || {}).content || '').trim();
+    const has = sel => { try { return !!document.querySelector(sel); } catch (e) { return false; } };
+    const g = re => re.test(gen);
+    if (g(/^WordPress/i) || has('link[href*="/wp-content/"], script[src*="/wp-content/"], script[src*="/wp-includes/"]')) return gen && /^WordPress/i.test(gen) ? gen : 'WordPress';
+    if (window.Shopify || has('link[href*="cdn.shopify.com"], script[src*="cdn.shopify.com"]')) return 'Shopify';
+    if (g(/Wix\.com/i) || window.wixBiSession || has('script[src*="static.parastorage.com"]')) return 'Wix';
+    if (window.Static && window.Static.SQUARESPACE_CONTEXT || has('script[src*="squarespace.com"], link[href*="squarespace.com"]')) return 'Squarespace';
+    if (g(/^Webflow/i) || document.documentElement.hasAttribute('data-wf-site')) return 'Webflow';
+    if (g(/^Joomla/i)) return gen;
+    if (g(/^Drupal/i) || window.drupalSettings || has('script[data-drupal-selector]')) return gen && /^Drupal/i.test(gen) ? gen : 'Drupal';
+    if (g(/^Ghost/i)) return gen;
+    if (gen) return gen;   // some other builder that names itself (Tilda, Duda, Hugo, Framer…)
+    return '';
+  }
   function buildPatch() {
     const when = new Date(); const stamp = when.toISOString().slice(0, 16).replace('T', ' ');
     const lines = [`# jig patch · ${state.F.name} · ${location.pathname} · ${stamp}`, ''];
+    { const pf = detectPlatform(); if (pf) lines.splice(1, 0, `platform: ${pf} · apply it the ${pf.split(' ')[0]} way (GIVE-THIS-TO-YOUR-AI.md, section 6)`); }
     const all = [...state.changes.values(), ...state.frame.changes];
     if (!all.length) lines.push('- (no changes)');
     // colour fixes share a rule on almost every site: one line per colour change, not one per link
@@ -1788,7 +1805,7 @@
     const F = state.F;
     return {
       title: (document.title || location.hostname).trim(), url: (() => { const u = new URL(location.href); u.searchParams.delete('jig'); if (u.hash === '#jig') u.hash = ''; return u.href; })(),
-      host: location.hostname, when: new Date(), viewport: `${window.innerWidth} × ${window.innerHeight}`, bp: state.bp, version: JIG_VERSION,
+      host: location.hostname, platform: detectPlatform(), when: new Date(), viewport: `${window.innerWidth} × ${window.innerHeight}`, bp: state.bp, version: JIG_VERSION,
       foundation: `${F.name} (${state.foundationSource || F.mode || 'inferred'})`,
       rules, frame,
       totals: { wcag: count('wcag'), wcagOpen: count('wcag', 'open'), practice: count('practice'), design: count('design'), all: items.length, open: items.filter(i => i.status === 'open').length, fixed: items.filter(i => i.status === 'fixed').length },
@@ -1811,7 +1828,7 @@
   }
   function reportMarkdown(R) {
     R = R || buildAXReport(true); const L = [];
-    L.push(`# Accessibility report: ${R.title}`, '', `${R.url}  `, `${fmtDate(R.when)} · viewport ${R.viewport} (${R.bp}) · Jig Studio ${R.version}`, '', `**${axHeadline(R)}**`, '');
+    L.push(`# Accessibility report: ${R.title}`, '', `${R.url}  `, `${fmtDate(R.when)}${R.platform ? ' · ' + R.platform : ''} · viewport ${R.viewport} (${R.bp}) · Jig Studio ${R.version}`, '', `**${axHeadline(R)}**`, '');
     if (!R.rules.length) L.push('Nothing flagged on this page at this viewport.', '');
     else {
       L.push('| Rule | WCAG | Level | Found | Open | Jig can fix |', '|---|---|---|---:|---:|---|');
@@ -1873,7 +1890,7 @@
         .rule,.card{border-color:#d9dbe3}details.patch{display:none}.lvl{background:none;border:1px solid #9a9fb0;color:#000}.lvl.l-wcag{border-color:#c4106c;color:#c4106c}.tag{border-color:#9a9fb0}@page{margin:16mm}}
       @media (max-width:560px){main{padding:28px 16px 48px}h1{font-size:26px}th:nth-child(2),td:nth-child(2),th:nth-child(5),td:nth-child(5){display:none}}`;
     return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Accessibility report · ${e(R.host)}</title><style>${css}</style></head><body><main>
-      <div class="eyebrow">Accessibility report</div><h1>${e(R.title)}</h1><p class="sub"><a href="${e(R.url)}">${e(R.url)}</a></p><p class="sub">${e(fmtDate(R.when))} · viewport ${e(R.viewport)} (${e(R.bp)})</p>
+      <div class="eyebrow">Accessibility report</div><h1>${e(R.title)}</h1><p class="sub"><a href="${e(R.url)}">${e(R.url)}</a></p><p class="sub">${e(fmtDate(R.when))}${R.platform ? ' · ' + e(R.platform) : ''} · viewport ${e(R.viewport)} (${e(R.bp)})</p>
       <p class="headline">${e(axHeadline(R))}</p>
       <div class="cards">${cards.map(([n, l, c]) => `<div class="card ${c}"><b>${n}</b><span>${e(l)}</span></div>`).join('')}</div>
       ${R.rules.length ? `<table><thead><tr><th>Rule</th><th>WCAG</th><th>Level</th><th class="n">Found</th><th class="n">Open</th><th>Fix</th></tr></thead><tbody>${sum}</tbody></table>${sections}` : '<div class="clean">Nothing flagged on this page at this viewport.</div>'}
@@ -1947,7 +1964,7 @@
       state.batch = true;
       undoAutoFixes();   // fixes ran after the snaps, so they come off first
       (state.normalize || []).slice().reverse().forEach(n => { n.el.style.removeProperty(n.prop); if (n.prev) n.el.style.setProperty(n.prop, n.prev, n.prevP || ''); });   // reverse: an element snapped twice must end on its first value
-      state.normalize = null; state.autoFixes = []; state.batch = false; { const nb = $('#jig-norm-btn'); if (nb) nb.classList.remove('on'); } renderHUD(); postToParent(); scanSoon(); return;
+      state.normalize = null; state.autoFixes = []; state.batch = false; { const nb = $('#jig-norm-btn'); if (nb) { nb.classList.remove('on'); nb.textContent = 'off'; nb.setAttribute('aria-pressed', 'false'); } } renderHUD(); postToParent(); scanSoon(); return;
     }
     state.batch = true;
     if (state.axFix) { undoAutoFixes(); state.axFix = false; }   // auto includes the ax fixes; start them over inside auto so its undo covers them
@@ -1990,7 +2007,7 @@
       (interactive ? ['margin-top', 'margin-bottom'] : ['padding-top', 'padding-bottom', 'padding-left', 'padding-right', 'margin-top', 'margin-bottom']).forEach(prop => snap(el, prop, px(c[prop]), spaceSteps, 2, 160));
       if (/flex|grid/.test(c.display)) ['row-gap', 'column-gap'].forEach(prop => snap(el, prop, px(c[prop]), spaceSteps, 2, 160));
     });
-    state.normalize = out; { const nb = $('#jig-norm-btn'); if (nb) nb.classList.add('on'); }
+    state.normalize = out; { const nb = $('#jig-norm-btn'); if (nb) { nb.classList.add('on'); nb.textContent = 'on'; nb.setAttribute('aria-pressed', 'true'); } }
     autoFixAX();
     autoHarmonizeButtons();
     autoAlignRows();
@@ -2437,7 +2454,7 @@
     $('#jig-found-btn').onclick = toggleFoundationPanel;
     $('#jig-norm-btn').onclick = () => {   // auto can take a few seconds on huge pages: say so, and let the label paint before the work starts
       const nb = $('#jig-norm-btn'); if (nb.dataset.busy) return; nb.dataset.busy = '1'; const label = nb.textContent; nb.textContent = 'working…';
-      setTimeout(() => { Promise.resolve().then(() => normalizePage(!state.normalize)).finally(() => { nb.textContent = label; delete nb.dataset.busy; }); }, 30);
+      setTimeout(() => { Promise.resolve().then(() => normalizePage(!state.normalize)).finally(() => { nb.textContent = state.normalize ? 'on' : 'off'; delete nb.dataset.busy; }); }, 30);
     };
     $('#jig-q-res').onchange = () => { if (state.normalize) { normalizePage(false); normalizePage(true); } };
     if (state.F.mode && state.F.mode !== 'inferred') $('#jig-q-res').value = '32';   // the site has tokens: light = its own steps; medium/strict stay on offer

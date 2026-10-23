@@ -42,6 +42,23 @@ Then add `?jig` to any URL on your site. Normal visitors never download `jig.js`
 
 Prefer a plain tag? `<script src="/jig.js" data-foundation="/jig.foundation.json"></script>` also works and also stays inert without `?jig`, but every visitor downloads the script.
 
+### On a CMS or site builder
+
+Paste the same loader wherever your platform takes site-wide code. On hosted builders you can't upload a `.js` file of your own, so point `s.src` at the hosted copy, `https://capybutz.com/jig.js` for now (a versioned CDN link replaces it at launch), and drop the `data-foundation` line.
+
+| Platform | Paste the loader in | `jig.js` lives | Notes |
+| --- | --- | --- | --- |
+| **WordPress** | A header/footer code plugin (WPCode, "Footer" box), or your child theme's footer | Your child theme folder (the Media Library refuses `.js`), or the hosted copy | `?jig` works on any page, logged in or not |
+| **Shopify** | Online Store → Themes → Edit code → `layout/theme.liquid`, just before `</body>` | Upload to Assets and use `s.src = '{{ "jig.js" \| asset_url }}'` | Test on a duplicate theme first if you like |
+| **Wix** | Settings → Custom Code → Add Custom Code → All pages → Body – end | Hosted copy | Needs a published site with a connected domain |
+| **Squarespace** | Website Tools → Code Injection → Footer | Hosted copy | Code Injection needs Core or higher (legacy: Business or higher) |
+| **Webflow** | Site Settings → Custom Code → Footer code, then publish | Hosted copy | Needs a paid site plan; runs on the published site, not in the Designer |
+| **Joomla** | The template's `index.php` just before `</body>`, or a Custom module set to "prepare content: no" | The template's `js` folder | |
+| **Drupal** | The theme's `html.html.twig`, or a JS-injection module like Asset Injector | The theme folder | Clear the cache after |
+| **Ghost** | Settings → Code injection → Site footer | Hosted copy, or theme assets | |
+
+Anything else with a "custom code" box (Tilda, Duda, Framer, Carrd) works the same way. The patch says which platform it came from, and [`GIVE-THIS-TO-YOUR-AI.md`](GIVE-THIS-TO-YOUR-AI.md) tells your AI how to turn it into that platform's terms: one CSS block for the right box, design-setting changes, and a page-by-page list of content edits.
+
 The jig never changes your site. You drag, it writes a patch; **Copy patch**, hand it to your AI with [`GIVE-THIS-TO-YOUR-AI.md`](GIVE-THIS-TO-YOUR-AI.md), and the AI (or you) makes the change in your code.
 
 ## Try it without installing

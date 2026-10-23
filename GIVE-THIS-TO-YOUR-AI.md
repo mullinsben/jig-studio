@@ -112,7 +112,41 @@ A patch may carry `# ax fixes` instead: the person pressed **Fix what I can**, w
 
 Each `quantize` entry lists `els` (selectors) and `hints` (what each element says, in the same order). Apply every element in the group: if a selector is hard to resolve against the source, find the element by its hint. A group usually maps to one rule; where an element sets the value inline (a `style=""` attribute), change it there too, or nothing changes on the page.
 
-## 6. Things not to do
+## 6. Sites on a CMS or builder
+
+If the patch has a `platform:` line, or you can tell from the site, there may be no source code to edit. Don't hand the person a diff they have no file to put it in. Split the patch into three kinds of change and put each where that platform keeps it:
+
+1. **Looks** (crops, sizes, spacing, scrims, tints, contrast shades, tap targets, max-widths, grid offsets): one block of CSS.
+2. **Tokens** (the `# proposed tokens` section, or `quantize` steps): the platform's own design settings where it has them; otherwise CSS custom properties in the same CSS block.
+3. **Content** (alt text, link wording, form labels, heading levels, `lang`, the page title, duplicate links): edits made in the page or media editor, by a person, one by one.
+
+Reply in this shape, every time:
+
+- **Paste this CSS** into *(the exact place below)*. One block, with a comment above each rule naming the patch entry it comes from.
+- **Design settings**: the token changes, written for the platform's settings screen or file (below).
+- **Content to edit, page by page**: a checklist naming the page, the element (use its text so it can be found by eye, plus its #number from the AX report if there is one), and the new value. Write the real alt text and link wording; don't leave "add alt text" as a task.
+- **Can't do here**: anything this platform won't allow, said plainly, with the closest workaround.
+
+**Selectors.** Patch selectors come from the live page. On WordPress, Shopify, Webflow, Joomla, Drupal and Ghost the classes come from the theme and are stable: use them. On Wix and Squarespace, many class names are generated and change when the site is re-published: prefer ids, `data-` attributes, Squarespace block ids (`#block-…`) and section ids, and say which rules may need checking after the next publish.
+
+**Where things go, by platform:**
+
+| Platform | CSS goes in | Tokens go in | Content edits | Watch out for |
+| --- | --- | --- | --- | --- |
+| **WordPress** (block theme) | Site Editor → Styles → Additional CSS | `theme.json`: `settings.typography.fontSizes`, `settings.spacing.spacingSizes` (child theme) | Page/post editor; alt text in the Media Library and on the image block | A page builder (Elementor, Divi) may set inline sizes that beat theme CSS; target the builder's own classes |
+| **WordPress** (classic theme) | Appearance → Customize → Additional CSS | `:root` custom properties in Additional CSS, or a child theme's `style.css` | Same as above | Caching plugins: tell them to clear the cache |
+| **Shopify** | Online Store → Themes → Customize → Theme settings → Custom CSS (or a section's Custom CSS) | Theme settings (typography, spacing) where the theme offers them; otherwise `:root` properties in Custom CSS | Products/pages/blog in the admin; image alt text on each media item | Custom CSS fields have a size limit; for long patches use a `jig-fixes.css` asset in Edit code and include it in `theme.liquid` |
+| **Wix** | Wix Studio: the site's global CSS (Code panel). Wix Editor: no site CSS; turn each look change into editor steps (select element → Design) | Site Styles / theme (text themes, colours) | In the editor; alt text in each image's settings | Generated classes; many looks must be done in the editor, not CSS |
+| **Squarespace** | Website → Website Tools → Custom CSS (7.1) | Site Styles (fonts, sizes, spacing) | In the page editor; alt text in each image block's settings | Generated classes; prefer block and section ids |
+| **Webflow** | Site Settings → Custom Code → Head code, inside a `<style>` tag (or better: make the change on the class in the Designer) | Variables panel (sizes, spacing) | Designer and CMS collections; alt text in each image's settings and the Assets panel | Custom code only runs on the published site, not in the Designer |
+| **Joomla** | The template's `user.css` (Cassiopeia: System → Site Templates → Cassiopeia → `media/templates/site/cassiopeia/css/user.css`) | `:root` properties in `user.css` | Articles in the editor; alt text in the image fields | Overrides in other templates differ; name the template |
+| **Drupal** | The theme's CSS (sub-theme), or a CSS-injection module like Asset Injector | Sub-theme CSS custom properties | Content editor; alt text on media entities | Clear the Drupal cache after CSS changes |
+| **Ghost** | Settings → Code injection → Site header, inside a `<style>` tag | `:root` properties in the same block, or the theme's `--` variables | The post editor; alt text on each image card | Theme updates don't touch code injection, so it survives upgrades |
+| **Anything else** with a "custom code" or "custom CSS" box (Tilda, Duda, Framer, Carrd, GoDaddy) | That box, inside `<style>` if it only takes HTML | `:root` properties in the same block | The builder's editor | Say what you couldn't map |
+
+If a change can only be made by hand in an editor (most content edits, and looks on builders without CSS), list the steps precisely enough that a non-designer can follow them.
+
+## 7. Things not to do
 
 - Don't apply a patch to a different page than the one in its header.
 - Don't invent values that aren't in the foundation; ask.
