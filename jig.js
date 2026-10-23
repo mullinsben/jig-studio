@@ -201,11 +201,11 @@
       e.content = inner > outer; e.aligned = Math.max(outer, inner); e.box = e.content ? { left: r.left + pl, width: r.width - pl - pr } : { left: r.left, width: r.width }; });
     const cands = Array.from(byW.values()); const onEdge = cands.filter(e => e.aligned >= 1).sort((a, b) => b.box.width - a.box.width);
     const best = onEdge[0] || cands.sort((a, b) => b.n - a.n || b.w - a.w)[0];   // the widest centred box real content sits on; inner strips are insets
-    gridAnchor = best ? best.el : null; gridAnchorContent = !!(best && best.content); gridInset = null;
+    gridAnchor = best ? best.el : null; gridAnchorContent = !!(best && best.content); gridInset = null; gridFit = null;
     let columns = 12, gutter = 24, maxWidth = best ? Math.round(best.box.width) : Math.min(1200, vw - 64);
     if (best) {
       // measure the grid the content actually uses: where the blocks start and end, the gap between neighbours, and the column count that puts the most block edges on lines
-      const A = best.box; const kids = Array.from(new Set(best.els.flatMap(c => $$('*', c)))).filter(k => { if (!visible(k) || k.closest('#jig-hud, #jig-axtags, .jig-tb')) return false; const r = k.getBoundingClientRect(); return r.height >= 60 && r.width >= 60 && r.left >= A.left - 1 && r.right <= A.left + A.width + 1; }).map(k => k.getBoundingClientRect());
+      const A = best.box; const kids = Array.from(new Set(best.els.flatMap(c => $$('*', c)))).filter(k => { if (!visible(k) || k.closest('#jig-hud, #jig-axtags, .jig-tb')) return false; const r = k.getBoundingClientRect(); return r.height >= 60 && r.width >= 60 && r.left >= A.left - 1 && r.right <= A.left + A.width + 1; }).map(k => { const r = k.getBoundingClientRect(), c = css(k); const pl = px(c.paddingLeft) + px(c.borderLeftWidth), pr = px(c.paddingRight) + px(c.borderRightWidth); return { left: r.left + pl, right: r.right - pr, width: r.width - pl - pr, height: r.height, top: r.top }; });   // content boxes: a Bootstrap column's padding is gutter, not content
       const mode = arr => { const m = new Map(); arr.forEach(v => m.set(v, (m.get(v) || 0) + 1)); return Array.from(m).sort((a, b) => b[1] - a[1] || a[0] - b[0])[0]; };
       const wide = kids.filter(r => r.width >= A.width * 0.5);
       if (wide.length >= 2) {
@@ -216,21 +216,26 @@
       const parts = kids.filter(r => r.width < W * 0.7 && r.width >= W * 0.08 && r.left >= L0 - 1 && r.right <= L0 + W + 1);
       const Ls = parts.map(r => Math.round(r.left)), Rs = parts.map(r => Math.round(r.right));
       const gaps = []; Rs.forEach(rv => Ls.forEach(lv => { const g = lv - rv; if (g >= 4 && g <= 48) gaps.push(g); }));
-      if (gaps.length >= 2) gutter = mode(gaps)[0];
-      const edges = Ls.map(x => x - L0).concat(Rs.map(x => x - L0));
-      if (edges.length >= 4) {
-        let bestN = 12, bestScore = -1;
-        [12, 16, 8, 6, 4, 10, 24].forEach(N => { const cw = (W - (N - 1) * gutter) / N; if (cw < 16) return;
-          const lines = []; for (let i = 0; i <= N; i++) { lines.push(i * (cw + gutter)); lines.push(i * (cw + gutter) - gutter); }
-          const hit = edges.filter(e => lines.some(x => Math.abs(x - e) <= 2)).length / edges.length;
-          if (hit > bestScore + 0.05 || (Math.abs(hit - bestScore) <= 0.05 && N === 12)) { bestScore = hit; bestN = N; } });
-        columns = bestN;
-      }
+      // fit gutter and column count together; keep the simplest grid (fewest columns) that lands as many real edges on lines as the best fit does
+      const edges = Ls.map(x => x - L0).concat(Rs.map(x => x - L0)).filter(e => e > 2 && e < W - 2);   // the outer edges fit every grid; they prove nothing
+      const gapCount = new Map(); gaps.forEach(g => gapCount.set(g, (gapCount.get(g) || 0) + 1));
+      const gCands = Array.from(new Set([...gapCount.keys(), 12, 16, 20, 24, 30, 32]));
+      if (edges.length >= 3) {
+        const fits = [];
+        gCands.forEach(g => [3, 4, 5, 6, 8, 9, 10, 12, 16, 24].forEach(N => { const cw = (W - (N - 1) * g) / N; if (cw < 16) return;
+          const lines = []; for (let i = 1; i < N; i++) { lines.push(i * (cw + g)); lines.push(i * (cw + g) - g); }
+          fits.push({ N, g, hit: edges.filter(e => lines.some(x => Math.abs(x - e) <= 2)).length / edges.length }); }));
+        const top = Math.max(...fits.map(f => f.hit));
+        if (top >= 0.3) {
+          const pick = fits.filter(f => f.hit >= top - 0.03).sort((a, b) => a.N - b.N || (gapCount.get(b.g) || 0) - (gapCount.get(a.g) || 0) || b.hit - a.hit)[0];
+          columns = pick.N; gutter = pick.g; gridFit = Math.round(pick.hit * 100);
+        } else if (gaps.length >= 2) { gutter = mode(gaps)[0]; gridFit = Math.round(top * 100); }
+      } else if (gaps.length >= 2) gutter = mode(gaps)[0];
       maxWidth = Math.round(W);
     }
     return { columns, gutter, margin: best ? 0 : 32, maxWidth, inferred: true };
   }
-  let gridAnchor = null, gridAnchorContent = false, gridInset = null;   // the element whose edges the inferred grid is drawn on (its padded content edge when that's where things line up)
+  let gridAnchor = null, gridAnchorContent = false, gridInset = null, gridFit = null;   // gridFit: % of measured content edges on the inferred lines   // the element whose edges the inferred grid is drawn on (its padded content edge when that's where things line up)
   function resolveFoundation() {
     const F = state.F; F.mode = F.mode || 'file';
     // type steps: explicit sizes in the file, else resolve the site's --text-* vars, else infer
@@ -950,6 +955,9 @@
     #jig-grid { position: absolute; inset: 0; pointer-events: none; z-index: 2147483640; }
     #jig-grid .cols { position: sticky; top: 0; height: 100vh; margin: 0 auto; display: grid; }
     #jig-grid .cols i { background: rgba(63,111,255,.08); border-inline: 1px solid rgba(63,111,255,.35); }
+    #jig-grid .cols { position: sticky; } #jig-grid .gmeta { position: absolute; left: 0; bottom: 8px; font: 600 11px/1 ui-monospace, monospace; background: #3f6fff; color: #fff; padding: 4px 6px; border-radius: 4px; white-space: nowrap; }
+    #jig-grid .offgrid { position: absolute; border: 2px dashed #f5a524; border-radius: 4px; box-sizing: border-box; }
+    #jig-grid .offgrid span { position: absolute; top: -1px; left: -1px; transform: translateY(-100%); font: 600 11px/1 ui-monospace, monospace; background: #f5a524; color: #111; padding: 3px 6px; border-radius: 4px 4px 0 0; white-space: nowrap; }
     @media (max-width: 640px) { #jig-grid .cols i { background: rgba(63,111,255,.12); border-inline: 1px solid rgba(63,111,255,.5); } }
     #jig-hud { position: fixed; top: 16px; right: 16px; width: 372px; height: auto; max-height: calc(100vh - 32px); min-width: 280px; min-height: 92px; display: flex; flex-direction: column; z-index: 2147483647;
       background: #0b0b0d; color: #f3f4f7; border-radius: 12px; box-shadow: 0 12px 40px rgba(0,0,0,.45); font: 13px/1.45 ui-sans-serif, system-ui, sans-serif; overflow: hidden; resize: both; }
@@ -1103,11 +1111,32 @@
       gridEl.appendChild(cols);
       // pages with an offset or positioned body put the overlay somewhere else than measured: correct by what actually landed
       const off = cols.getBoundingClientRect().left - r.left; if (Math.abs(off) > 0.5) cols.style.marginLeft = `${Math.round(r.left - off)}px`;
-      gridEl.style.height = `${document.documentElement.scrollHeight}px`; return;
+      gridEl.style.height = `${document.documentElement.scrollHeight}px`;
+      const meta = document.createElement('b'); meta.className = 'gmeta'; meta.textContent = gridFit != null && gridFit >= 30 ? `${G.columns} col · ${G.gutter}px gutter · measured · ${gridFit}% of edges on lines` : `${G.columns} col · ${G.gutter}px gutter · assumed (not enough side-by-side content to measure)`; cols.appendChild(meta);
+      markOffGrid(cols); return;
     } else { cols.style.maxWidth = `${G.maxWidth}px`; cols.style.paddingInline = `${Math.min(G.margin, Math.floor(window.innerWidth * 0.06))}px`; }
     for (let i = 0; i < G.columns; i++) cols.appendChild(document.createElement('i'));
     gridEl.appendChild(cols);
     gridEl.style.height = `${document.documentElement.scrollHeight}px`;
+  }
+  // rows whose blocks don't sit on the grid get a dashed outline: real sites hand-build heroes and sidebars, and pretending they fit helps nobody
+  function markOffGrid(cols) {
+    const ci = Array.from(cols.querySelectorAll('i')).map(i => i.getBoundingClientRect()); if (ci.length < 2) return;
+    const L = ci[0].left, R = ci[ci.length - 1].right, W = R - L; const lines = ci.flatMap(c => [c.left, c.right]); const on = x => lines.some(l => Math.abs(l - x) <= 2);
+    const gr = gridEl.getBoundingClientRect(); const flagged = []; let n = 0;
+    for (const row of $$('body *')) {
+      if (n >= 12) break; if (row.closest('#jig-hud, #jig-grid, #jig-axtags, .jig-tb, #jig-device') || flagged.some(f => f.contains(row))) continue;
+      const kids = Array.from(row.children).map(k => { const r = k.getBoundingClientRect(), c = css(k); const pl = px(c.paddingLeft) + px(c.borderLeftWidth), pr = px(c.paddingRight) + px(c.borderRightWidth); return { left: r.left + pl, right: r.right - pr, top: r.top, bottom: r.bottom, width: r.width - pl - pr, height: r.height }; }).filter(k => k.width >= W * 0.08 && k.height >= 60 && k.left >= L - 2 && k.right <= R + 2);
+      if (kids.length < 2) continue;
+      const side = kids.filter((k, i) => kids.some((o, j) => j !== i && o.top < k.bottom - 10 && k.top < o.bottom - 10 && (o.left >= k.right - 1 || o.right <= k.left + 1)));
+      if (side.length < 2) continue;
+      const edges = side.flatMap(k => [k.left, k.right]).filter(x => x > L + 2 && x < R - 2); if (!edges.length) continue;
+      const hit = edges.filter(on).length / edges.length; if (hit >= 0.75) continue;
+      const rr = row.getBoundingClientRect(); flagged.push(row); n++;
+      const box = document.createElement('div'); box.className = 'offgrid';
+      box.style.cssText = `left:${Math.round(rr.left - gr.left)}px;top:${Math.round(rr.top - gr.top)}px;width:${Math.round(rr.width)}px;height:${Math.round(rr.height)}px`;
+      box.innerHTML = `<span>own layout · ${side.map(k => Math.round(k.width)).join(' | ')}px · not on the grid</span>`; gridEl.appendChild(box);
+    }
   }
   function toggleGrid(force) {
     state.grid = force === undefined ? !state.grid : force;
