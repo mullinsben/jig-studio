@@ -1003,6 +1003,14 @@
     #jig-axtags { all: revert; position: fixed; inset: 0; z-index: 2147483645; pointer-events: none; }
     #jig-axtags .tag { all: revert; position: fixed; pointer-events: none; background: #ff2d9b; color: #fff; font: 700 10px/1 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .02em; padding: 4px 6px; border-radius: 4px; white-space: nowrap; box-shadow: 0 2px 8px rgba(0,0,0,.35); }
     #jig-axtags .tag[hidden] { display: none !important; }
+    #jig-axtags .tag .n { all: revert; display: inline-block; min-width: 9px; text-align: center; background: #fff; color: #c4106c; border-radius: 999px; padding: 1px 4px; margin-right: 4px; font: 800 10px/1 ui-monospace, SFMono-Regular, Menlo, monospace; }
+    #jig-axtags .tag.focus { outline: 2px solid #fff; outline-offset: 1px; z-index: 1; }
+    .jig-ax.jig-ax.jig-ax-focus { outline: 4px solid #ff2d9b !important; outline-offset: 4px !important; box-shadow: 0 0 0 10px rgba(255,45,155,.28) !important; }
+    @media (prefers-reduced-motion: no-preference) { .jig-ax.jig-ax.jig-ax-focus { animation: jig-ax-pulse .5s ease-in-out 3 alternate; } @keyframes jig-ax-pulse { to { box-shadow: 0 0 0 18px rgba(255,45,155,.08) !important; } } }
+    #jig-hud .axrow .s .tw { opacity: .5; margin-left: 4px; font-size: 10px; }
+    #jig-hud .axitems { margin: 2px 0 6px 34px; }
+    #jig-hud .axi { display: flex; gap: 8px; align-items: baseline; padding: 3px 0; cursor: pointer; font-size: 12px; } #jig-hud .axi:hover { color: #fff; }
+    #jig-hud .axi b { flex: none; font: 700 11px ui-monospace, Menlo, monospace; color: #ff2d9b; min-width: 24px; } #jig-hud .axi span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } #jig-hud .axi.fixed { opacity: .45; } #jig-hud .axi.fixed b { color: #35c186; }
     #jig-hud .welcome { margin: 10px 12px 2px; padding: 10px 12px; background: #13141a; border: 1px solid #262833; border-left: 3px solid #3f6fff; border-radius: 8px; font: 12px/1.5 ui-sans-serif, system-ui; color: #c9d1e6; }
     #jig-hud .welcome b { color: #fff; font-weight: 600; } #jig-hud .welcome i { font-style: normal; color: #fff; border: 1px solid #3a3d4a; border-radius: 999px; padding: 0 6px; font-size: 11px; }
     #jig-hud .jigs .lbl { font: 11px ui-sans-serif, system-ui; letter-spacing: .14em; text-transform: uppercase; opacity: .6; align-self: center; margin-right: 2px; }
@@ -1464,11 +1472,12 @@
     axTags.innerHTML = '';
     const frameOpen = !!(deviceEl && $('iframe', deviceEl));
     if (!axOn || frameOpen) { $$('.jig-ax').forEach(el => el.classList.remove('jig-ax')); return; }
-    const byEl = new Map();
+    const byEl = new Map(); const num = new Map(); buildAXReport().rules.forEach(r => r.items.forEach(i => num.set(axKey(i.el, i.kind), i.n)));
     state.warnings.forEach(w => { if (!w.el || !w.el.isConnected || w.page) return; w.el.classList.add('jig-ax'); byEl.set(w.el, (byEl.get(w.el) || []).concat(w)); });
     byEl.forEach((ws, el) => {
       const tag = document.createElement('div'); tag.className = 'tag'; tag.__el = el;
-      tag.textContent = ws.map(w => w.kind === 'contrast' ? `contrast ${w.value} / ${w.min}` : w.kind === 'tap-target' ? `tap ${w.msg.replace(/.*×(\d+)px.*/, '$1')}px tall` : w.kind === 'alt' ? 'no alt' : w.kind === 'small-text' ? 'small text' : w.kind === 'measure' ? `${Math.round(w.cpl)} cpl` : w.kind === 'button-wrap' ? 'label wraps' : w.kind === 'no-name' ? 'no name' : w.kind === 'overflow' ? 'overflows' : w.kind === 'soft' ? 'soft' : w.kind === 'face' ? 'face cropped' : w.kind === 'h1-role' ? 'h1 is the logo?' : w.kind === 'dup-link' ? 'duplicate link' : w.kind === 'label' ? 'no label' : w.kind === 'vague-link' ? 'vague link' : w.kind === 'colour-link' ? `colour only ${w.value}` : w.kind === 'empty-heading' ? 'empty heading' : w.kind).join(' · ');
+      const label = w => w.kind === 'contrast' ? `contrast ${w.value} / ${w.min}` : w.kind === 'tap-target' ? `tap ${w.msg.replace(/.*×(\d+)px.*/, '$1')}px tall` : w.kind === 'alt' ? 'no alt' : w.kind === 'small-text' ? 'small text' : w.kind === 'measure' ? `${Math.round(w.cpl)} cpl` : w.kind === 'button-wrap' ? 'label wraps' : w.kind === 'no-name' ? 'no name' : w.kind === 'overflow' ? 'overflows' : w.kind === 'soft' ? 'soft' : w.kind === 'face' ? 'face cropped' : w.kind === 'h1-role' ? 'h1 is the logo?' : w.kind === 'dup-link' ? 'duplicate link' : w.kind === 'label' ? 'no label' : w.kind === 'vague-link' ? 'vague link' : w.kind === 'colour-link' ? `colour only ${w.value}` : w.kind === 'empty-heading' ? 'empty heading' : w.kind;
+      ws.slice().sort((a, b) => (num.get(axKey(a.el, a.kind)) || 1e9) - (num.get(axKey(b.el, b.kind)) || 1e9)).forEach((w, k) => { if (k) tag.append(' · '); const b = document.createElement('span'); b.className = 'n'; b.textContent = num.get(axKey(w.el, w.kind)) || '•'; tag.append(b, label(w)); });
       tag.title = ws.map(w => w.msg).join('\n');
       axTags.appendChild(tag);
     });
@@ -1770,10 +1779,10 @@
     const rules = [];
     Object.keys(AX_RULES).concat(Array.from(new Set(items.map(i => i.kind))).filter(k => !AX_RULES[k])).forEach(k => {
       const list = items.filter(i => i.kind === k); if (!list.length) return;
-      list.sort((a, b) => (a.status === 'fixed') - (b.status === 'fixed'));
       if (detail) list.slice(0, AX_LIST_CAP).forEach(i => { i.sel = i.el === document.documentElement ? 'html' : selectorOf(i.el); i.snippet = axSnippet(i.el); });
       const r = ruleOf(k); rules.push({ kind: k, ...r, items: list, open: list.filter(i => i.status === 'open').length, fixed: list.filter(i => i.status === 'fixed').length });
     });
+    let n = 0; rules.forEach(r => r.items.forEach(i => { i.n = ++n; }));   // one number per finding, the same on the page chips, in the panel and in the report
     const count = (cat, st) => rules.filter(r => r.cat === cat).reduce((a, r) => a + (st ? r[st] : r.items.length), 0);
     const frame = state.device && deviceEl ? { device: state.device.name, notes: (state.frame.warnings || []).map(w => ({ kind: w.kind, name: w.name || w.kind, msg: w.msg })) } : null;
     const F = state.F;
@@ -1812,7 +1821,7 @@
         L.push(`## ${label}`, '');
         rs.forEach(r => {
           L.push(`### ${r.t} (${r.items.length})`, '', `${r.ref}${r.lvl && r.lvl !== r.ref ? ' · ' + r.lvl : ''}. ${r.fix}`, '');
-          r.items.slice(0, AX_LIST_CAP).forEach(i => L.push(`- \`${i.sel}\`${i.snippet ? ' "' + i.snippet.replace(/"/g, "'") + '"' : ''}: ${i.msg}${i.status === 'fixed' ? ' (fixed)' : ''}`));
+          r.items.slice(0, AX_LIST_CAP).forEach(i => L.push(`- #${i.n} \`${i.sel}\`${i.snippet ? ' "' + i.snippet.replace(/"/g, "'") + '"' : ''}: ${i.msg}${i.status === 'fixed' ? ' (fixed)' : ''}`));
           if (r.items.length > AX_LIST_CAP) L.push(`- … and ${r.items.length - AX_LIST_CAP} more like these`);
           L.push('');
         });
@@ -1832,7 +1841,7 @@
       const rs = R.rules.filter(r => r.cat === cat); if (!rs.length) return '';
       return `<h2>${e(label)}</h2>` + rs.map(r => `<section class="rule" id="r-${e(r.kind)}"><header><h3>${e(r.t)}</h3><span class="cnt">${r.items.length}</span></header>
         <p class="meta"><span class="lvl l-${e(r.cat)}">${e(r.lvl)}</span> ${e(r.ref)}${r.auto ? ' · <span class="tag auto">jig can fix</span>' : ''}</p><p class="fix">${e(r.fix)}</p>
-        <ol>${r.items.slice(0, AX_LIST_CAP).map(i => `<li class="${i.status}"><div class="what"><code>${e(i.sel)}</code>${i.status === 'fixed' ? '<span class="tag ok">fixed</span>' : i.fresh ? '<span class="tag">new since load</span>' : ''}</div>${i.snippet ? `<div class="snip">${e(i.snippet)}</div>` : ''}<div class="msg">${e(i.msg)}</div></li>`).join('')}</ol>${r.items.length > AX_LIST_CAP ? `<p class="more">… and ${r.items.length - AX_LIST_CAP} more like these (${r.items.filter(i => i.status === 'open').length} open in total).</p>` : ''}</section>`).join('');
+        <ol>${r.items.slice(0, AX_LIST_CAP).map(i => `<li value="${i.n}" class="${i.status}"><div class="what"><code>${e(i.sel)}</code>${i.status === 'fixed' ? '<span class="tag ok">fixed</span>' : i.fresh ? '<span class="tag">new since load</span>' : ''}</div>${i.snippet ? `<div class="snip">${e(i.snippet)}</div>` : ''}<div class="msg">${e(i.msg)}</div></li>`).join('')}</ol>${r.items.length > AX_LIST_CAP ? `<p class="more">… and ${r.items.length - AX_LIST_CAP} more like these (${r.items.filter(i => i.status === 'open').length} open in total).</p>` : ''}</section>`).join('');
     }).join('');
     const frame = R.frame && R.frame.notes.length ? `<h2>Also seen on ${e(R.frame.device)}</h2><ul class="plain">${R.frame.notes.map(n => `<li><b>${e(n.name)}</b>: ${e(n.msg)}</li>`).join('')}</ul>` : '';
     const patch = R.changed ? `<details class="patch"><summary>The fixes made in this session, as a jig patch</summary><p>Hand this to your AI or developer to make the changes permanent.</p><pre>${e(buildPatch())}</pre></details>` : '';
@@ -1851,7 +1860,7 @@
       .rule{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px 20px;margin:0 0 14px}.rule header,.rule .meta,.rule .fix,h2{break-after:avoid}
       .rule header{display:flex;justify-content:space-between;align-items:baseline;gap:12px}.rule h3{margin:0;font-size:18px;color:#fff}.cnt{font:700 14px ui-monospace,Menlo,monospace;color:var(--pink)}
       .meta{margin:4px 0 6px;color:var(--mute);font-size:13px}.fix{margin:0 0 12px}
-      ol{margin:0;padding-left:22px}li{padding:8px 0;border-top:1px dashed var(--line);break-inside:avoid}li .what{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.snip{color:#fff;margin:2px 0}.msg{color:var(--mute);font-size:13.5px}
+      ol{margin:0;padding-left:38px}li{padding:8px 0;border-top:1px dashed var(--line);break-inside:avoid}li .what{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.snip{color:#fff;margin:2px 0}.msg{color:var(--mute);font-size:13.5px}
       li.fixed{opacity:.5}
       .tag{display:inline-block;font:600 10.5px ui-monospace,Menlo,monospace;letter-spacing:.04em;padding:2px 7px;border-radius:999px;border:1px solid var(--line);color:var(--mute);white-space:nowrap}.tag.auto{border-color:var(--blue);color:#8fb0ff}.tag.ok{border-color:var(--ok);color:var(--ok)}
       .lvl{display:inline-block;font:700 10.5px ui-monospace,Menlo,monospace;padding:2px 6px;border-radius:4px;background:#262833;color:#fff}.lvl.l-wcag{background:var(--pink)}
@@ -1894,6 +1903,15 @@
     if (on) { autoFixAX(); state.axFix = true; } else { undoAutoFixes(); state.axFix = false; }
     state.batch = false; scanProtection(); renderHUD(); postToParent();
   }
+  // take the viewer to a finding: scroll it to the middle and pulse its outline and chip so it can't be missed
+  function axJump(el) {
+    if (!el || !el.isConnected) return;
+    if (el === document.documentElement) { window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
+    el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    $$('.jig-ax-focus').forEach(x => x.classList.remove('jig-ax-focus')); el.classList.add('jig-ax-focus');
+    const tag = axTags && $$('.tag', axTags).find(t => t.__el === el); $$('.tag.focus', axTags || document).forEach(t => t.classList.remove('focus')); if (tag) tag.classList.add('focus');
+    clearTimeout(axJump.t); axJump.t = setTimeout(() => { el.classList.remove('jig-ax-focus'); if (tag) tag.classList.remove('focus'); }, 2200);
+  }
   function renderAXPanel() {
     const box = $('#jig-axr'); if (!box) return;
     const on = state.jigs.has('ax') && !(state.device && deviceEl); box.hidden = !on; if (!on) return;
@@ -1901,12 +1919,22 @@
     $('#jig-axr-n').textContent = T.wcagOpen; $('#jig-axr-n').classList.toggle('ok', !T.wcagOpen);
     $('#jig-axr-l').textContent = (T.wcagOpen === 1 ? 'accessibility failure' : 'accessibility failures') + (T.practice + T.design ? ` · ${T.practice + T.design} more` : '') + (T.fixed ? ` · ${T.fixed} fixed` : '');
     const list = $('#jig-axr-rules'); list.innerHTML = '';
+    state.axOpen = state.axOpen || new Set();
     R.rules.forEach(r => {
-      const row = document.createElement('div'); row.className = 'row axrow' + (r.open ? '' : ' done');
-      row.innerHTML = `<span class="c ${r.cat}">${r.open}</span><span class="s">${esc(r.t)}<small>${esc(r.ref)}${r.auto ? ' · auto' : ''}</small></span>`;
-      let i = 0; const open = r.items.filter(x => x.status === 'open');
-      row.onclick = () => { if (!open.length) return; const t = open[i++ % open.length].el; if (t && t.isConnected) { t.scrollIntoView({ block: 'center', behavior: 'smooth' }); if (t.classList.contains('jig-el') && state.jigs.has(groupOf(t.dataset.jigCtl))) select(t); } };
+      const openNow = state.axOpen.has(r.kind);
+      const row = document.createElement('div'); row.className = 'row axrow' + (r.open ? '' : ' done'); row.setAttribute('aria-expanded', openNow ? 'true' : 'false');
+      row.innerHTML = `<span class="c ${r.cat}">${r.open}</span><span class="s">${esc(r.t)}<span class="tw">${openNow ? '▾' : '▸'}</span><small>${esc(r.ref)}${r.auto ? ' · auto fix' : ''}</small></span>`;
+      row.onclick = () => { if (openNow) state.axOpen.delete(r.kind); else state.axOpen.add(r.kind); renderAXPanel(); };
       list.appendChild(row);
+      if (!openNow) return;
+      const box = document.createElement('div'); box.className = 'axitems';
+      r.items.slice(0, AX_LIST_CAP).forEach(it => {
+        const d = document.createElement('div'); d.className = 'axi ' + it.status; d.title = it.msg;
+        const b = document.createElement('b'); b.textContent = '#' + it.n; const t = document.createElement('span'); t.textContent = (it.el === document.documentElement ? 'the page' : axSnippet(it.el) || nameOf(it.el)) + (it.status === 'fixed' ? ' (fixed)' : '');
+        d.append(b, t); d.onclick = () => axJump(it.el); box.appendChild(d);
+      });
+      if (r.items.length > AX_LIST_CAP) { const m = document.createElement('div'); m.className = 'axi'; m.textContent = `+ ${r.items.length - AX_LIST_CAP} more in the report`; box.appendChild(m); }
+      list.appendChild(box);
     });
     if (!R.rules.length) list.innerHTML = '<div class="empty">Nothing flagged on this page.</div>';
     const fb = $('#jig-axfix'); const can = R.rules.some(r => r.auto && r.open);
