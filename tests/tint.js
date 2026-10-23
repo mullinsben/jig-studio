@@ -1,0 +1,10 @@
+const { chromium } = require('playwright');
+(async () => { const b = await chromium.launch(); const p = await b.newPage({ viewport: { width: 1440, height: 900 } }); p.on('pageerror', e => console.log('ERR', e.message));
+await p.goto('http://localhost:8777/tover.html?jig'); await p.waitForFunction(() => window.__jig && document.querySelector('#jig-wn-n').textContent !== '…');
+console.log('before', await p.evaluate(() => __jig.state.warnings.map(w => w.kind + ':' + w.msg.slice(0, 50)).join(' | ')));
+await p.click('#jig-adv-btn'); await p.click('#jig-norm-btn'); await p.waitForTimeout(1800);
+console.log('after', await p.evaluate(() => __jig.state.warnings.map(w => w.kind).join(',') + ' || fixes: ' + __jig.state.autoFixes.map(f => f.what).join('; ') + ' || cap bg ' + getComputedStyle(document.querySelector('.cap')).backgroundColor + ' / span bg ' + getComputedStyle(document.querySelector('.cap span')).backgroundColor));
+await p.screenshot({ path: '/tmp/claude-0/-home-claude/900e9517-47da-544c-9e1e-0e004e3d7d68/scratchpad/tint.png', clip: { x: 400, y: 20, width: 640, height: 440 } });
+await p.click('#jig-norm-btn'); await p.waitForTimeout(800);
+console.log('undo', await p.evaluate(() => getComputedStyle(document.querySelector('.cap')).backgroundColor + ' / ' + getComputedStyle(document.querySelector('.cap span')).backgroundColor));
+await b.close(); })();

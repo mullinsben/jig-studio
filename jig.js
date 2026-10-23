@@ -250,13 +250,13 @@
         gCands.forEach(g => [3, 4, 5, 6, 8, 9, 10, 12, 16, 24].forEach(N => { const cw = (W - (N - 1) * g) / N; if (cw < 16) return;
           const pitch = cw + g; const onR = x => { const k = Math.round((x + g) / pitch); return k >= 1 && k < N && Math.abs(k * pitch - g - x) <= 2; }, onL = x => { const k = Math.round(x / pitch); return k >= 1 && k < N && Math.abs(k * pitch - x) <= 2; };
           const ok = p => Math.abs(p.l - p.r - g) <= 2 && onR(p.r) && onL(p.l);
-          fits.push({ N, g, hit: P.reduce((a, p) => a + (ok(p) ? p.w : 0), 0) / total, n: P.filter(ok).length }); }));
+          fits.push({ N, g, hit: P.reduce((a, p) => a + (ok(p) ? p.w : 0), 0) / total, n: P.filter(ok).length, rep: P.reduce((a, p) => a + (ok(p) && p.w > 1 ? p.w : 0), 0) }); }));   // rep: gaps that recur row after row are the page's real grid
         const cand = fits.filter(f => f.n >= 2);   // one gap can't define a grid: a dozen column counts explain any single gap
         const top = cand.length ? Math.max(...cand.map(f => f.hit)) : 0;
         gridDebug = { box: [Math.round(A.left), Math.round(A.width)], inset: gridInset, L0: Math.round(L0), W: Math.round(W), pairs: P.map(p => [Math.round(p.r), Math.round(p.l), +p.w.toFixed(2)]), top: +top.toFixed(2), best: fits.slice().sort((x, y) => y.hit - x.hit).slice(0, 4) };
         const strong = cand.filter(f => f.n >= 3 && f.hit >= 0.15);   // three exact column gaps don't happen by accident: a grid exists, even if other sections do their own thing
         if (top >= 0.3 || strong.length) {
-          const pick = cand.filter(f => f.hit >= top - 0.03 && (top >= 0.3 || f.n >= 3)).sort((a, b) => a.N - b.N || (gapCount.get(b.g) || 0) - (gapCount.get(a.g) || 0) || b.hit - a.hit)[0];
+          const pick = cand.filter(f => f.hit >= top - 0.03 && (top >= 0.3 || f.n >= 3)).sort((a, b) => Math.round((b.rep - a.rep) * 10) || a.N - b.N || (gapCount.get(b.g) || 0) - (gapCount.get(a.g) || 0) || b.hit - a.hit)[0];
           columns = pick.N; gutter = pick.g; gridFit = Math.round(pick.hit * 100); gridMeasured = true;
         } else if (gaps.length >= 2) { gutter = mode(gaps)[0]; gridFit = Math.round(top * 100); }
       } else if (gaps.length >= 2) gutter = mode(gaps)[0];
@@ -1767,18 +1767,43 @@
     state.autoFixes = [];
     scanProtection();
     const seen = new Set(); const ids = new WeakMap(); let nid = 0; const key = (el, k) => { if (!ids.has(el)) ids.set(el, ++nid); return k + ':' + ids.get(el); };
+    // text over an image the scrims couldn't fix (or that the jig didn't wire): a tint behind the words, as light as passes; dark tint for light text, light for dark
+    const tintFallback = w => {
+            let el = w.el; while (el.parentElement && /^inline/.test(css(el).display) && !/^(A|BUTTON)$/.test(el.tagName) && el.parentElement !== document.body && !el.parentElement.querySelector('img, picture, video')) el = el.parentElement;
+            if (seen.has(key(el, 'tint'))) return false; seen.add(key(el, 'tint'));
+            const fg = parseColor(css(el).color) || [255, 255, 255, 1]; const light = lum(fg) > 0.4; const rgb = light ? '10,10,12' : '255,255,255';
+            const keep = ['background-color', 'padding', 'border-radius', 'box-decoration-break', '-webkit-box-decoration-break'].map(k => [k, el.style.getPropertyValue(k)]);
+            const undo = () => keep.forEach(([k, v]) => { el.style.removeProperty(k); if (v) el.style.setProperty(k, v); });
+            let passed = null, last = null;
+            for (const a of [0.45, 0.6, 0.75]) {
+              el.style.setProperty('background-color', `rgba(${rgb},${a})`, 'important'); el.style.setProperty('border-radius', '4px', 'important');
+              if (!px(css(el).paddingLeft)) el.style.setProperty('padding', '.1em .3em', 'important');
+              el.style.setProperty('box-decoration-break', 'clone', 'important'); el.style.setProperty('-webkit-box-decoration-break', 'clone', 'important');
+              scanProtection(); last = a;
+              if (!state.warnings.some(x => (el === x.el || el.contains(x.el)) && /contrast|busy|text-over/.test(x.kind))) { passed = a; break; }
+            }
+            const unsampled = w.kind === 'text-over-image' && /could not be sampled/.test(w.msg);
+            if (passed != null || unsampled) {
+              const a = passed != null ? passed : 0.6; if (passed == null) { el.style.setProperty('background-color', `rgba(${rgb},${a})`, 'important'); }
+              record(el, 'text', { scrim: 'tint', tint: `rgba(${rgb},${a})`, verified: passed != null }, `tint behind text rgba(${rgb},${a})${passed != null ? '' : ' (image not sampleable; unverified)'}`, 'tint');
+              state.autoFixes.push({ el, ctl: 'text', sub: 'tint', what: `tint behind text, ${Math.round(a * 100)}%${passed != null ? ' (now passes)' : ' (unverified: image not sampleable)'}`, undo }); 
+              return true;
+            } else { undo(); scanProtection(); return false; }
+    };
     const shadeFor = new Map();   // source colour → shade chosen; every later element with that colour reuses it if it passes there too
     for (let pass = 0; pass < 4; pass++) {
       let did = false;
       for (const w of state.warnings.slice()) {
         const plain = w.kind === 'contrast' && /on background/.test(w.msg);
         if (!plain && (w.kind === 'contrast' || w.kind === 'busy-background' || w.kind === 'text-over-image')) {
-          const ov = w.el.closest('.jig-el[data-jig-ctl="text"]'); if (!ov || !ov.__jigSetScrim || seen.has(key(ov, 'scrim'))) continue;
+          const ov = w.el.closest('.jig-el[data-jig-ctl="text"]');
+          if (!ov || !ov.__jigSetScrim) { if (tintFallback(w)) did = true; continue; }
+          if (seen.has(key(ov, 'scrim'))) continue;
           seen.add(key(ov, 'scrim'));
           for (const sc of ['gradient', 'tint', 'glass']) {
             ov.__jigSetScrim(sc); scanProtection();
             if (!state.warnings.some(x => ov.contains(x.el) && /contrast|busy|text-over/.test(x.kind))) { state.autoFixes.push({ el: ov, what: `scrim ${sc} (text over image now passes)` }); did = true; break; }
-            if (sc === 'glass') state.autoFixes.push({ el: ov, what: 'scrim glass (best effort; still short of AA)' });
+            if (sc === 'glass') { ov.__jigSetScrim('none'); scanProtection(); if (tintFallback(w)) did = true; else { ov.__jigSetScrim('glass'); state.autoFixes.push({ el: ov, what: 'scrim glass (best effort; still short of AA)' }); } }
           }
         }
         if (plain && !seen.has(key(w.el, w.kind))) {
