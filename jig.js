@@ -8,6 +8,7 @@
 
   // ------------------------------------------------------------ activation
   const JIG_VERSION = '0.1.0';
+  const COARSE = !!(window.matchMedia && matchMedia('(hover: none) and (pointer: coarse)').matches);   // a touch device: pinching belongs to the browser
   // never the site's content: elements marked off, and the CMS's own chrome a logged-in owner sees (WordPress admin bar)
   const OFF = '[data-jig="off"], #wpadminbar';
   const url = new URL(location.href);
@@ -472,7 +473,7 @@
       }, { passive: false });
       // two-finger pinch on touch
       let pinch = null;
-      on(el, 'touchstart', e => { if (e.touches.length === 2) pinch = { d: dist(e.touches), z: zoom }; }, { passive: true });
+      on(el, 'touchstart', e => { if (COARSE) return; if (e.touches.length === 2) pinch = { d: dist(e.touches), z: zoom }; }, { passive: true });   // on phones the browser owns pinch (page zoom); the −/+ buttons zoom the crop
       on(el, 'touchmove', e => { if (pinch && e.touches.length === 2) { e.preventDefault(); setZoom(pinch.z * dist(e.touches) / pinch.d, true); } }, { passive: false });
       on(el, 'touchend', () => { if (pinch) { pinch = null; commit(); } });
       function dist(t) { return Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY); }
@@ -991,6 +992,7 @@
     .jig-scrim-panel.c { margin-inline: auto; } .jig-scrim-panel.r { margin-left: auto; }
     html.jig-scanning *, html.jig-scanning *::before, html.jig-scanning *::after { transition: none !important; animation: none !important; }
     html.jig-scanning #jig-axtags { display: none !important; }
+    html.jig-scanning body * { pointer-events: auto !important; }
     .jig-el.jig-active { outline: 1.5px dashed rgba(63,111,255,.55); outline-offset: 2px; }
     .jig-el.jig-active:hover, .jig-el.jig-active.jig-selected { outline: 2px solid #3f6fff; }
     .jig-el.jig-el:not(.jig-active) { pointer-events: none; cursor: auto !important; }
@@ -1119,9 +1121,22 @@
       #jig-hud header::before { content: ""; width: 36px; height: 4px; border-radius: 2px; background: #3a3d4a; position: absolute; left: 50%; top: 5px; transform: translateX(-50%); }
       #jig-hud header { position: relative; padding-top: 14px; }
       #jig-hud .devwrap { display: none !important; }
-      #jig-hud { resize: none; }
+      #jig-hud { resize: none; max-height: 62vh; padding-bottom: env(safe-area-inset-bottom, 0px); }
       .jig-tb button { width: 36px; height: 36px; }
+      /* check-and-nudge: a slim bar (count + jigs) that opens into a findings sheet; no grid, device, advanced or foundation on a phone */
+      #jig-hud .tools, #jig-hud .advpanel, #jig-hud .welcome, #jig-hud .hint, #jig-found { display: none !important; }
+      #jig-hud header { touch-action: none; padding-bottom: 8px; }
+      #jig-hud header small { display: none; }
+      #jig-hud header .min { display: none; }
+      #jig-hud header .phn { display: inline-block; margin-left: auto; font: 700 12px ui-monospace, Menlo, monospace; background: #ff2d9b; color: #fff; border-radius: 999px; padding: 3px 9px; } #jig-hud .phn.ok { background: #35c186; color: #0b0b0d; }
+      #jig-hud .jigs { padding: 6px 10px 10px; } #jig-hud .jigs button { padding: 8px 2px; font-size: 12px; }
+      #jig-hud .list { overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+      #jig-hud.jig-collapsed .list, #jig-hud.jig-collapsed footer { display: none !important; }
+      #jig-hud.jig-collapsed .jigs { display: flex !important; }
+      .jig-el.jig-active:not(.jig-selected) { touch-action: auto; } .jig-el.jig-selected { touch-action: none; }   /* tap to select, then drag; swiping anywhere else scrolls the page */
+      .jig-badge { white-space: normal; max-width: calc(100vw - 16px); }
     }
+    #jig-hud .phn { display: none; }
   `;
 
   const badge = document.createElement('div'); badge.className = 'jig-badge'; badge.hidden = true;
@@ -1306,7 +1321,7 @@
   function scanProtection() {
     clearTimeout(scanTimer); checkFaces();
     document.documentElement.classList.add('jig-scanning');   // transitions off: read settled values, not a frame of an animation
-    const ts = performance.now(); scanTimer = null;
+    const ts = performance.now(); scanTimer = null; painters = null;
     try { scanNow(); } finally { document.documentElement.classList.remove('jig-scanning'); state.lastScanMs = performance.now() - ts; }
   }
   function scanNow() {
@@ -1432,6 +1447,7 @@
       } else { bg = solidBehind(t); how = 'on background'; }
       if (!bg && ratioOverride === undefined) return;
       const ratio = bg ? contrast(fg, bg) : ratioOverride;
+      if (bg && ratio < 1.15) { if (!seen.has(t)) { seen.add(t); W.push({ kind: 'text-over-image', el: t, msg: "couldn't tell what's behind this text (it measures as the same colour as its background, so the real background is somewhere the jig can't see); check it by eye" }); } return; }
       const fs = px(css(t).fontSize), bold = px(css(t).fontWeight) >= 700;
       const large = fs >= 24 || (bold && fs >= 18.66);          // WCAG large text
       const need = large ? Math.min(3, P.minContrast || 4.5) : (P.minContrast || 4.5);
@@ -1513,9 +1529,10 @@
         const pxs = ((c.backgroundSize || '').match(/[\d.]+px/g) || []).map(parseFloat); const icon = /no-repeat/.test(c.backgroundRepeat) && pxs.length > 0 && pxs.every(v => v <= 96);   // 'auto 16px' is an icon too
         if (!icon && overlap(n.getBoundingClientRect()) >= 0.5) return { img: n, box: n };
       }
-      const bgc = parseColor(c.backgroundColor); if (bgc && bgc[3] >= 0.95) return null;   // text sits on a solid colour: nothing further up is behind it
+      const bgc = parseColor(c.backgroundColor); if (bgc && bgc[3] >= 0.95) { const hr = n.getBoundingClientRect(); const p = painterUnder(t, hr.width * hr.height); return p && p.pic ? { img: p.e, box: p.e } : null; }   // text sits on a solid colour, unless something smaller is painted between
       n = n.parentElement;
     }
+    { const p = painterUnder(t, Infinity); if (p && p.pic) return { img: p.e, box: p.e }; }
     return null;
   }
   function scrimBehind(t) {
@@ -1533,9 +1550,32 @@
     return null;
   }
   function blend(under, over) { const a = over[3]; return [over[0] * a + under[0] * (1 - a), over[1] * a + under[1] * (1 - a), over[2] * a + under[2] * (1 - a), 1]; }
+  // everything on the page that paints a box: an opaque colour or a picture. Built once per scan.
+  let painters = null;
+  function getPainters() {
+    if (painters) return painters; painters = [];
+    for (const e of document.body.querySelectorAll('*')) {
+      if (e.closest('#jig-hud, #jig-axtags, .jig-tb, .jig-badge, #jig-grid, #jig-found, #jig-device') || /^(SCRIPT|STYLE|TEMPLATE|LINK|META)$/.test(e.tagName)) continue;
+      const c = css(e); const bg = parseColor(c.backgroundColor); const pic = /^(IMG|VIDEO|CANVAS)$/.test(e.tagName) || /url\(/.test(c.backgroundImage);
+      if (!(bg && bg[3] > 0.9) && !pic) continue;
+      const r = e.getBoundingClientRect(); if (r.width < 8 || r.height < 8 || c.visibility === 'hidden' || +c.opacity === 0) continue;
+      let fx = false; for (let a = e, i = 0; a && a !== document.body && i < 14; a = a.parentElement, i++) if (/fixed|sticky/.test(css(a).position)) { fx = true; break; }   // fixed and sticky layers move with the scroll; they only count for text that moves with them
+      painters.push({ e, pic, bg, fx, x0: r.left + scrollX, y0: r.top + scrollY, x1: r.right + scrollX, y1: r.bottom + scrollY, area: r.width * r.height });
+    }
+    return painters;
+  }
+  // the smallest painted box under the text's centre that isn't the text's own parent chain. The text is readable, so it sits on top of it.
+  function painterUnder(t, maxArea) {
+    const r = t.getBoundingClientRect(); if (!r.width || !r.height) return null; const cx = r.left + r.width / 2 + scrollX, cy = r.top + r.height / 2 + scrollY;
+    let best = null; let tfx = false; for (let a = t, i = 0; a && a !== document.body && i < 20; a = a.parentElement, i++) if (/fixed|sticky/.test(css(a).position)) { tfx = true; break; }
+    for (const p of getPainters()) { if (p.fx !== tfx || p.area >= maxArea || cx < p.x0 || cx > p.x1 || cy < p.y0 || cy > p.y1 || p.e.contains(t) || t.contains(p.e)) continue; if (!best || p.area < best.area) best = p; }
+    return best;
+  }
   function solidBehind(t) {
-    let n = t;
-    while (n && n !== document.documentElement) { const c = parseColor(css(n).backgroundColor); if (c && c[3] > 0.9) return c; n = n.parentElement; }
+    let n = t, host = null, hc = null;
+    while (n && n !== document.documentElement) { const c = parseColor(css(n).backgroundColor); if (c && c[3] > 0.9) { host = n; hc = c; break; } n = n.parentElement; }
+    { const hr = host && host !== document.body ? host.getBoundingClientRect() : null; const p = painterUnder(t, hr ? hr.width * hr.height : Infinity); if (p && !p.pic) return p.bg; }
+    if (hc) return hc;
     const h = parseColor(css(document.documentElement).backgroundColor);
     if (h && h[3] > 0.9) return h;
     return [255, 255, 255, 1];   // the canvas: browsers paint white under a transparent html/body
@@ -1602,6 +1642,7 @@
     const c = css(el); const fg = parseColor(c.color); if (!fg) return null;
     const own = parseColor(c.backgroundColor); const hasOwnBg = own && own[3] > 0.9;
     const bg = hasOwnBg ? own : solidBehind(el);
+    if (fg && bg && contrast(fg, bg) < 1.15) return null;   // a measuring miss, not a colour to change
     const fs = px(c.fontSize), bold = px(c.fontWeight) >= 700; const P = state.F.protect || {};
     const need = (fs >= 24 || (bold && fs >= 18.66)) ? Math.min(3, P.minContrast || 4.5) : (P.minContrast || 4.5);
     const before = contrast(fg, bg); if (before >= need) return { already: true, ratio: before };
@@ -1625,7 +1666,7 @@
   // ------------------------------------------------------------ HUD
   const hud = document.createElement('div'); hud.id = 'jig-hud';
   hud.innerHTML = `
-    <header><b>jig <i>studio</i></b><small id="jig-bp"></small><button class="min" id="jig-min-btn" title="minimize">–</button></header>
+    <header><b>jig <i>studio</i></b><small id="jig-bp"></small><em class="phn" id="jig-ph-n" title="accessibility failures"></em><button class="min" id="jig-min-btn" title="minimize">–</button></header>
     <div class="jigs">${JIGS.map(j => `<button data-jig-toggle="${j.id}" aria-pressed="false">${j.label}</button>`).join('')}</div>
     <div class="welcome" id="jig-welcome" hidden><b>Pink is what fails accessibility.</b> Switch on <i>images</i>, <i>type</i>, <i>buttons</i> or <i>spacing</i>, then drag or click anything outlined. Everything you do lands in one patch; <b>Copy patch</b> and hand it to your AI.</div>
     <div class="tools">
@@ -1650,7 +1691,7 @@
     const CAP = 150; const more = (box, n) => { if (n > 0) { const m = document.createElement('div'); m.className = 'empty'; m.textContent = `+ ${n} more in the patch`; box.appendChild(m); } };
     const ch = $('#jig-changes'), wn = $('#jig-warn');
     ch.innerHTML = ''; wn.innerHTML = '';
-    if (!state.changes.size) ch.innerHTML = state.jigs.size ? '<div class="empty">Nothing changed yet. Hover anything outlined; drag, pinch, or click it.</div>' : '<div class="empty">Switch on a jig above. Only that kind of thing becomes adjustable, so the page stays readable.</div>';
+    if (!state.changes.size) ch.innerHTML = state.jigs.size ? '<div class="empty">' + (COARSE ? 'Nothing changed yet. Tap anything outlined, then drag it or use its buttons.' : 'Nothing changed yet. Hover anything outlined; drag, pinch, or click it.') + '</div>' : '<div class="empty">Switch on a jig above. Only that kind of thing becomes adjustable, so the page stays readable.</div>';
     let shown = 0;
     for (const [k, c] of state.changes) {
       if (++shown > CAP) { more(ch, state.changes.size - CAP); break; }
@@ -1797,7 +1838,7 @@
     'dup-link':        { t: 'Repeated links', ref: '2.4.4 Link Purpose', lvl: 'best practice', cat: 'practice', auto: false, fix: 'An image link that repeats the headline link beside it doubles every stop for keyboard and screen reader users. Add aria-hidden="true" tabindex="-1" to the image link.' },
     'vague-link':      { t: 'Link text that doesn\'t say where it goes', ref: '2.4.4 Link Purpose (In Context)', lvl: 'best practice', cat: 'practice', auto: false, fix: 'Say where the link goes ("Read the membership rules"), or add the context with aria-label or aria-describedby. Screen reader users often browse a list of links with no surrounding text.' },
     'empty-heading':   { t: 'Empty headings', ref: '2.4.6 Headings and Labels', lvl: 'best practice', cat: 'practice', auto: false, fix: 'Give the heading text or remove it; an empty heading is a dead stop for anyone navigating by headings.' },
-    'measure':         { t: 'Lines too long to read comfortably', ref: '1.4.8 Visual Presentation', lvl: 'AAA', cat: 'practice', auto: true, fix: 'Cap text columns at about 65 to 75 characters per line (max-width: 68ch is a good start).' },
+    'measure':         { t: 'Lines too long to read comfortably', ref: '1.4.8 Visual Presentation', lvl: 'AAA', cat: 'practice', auto: false, fix: 'Cap text columns at about 65 to 75 characters per line (max-width: 68ch is a good start).' },
     'hierarchy':       { t: 'Headings that don\'t read as headings', ref: 'visual hierarchy', lvl: 'design', cat: 'design', auto: true, fix: 'A heading should be clearly larger than the body copy beside it (about 15% or more), or bold. An h2 shouldn\'t outsize the h1.' },
     'small-text':      { t: 'Body copy too small', ref: 'readability', lvl: 'design', cat: 'design', auto: true, fix: 'Set body copy at 14px or more; 16px is the usual default.' },
     'overflow':        { t: 'Clipped or overflowing text', ref: 'related: 1.4.10 Reflow', lvl: 'design', cat: 'design', auto: false, fix: 'Let the box grow with its text, or give it room to wrap. Clipped words are lost words.' },
@@ -1983,6 +2024,7 @@
   function renderAXPanel() {
     const box = $('#jig-ax'); if (!box) return;
     const R = buildAXReport(); const T = R.totals;
+    { const pb = $('#jig-ph-n'); if (pb) { pb.textContent = T.wcagOpen ? T.wcagOpen + ' ax' : 'ax ok'; pb.classList.toggle('ok', !T.wcagOpen); } }
     { const b = $('#jig-ax-n'); if (b) { b.textContent = T.wcagOpen; b.classList.toggle('warn', T.wcagOpen > 0); b.title = `${T.wcagOpen} WCAG failures open · ${T.practice + T.design} more notes`; } }
     $('#jig-axr-n').textContent = T.wcagOpen; $('#jig-axr-n').classList.toggle('ok', !T.wcagOpen);
     $('#jig-axr-l').textContent = (T.wcagOpen === 1 ? 'accessibility failure' : 'accessibility failures') + (T.practice + T.design ? ` · ${T.practice + T.design} more` : '') + (T.fixed ? ` · ${T.fixed} fixed` : '');
@@ -2264,17 +2306,23 @@
           record(el, 'text', { chip: tint }, `link chip ${tint} (marks the link by shape, not colour alone; an underline also works)`, 'chip');
           state.autoFixes.push({ el, ctl: 'text', sub: 'chip', what: 'link chip (shape, not colour alone)', undo: () => keep.forEach(([k, v, pr]) => { el.style.removeProperty(k); if (v) el.style.setProperty(k, v, pr); }) }); did = true;
         }
-        if (w.kind === 'measure' && w.long && !w.el.__jigSetMaxCols && !seen.has(key(w.el, w.kind))) {
+        // line length is a layout call (WCAG AAA), not a breakage: auto fix leaves it as a note; the type toolbar's width buttons do it on purpose
+        if (false && w.kind === 'measure' && w.long && !w.el.__jigSetMaxCols && !seen.has(key(w.el, w.kind))) {
           seen.add(key(w.el, w.kind)); let el = w.el; while (el.parentElement && /^inline/.test(css(el).display) && el.parentElement !== document.body) el = el.parentElement;   // max-width does nothing on an inline span: cap its block
           if (seen.has(key(el, 'measure-cap'))) continue; seen.add(key(el, 'measure-cap')); const prev = el.style.getPropertyValue('max-width');
           el.style.setProperty('max-width', '68ch', 'important');
           record(el, 'type', { maxWidth: '68ch', wasCpl: Math.round(w.cpl) }, `max-width 68ch (measure was ~${Math.round(w.cpl)} characters)`, 'measure');
           state.autoFixes.push({ el, ctl: 'type', sub: 'measure', what: `max-width 68ch (measure was ~${Math.round(w.cpl)} characters)`, undo: () => { el.style.removeProperty('max-width'); if (prev) el.style.setProperty('max-width', prev); } }); did = true;
         }
-        if (w.kind === 'measure' && w.long && w.el.__jigSetMaxCols && !seen.has(key(w.el, w.kind))) {
+        if (false && w.kind === 'measure' && w.long && w.el.__jigSetMaxCols && !seen.has(key(w.el, w.kind))) {
           seen.add(key(w.el, w.kind)); const G = state.F.grid; const colW = w.el.getBoundingClientRect().width / Math.max(1, Math.round(w.el.getBoundingClientRect().width / colWidth(w.el.parentElement || document.body)));
           const want = clamp(Math.round((70 * px(css(w.el).fontSize) * 0.5 + G.gutter) / (colWidth(w.el.parentElement || document.body))), 2, G.columns);
-          w.el.__jigSetMaxCols(want); state.autoFixes.push({ el: w.el, what: `max-width ${want} cols (measure was ~${Math.round(w.cpl)} characters)` }); did = true;
+          // the whole text column gets the same cap: sibling paragraphs and lists, or one paragraph ends narrower than the next
+          const col = Array.from((w.el.parentElement || w.el).children).filter(x => x === w.el || (/^(P|UL|OL|BLOCKQUOTE|DL)$/.test(x.tagName) && x.tagName === w.el.tagName || /^(UL|OL)$/.test(x.tagName)) && visible(x));
+          col.forEach(x => { seen.add(key(x, 'measure')); seen.add(key(x, 'measure-cap'));
+            if (x.__jigSetMaxCols) { x.__jigSetMaxCols(want); state.autoFixes.push({ el: x, what: `max-width ${want} cols (${x === w.el ? `measure was ~${Math.round(w.cpl)} characters` : 'same column as the paragraph beside it'})` }); }
+            else { const prev = x.style.getPropertyValue('max-width'); x.style.setProperty('max-width', getComputedStyle(w.el).maxWidth, 'important'); state.autoFixes.push({ el: x, what: 'max-width matches the paragraph beside it', undo: () => { x.style.removeProperty('max-width'); if (prev) x.style.setProperty('max-width', prev); } }); } });
+          did = true;
         }
         if (w.kind === 'tap-target' && w.narrow && w.el.__jigStepSize && !seen.has(key(w.el, w.kind))) {
           seen.add(key(w.el, w.kind)); let steps = 0; const min = (state.F.protect || {}).minTapTarget || 24;
@@ -2512,7 +2560,7 @@
     on(window, 'message', e => { if (e.data && e.data.jig === 'frame') { state.frame = { changes: e.data.changes || [], warnings: e.data.warnings || [], device: e.data.device, bp: e.data.bp }; renderHUD(); } });
     $('#jig-min-btn').onclick = e => { e.stopPropagation(); hud.classList.toggle('jig-collapsed'); $('#jig-min-btn').textContent = hud.classList.contains('jig-collapsed') ? '+' : '–'; };
     // changes / notes fold shut by default; the state is remembered for the session
-    $$('h6.fold', hud).forEach(h => { const body = $('#jig-' + h.dataset.fold); const key = 'jig-fold-' + h.dataset.fold; const open = safeGet(key) === '1'; body.hidden = !open; h.setAttribute('aria-expanded', open ? 'true' : 'false');
+    $$('h6.fold', hud).forEach(h => { const body = $('#jig-' + h.dataset.fold); const key = 'jig-fold-' + h.dataset.fold; const saved = safeGet(key); const open = saved === '1' || (saved == null && h.dataset.fold === 'ax' && window.innerWidth <= 640); body.hidden = !open; h.setAttribute('aria-expanded', open ? 'true' : 'false');
       h.onclick = () => { const o = body.hidden; body.hidden = !o; h.setAttribute('aria-expanded', o ? 'true' : 'false'); safeSet(key, o ? '1' : '0'); }; });
     const devBtn = $('#jig-device-btn'), devMenu = $('#jig-device-menu');
     const showDevMenu = show => { devMenu.hidden = !show; devBtn.setAttribute('aria-expanded', show ? 'true' : 'false'); };
@@ -2570,11 +2618,14 @@
     const keepOnScreen = (left, top) => { const r = hud.getBoundingClientRect(); hud.style.left = `${clamp(left, 80 - r.width, window.innerWidth - 80)}px`; hud.style.top = `${clamp(top, 0, Math.max(0, window.innerHeight - 44))}px`; hud.style.right = 'auto'; };
     [hdr, grip].forEach(h => {
       if (!h) return;
-      on(h, 'pointerdown', e => { if (e.target.closest('.min')) return; d = { x: e.clientX - hud.offsetLeft, y: e.clientY - hud.offsetTop, sx: e.clientX, sy: e.clientY }; h.setPointerCapture(e.pointerId); });
+      on(h, 'pointerdown', e => { if (e.target.closest('.min')) return; d = { x: e.clientX - hud.offsetLeft, y: e.clientY - hud.offsetTop, sx: e.clientX, sy: e.clientY }; try { h.setPointerCapture(e.pointerId); } catch (x) {} });
       on(h, 'pointermove', e => { if (!d || window.innerWidth <= 640) return; keepOnScreen(e.clientX - d.x, e.clientY - d.y); });
-      on(h, 'pointerup', e => { if (e.target.closest('.min')) { d = null; return; } const moved = d && (Math.abs(e.clientX - d.sx) > 4 || Math.abs(e.clientY - d.sy) > 4); d = null; if (h === hdr && window.innerWidth <= 640 && !moved) hud.classList.toggle('jig-collapsed'); });
+      on(h, 'pointerup', e => { if (e.target.closest('.min')) { d = null; return; } if (!d) return; const dy = e.clientY - d.sy, moved = Math.abs(e.clientX - d.sx) > 4 || Math.abs(dy) > 4; d = null;
+        if (h === hdr && window.innerWidth <= 640) { if (dy < -24) { hud.classList.remove('jig-collapsed'); hdr.__swiped = true; } else if (dy > 24) { hud.classList.add('jig-collapsed'); hdr.__swiped = true; } } });
     });
     on(window, 'resize', () => { if (window.innerWidth > 640 && hud.style.top) keepOnScreen(hud.offsetLeft, hud.offsetTop); });
+    // a tap opens or closes the phone sheet on click, after the finger has lifted; toggling earlier lets the click land on whatever slid under it
+    on(hdr, 'click', e => { if (window.innerWidth > 640 || e.target.closest('.min')) return; if (hdr.__swiped) { hdr.__swiped = false; return; } hud.classList.toggle('jig-collapsed'); });
     if (window.innerWidth <= 640) hud.classList.add('jig-collapsed');
     // first scan once visible images are in; lazy images below the fold never load until scrolled, so never wait on them, and never wait more than 2.5s
     const wn0 = $('#jig-wn-n'); if (wn0) { wn0.textContent = '…'; wn0.title = 'scanning'; }

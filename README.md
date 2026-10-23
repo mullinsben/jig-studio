@@ -146,7 +146,7 @@ They're listed in the HUD under **notes** and included in the patch. They never 
 
 Turn on the **ax** pill and the HUD shows the scan as a report: a headline count of WCAG A/AA failures, one row per rule with its WCAG reference (click a row to walk its elements), and three buttons:
 
-- **Fix what I can**: the accessibility half of auto on its own (contrast shades, scrims and tints, tap target sizes, heading steps, small body copy, long measures), with no snapping. Press again to undo. The fixes land in the patch like any other change.
+- **Fix what I can**: the accessibility half of auto on its own (contrast shades, overlays, scrims and tints, link chips, tap target sizes, heading steps, small body copy), with no snapping. Press again to undo. The fixes land in the patch like any other change.
 - **Download report**: one self-contained HTML file, dark on screen and clean on paper; print it to get the PDF. Header with the URL, date and viewport; a summary table by rule; findings grouped as *Accessibility failures (WCAG A/AA)*, *Best practice* and *Design quality*, each with the selector, the text it's about, the measured value against the requirement, and whether the jig can fix it; a "how this was checked" section. If you fixed things in the session, fixed findings are marked and the patch rides along at the bottom.
 - **Copy markdown**: the same report for a ticket, an issue or Slack.
 
