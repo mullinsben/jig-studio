@@ -8,6 +8,8 @@
 
   // ------------------------------------------------------------ activation
   const JIG_VERSION = '0.1.0';
+  // never the site's content: elements marked off, and the CMS's own chrome a logged-in owner sees (WordPress admin bar)
+  const OFF = '[data-jig="off"], #wpadminbar';
   const url = new URL(location.href);
   const wanted = url.searchParams.has('jig') || location.hash === '#jig' || safeGet('jig') === '1' || (document.currentScript && document.currentScript.dataset.jigInjected);
   if (!wanted) return;
@@ -895,7 +897,7 @@
   // data-jig="off" excludes an element (and its subtree), data-jig-name names it.
   function autoTargets() {
     const out = new Map(); // el -> ctl
-    const skip = el => !el.offsetParent && css(el).position !== 'fixed' || el.closest('#jig-hud, .jig-tb, .jig-badge, #jig-grid, #jig-found, #jig-device, #jig-axtags, [data-jig="off"]') || el.classList.contains('jig-crop-box') || el.classList.contains('jig-scrim-panel');
+    const skip = el => !el.offsetParent && css(el).position !== 'fixed' || el.closest('#jig-hud, .jig-tb, .jig-badge, #jig-grid, #jig-found, #jig-device, #jig-axtags, ' + OFF) || el.classList.contains('jig-crop-box') || el.classList.contains('jig-scrim-panel');
     const add = (el, ctl) => { if (!out.has(el) && !skip(el) && Controls[ctl]) out.set(el, ctl); };
     // explicit first
     $$('[data-jig]').forEach(el => { let c = el.dataset.jig; if (c === 'heading') c = 'type'; if (c && c !== 'off') add(el, c); });
@@ -1461,7 +1463,7 @@
       $$('h1,h2,h3,h4,h5,h6').forEach(h => { if (jigUI(h) || !h.offsetParent && css(h).position !== 'fixed') return; if (!(h.textContent || '').trim() && !h.querySelector('img[alt]:not([alt=""]), svg[aria-label], [aria-label]') && !(h.getAttribute('aria-label') || '').trim()) W.push({ kind: 'empty-heading', el: h, msg: `empty ${h.tagName.toLowerCase()}; screen reader users jump between headings and land on nothing` }); });
     }
     const hid = new Map(); const hidden = el => { if (!hid.has(el)) hid.set(el, srOnly(el)); return hid.get(el); };   // visually hidden text is for screen readers; size, contrast and clipping rules don't apply
-    state.warnings = W.filter((w, i) => W.findIndex(x => x.el === w.el && x.kind === w.kind) === i && (/heading|h1|^lang$|^title$/.test(w.kind) || !hidden(w.el))); axTrackBaseline(); renderHUD(); postToParent(); paintAX();
+    state.warnings = W.filter((w, i) => W.findIndex(x => x.el === w.el && x.kind === w.kind) === i && (/heading|h1|^lang$|^title$/.test(w.kind) || !hidden(w.el)) && (w.page || !w.el.closest(OFF))); axTrackBaseline(); renderHUD(); postToParent(); paintAX();
   }
   // ax jig: every element with a protection warning gets a pink outline and a chip saying why
   let axTags = null;
@@ -1495,6 +1497,13 @@
       // an <img> counts only if it actually sits under the words (an avatar beside a byline doesn't)
       const img = Array.from(n.children).find(c => c.tagName === 'IMG' && c !== t && !c.contains(t) && overlap(c.getBoundingClientRect()) >= 0.5);
       if (img && css(n).position !== 'static') return { img, box: n };
+      // page builders (Bold, Elementor, Divi) put the photo in an absolutely positioned layer beside the content, not behind it in the tree
+      for (const c of n.children) {
+        if (c === t || c.contains(t) || /^(SCRIPT|STYLE|TEMPLATE|svg)$/i.test(c.tagName) || (c.id || '').startsWith('jig-') || !/absolute|fixed/.test(css(c).position) || overlap(c.getBoundingClientRect()) < 0.5) continue;
+        const cand = [c, ...c.querySelectorAll('*')].slice(0, 40);
+        const src = cand.find(e => (/^(IMG|VIDEO|CANVAS)$/.test(e.tagName) || /url\(/.test(css(e).backgroundImage)) && overlap(e.getBoundingClientRect()) >= 0.5);
+        if (src) return { img: src, box: n };
+      }
       const c = css(n), bgi = c.backgroundImage;
       if (bgi !== 'none' && /url\(/.test(bgi)) {
         // a small no-repeat background is an icon (a bullet, an arrow), not a picture behind the text
@@ -1510,6 +1519,7 @@
     // a translucent background on the text's own box or an ancestor between it and the image
     let n = t;
     while (n && n !== document.body) {
+      for (const ps of ['::before', '::after']) { const pc = getComputedStyle(n, ps); if (pc.content !== 'none' && /absolute|fixed/.test(pc.position)) { const pb = parseColor(pc.backgroundColor); if (pb && pb[3] > 0.05 && pb[3] < 1) { pb[3] *= (+pc.opacity || 1); return pb; } } }   // a builder's section overlay
       const bgc = parseColor(css(n).backgroundColor); const bgi = css(n).backgroundImage;
       const bf = css(n).backdropFilter || css(n).webkitBackdropFilter || '';
       if (bgc && bgc[3] > 0.05 && bgc[3] < 1) { if (/blur/.test(bf)) bgc.blur = true; return bgc; }
@@ -1527,8 +1537,32 @@
     if (h && h[3] > 0.9) return h;
     return [255, 255, 255, 1];   // the canvas: browsers paint white under a transparent html/body
   }
+  const bgImgs = new Map();
+  function bgImage(el) {
+    const m = (css(el).backgroundImage || '').match(/url\(["']?([^"')]+)["']?\)/); if (!m) return null;
+    let im = bgImgs.get(m[1]); if (!im) { im = new Image(); im.decoding = 'async'; im.onload = () => scanSoon(); im.src = m[1]; bgImgs.set(m[1], im); }
+    return im.complete && im.naturalWidth ? im : null;
+  }
+  // where a CSS background image lands inside its box: background-size cover/contain/auto/px, background-position in % or px
+  function sampleBg(el, t) {
+    const im = bgImage(el); if (!im) return null;
+    try {
+      const c = css(el), br = el.getBoundingClientRect(), tr = t.getBoundingClientRect(); const iw = im.naturalWidth, ih = im.naturalHeight;
+      const size = (c.backgroundSize || 'auto').split(' '); let s;
+      if (size[0] === 'cover') s = Math.max(br.width / iw, br.height / ih); else if (size[0] === 'contain') s = Math.min(br.width / iw, br.height / ih);
+      else if (/%$/.test(size[0])) s = br.width * parseFloat(size[0]) / 100 / iw; else if (/px$/.test(size[0])) s = parseFloat(size[0]) / iw; else s = 1;
+      const rw = iw * s, rh = ih * s; const pos = (c.backgroundPosition || '50% 50%').split(/\s+/);
+      const off = (v, room) => /%$/.test(v) ? room * parseFloat(v) / 100 : /px$/.test(v) ? parseFloat(v) : room / 2;
+      const ox = off(pos[0] || '50%', br.width - rw), oy = off(pos[1] || '50%', br.height - rh);
+      const x0 = clamp((tr.left - br.left - ox) / s, 0, iw), y0 = clamp((tr.top - br.top - oy) / s, 0, ih), x1 = clamp((tr.right - br.left - ox) / s, 0, iw), y1 = clamp((tr.bottom - br.top - oy) / s, 0, ih);
+      const N = 8, cv = document.createElement('canvas'); cv.width = N; cv.height = N; const ctx = cv.getContext('2d');
+      ctx.drawImage(im, x0, y0, Math.max(1, x1 - x0), Math.max(1, y1 - y0), 0, 0, N, N);
+      const d = ctx.getImageData(0, 0, N, N).data; const patches = []; for (let i = 0; i < d.length; i += 4) patches.push([d[i], d[i + 1], d[i + 2], 1]); return patches;
+    } catch (e) { return null; }   // cross-origin image: unmeasured, never guessed
+  }
   function sampleImage(img, t) {
-    if (img.tagName !== 'IMG' || !img.complete || !img.naturalWidth) return null;
+    if (img.tagName !== 'IMG') return /url\(/.test(css(img).backgroundImage) ? sampleBg(img, t) : null;
+    if (!img.complete || !img.naturalWidth) return null;
     try {
       const c = document.createElement('canvas'); const ir = img.getBoundingClientRect(), tr = t.getBoundingClientRect();
       const fit = naturalFit(img); const [ox, oy] = parsePos(css(img).objectPosition);
@@ -1973,7 +2007,7 @@
     const { typeSteps, spaceSteps } = quantizeScales(res);
     state.normalizeRes = res;
     // buttons are left to the button control (their padding IS their size); snapping them would shrink tap targets the scan then has to grow back
-    const skipEl = el => el.closest('#jig-hud, .jig-tb, #jig-found, #jig-device, .jig-badge, #jig-axtags, #jig-grid, script, style, svg') || el === document.body || el === document.documentElement || !visible(el) || el.dataset.jigCtl === 'button' || el.closest('.jig-el[data-jig-ctl="button"]') || srOnly(el);
+    const skipEl = el => el.closest('#jig-hud, .jig-tb, #jig-found, #jig-device, .jig-badge, #jig-axtags, #jig-grid, script, style, svg, ' + OFF) || el === document.body || el === document.documentElement || !visible(el) || el.dataset.jigCtl === 'button' || el.closest('.jig-el[data-jig-ctl="button"]') || srOnly(el);
     const autoMargin = (() => {   // margins authored as auto compute to px; snapping that number would break the layout
       const rules = []; for (const sh of Array.from(document.styleSheets)) { try { for (const r of Array.from(sh.cssRules || [])) if (r.style && /auto/.test(r.style.margin + r.style.marginTop + r.style.marginBottom + r.style.marginLeft + r.style.marginRight + r.style.marginBlock + r.style.marginInline)) rules.push(r); } catch (e) {} }
       return (el, prop) => { if (/auto/.test(el.style.getPropertyValue(prop) + el.style.margin)) return true; const side = prop.replace('margin-', ''); return rules.some(r => { try { if (!el.matches(r.selectorText)) return false; } catch (e) { return false; } const st = r.style; const v = st.getPropertyValue(prop) || ((side === 'top' || side === 'bottom') ? st.marginBlock : st.marginInline) || ''; if (/auto/.test(v)) return true; const m = (st.margin || '').split(/\s+/); if (!m[0]) return false; const idx = { top: 0, right: 1, bottom: m.length > 2 ? 2 : 0, left: m.length > 3 ? 3 : (m.length > 1 ? 1 : 0) }[side]; return /auto/.test(m[idx] || ''); }); };

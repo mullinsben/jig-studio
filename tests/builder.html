@@ -1,0 +1,14 @@
+<!doctype html><html lang="en"><head><title>Builder hero</title>
+<style>
+  body { margin: 0; font: 16px sans-serif; }
+  .sec { position: relative; background: rgb(250,249,246); height: 560px; overflow: hidden; }
+  .sec::before { content: ""; position: absolute; inset: 0; background: rgba(0,0,0,.3); z-index: 1; }
+  .holder_wrapper { position: absolute; inset: 0; }
+  .holder { position: absolute; inset: 0; background: url(../demo/assets/banner-soak.jpg) center / cover no-repeat; }
+  .port { position: relative; z-index: 2; max-width: 1100px; margin: 0 auto; padding-top: 120px; text-align: center; color: #fff; }
+  .port h1 { font-size: 64px; margin: 0 0 12px; } .port p { font-size: 22px; }
+  .plain { padding: 40px; } .plain p { color: #bbb; }
+</style></head><body>
+<section class="sec"><div class="holder_wrapper"><div class="holder"></div></div><div class="port"><p class="eyebrow">LICENSED DAYCARE &amp; PRESCHOOL</p><h1>Small Ratios, Big Love</h1><p>SHORELINE, WA</p></div></section>
+<div class="plain"><p>Plain grey text on white still gets the colour fix.</p></div>
+<script src="../jig.js"></script></body></html>

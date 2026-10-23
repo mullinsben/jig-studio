@@ -357,7 +357,7 @@
   });
 </script>
 <script>
-  /* Jig Studio: costs nothing until someone adds ?jig to the URL */
+  /* Jig Studio: does nothing until someone adds ?jig to the URL */
   (function () {
     var on = /[?&]jig(=|&|$)/.test(location.search) || location.hash === '#jig';
     try { on = on || localStorage.getItem('__jig') === '1'; } catch (e) {}
