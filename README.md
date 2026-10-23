@@ -8,6 +8,48 @@ The jig never writes to your site. It proposes. Approval is reading the patch an
 
 Non-designers get to fix what looks wrong without opening a design tool. Designers get a faster loop than mockup, handoff, wait, review.
 
+## Install on your site
+
+Paste this once, at the end of `<body>` (or in `<head>`; either works):
+
+```html
+<script>
+  /* Jig Studio: costs nothing until someone adds ?jig to the URL */
+  (function () {
+    var on = /[?&]jig(=|&|$)/.test(location.search) || location.hash === '#jig';
+    try { on = on || localStorage.getItem('__jig') === '1'; } catch (e) {}
+    if (!on) return;
+    var s = document.createElement('script');
+    s.src = '/jig.js';                                          // where you put jig.js
+    s.setAttribute('data-foundation', '/jig.foundation.json');  // optional
+    document.head.appendChild(s);
+  })();
+</script>
+```
+
+Then add `?jig` to any URL on your site. Normal visitors never download `jig.js`; it only loads when the URL asks for it, so it's safe on production. "It's just a jig."
+
+1. **Put `jig.js` on your site** (copy it next to your pages) and point `s.src` at it. Until the repo is public and has a versioned CDN URL, self-hosting is the way.
+2. **A foundation file is optional.** Without one the jig reads your CSS custom properties or measures the page and infers scales, and the patch proposes a `jig.foundation.json` you can commit. Drop the `data-foundation` line if you don't have one.
+3. **Naming things is optional too.** The jig finds cover-cropped images, all text, buttons, sections and image overlays by itself; names just make the patch read better:
+
+```html
+<img src="hero.jpg" data-jig-name="Hero image">
+<h1 data-jig-name="Hero headline">…</h1>
+<div class="cards" data-jig="grid" data-jig-name="Card row">…</div>   <!-- grid is opt-in -->
+<aside data-jig="off">…</aside>                                       <!-- leave this alone -->
+```
+
+Prefer a plain tag? `<script src="/jig.js" data-foundation="/jig.foundation.json"></script>` also works and also stays inert without `?jig`, but every visitor downloads the script.
+
+The jig never changes your site. You drag, it writes a patch; **Copy patch**, hand it to your AI with [`GIVE-THIS-TO-YOUR-AI.md`](GIVE-THIS-TO-YOUR-AI.md), and the AI (or you) makes the change in your code.
+
+## Try it without installing
+
+[capybutz.com/bookmarklet.html](https://capybutz.com/bookmarklet.html) (or `bookmarklet.html` here) gives you a "🦆 Jig this page" button for your bookmarks bar. Click it on any page: the hosted `jig.js` is injected, the jig turns on, nothing is written to the page. Infer, drag, copy the patch, send the patch to whoever owns the site. Sites with a strict Content-Security-Policy will block the injection (the button tells you); an extension is the way past that, and it's on the list.
+
+The bookmarklet is the zero-setup way to try the jig on your own site (copy the patch, hand it to your AI with your code), and an audit tool on anyone else's: turn on **ax** and download the report.
+
 ## Try the demo
 
 ```bash
@@ -23,7 +65,7 @@ Open <http://localhost:8000/demo/>. Seven things are deliberately wrong. Then op
 | David's card shows a wing and very little David | drag the duck |
 | "Meet the herd" is bigger than the h1; the names look like body copy | click any text, press − / + |
 | The membership CTA is tiny next to a huge secondary | click a button, step its size |
-| The card row is nudged off the grid | press **auto**; anything a few px off a column line goes back on it |
+| The card row is nudged off the grid | press **auto fix**; anything a few px off a column line goes back on it |
 | White copy over the palest part of the banner; contrast fails | drag the copy to a darker corner |
 | Section padding is 24 / 48 / 16 | click a section, step its padding |
 | A puppy's alt text is `IMG_4471.jpg` | the **ax** pill shows it pink; the patch carries the note for your AI to write real alt text |
@@ -44,32 +86,6 @@ It looks for a source of truth in this order and stops at the first hit:
 
 Either way, "editable" means "has a scale to move along." The HUD says which source it's using, and inferred changes carry their px in the patch so the approver can tell them apart.
 
-## Use it on a site you don't own
-
-`bookmarklet.html` gives you a "🦆 Jig this page" button for your bookmarks bar. Click it on any page: the hosted `jig.js` is injected, the jig turns on, nothing is written to the page. Infer, drag, copy the patch, send the patch to whoever owns the site. Sites with a strict Content-Security-Policy will block the injection (the button tells you); an extension is the way past that, and it's on the list.
-
-The jig never changes a site, installed or not; whoever can edit the code applies the patch. So the bookmarklet is the zero-setup way to try the jig on your own site (copy the patch, hand it to your AI with your code), and an audit tool on anyone else's: turn on **ax** and download the report.
-
-## Install on your site
-
-1. Copy `jig.js`. A `jig.foundation.json` is optional: without one the jig reads your CSS variables or infers scales from the page, and the patch proposes a foundation file you can commit.
-2. Optionally name things. The jig finds cover-cropped images, all text, buttons, sections, and image overlays by itself; names just make the patch read better:
-
-```html
-<img src="hero.jpg" data-jig-name="Hero image">
-<h1 data-jig-name="Hero headline">…</h1>
-<div class="cards" data-jig="grid" data-jig-name="Card row">…</div>   <!-- grid is opt-in -->
-<aside data-jig="off">…</aside>                                       <!-- leave this alone -->
-```
-
-3. Load the script once, at the end of `<body>`:
-
-```html
-<script src="/jig.js" data-foundation="/jig.foundation.json"></script>
-```
-
-It is inert without `?jig` in the URL, so it is fine on production. "It's just a jig."
-
 ## Controls
 
 Everything below is found automatically; `data-jig="<control>"` forces one, `data-jig="off"` excludes an element and its children.
@@ -81,11 +97,11 @@ Everything below is found automatically; `data-jig="<control>"` forces one, `dat
 | `text` | drag; it only lands on grid columns (the grid shows itself while you drag). Overlays also pick a top/center/bottom band; ⌘/Ctrl + wheel sets max-width in columns; click for the scrim picker (gradient / tint / glass) | `anchor`, `col`, `offsetCols`, `offsetY`, `maxWidthCols`, `scrim` |
 | `button` | click, then − / + for size, ◐ for variant | `size`, `variant` |
 | `section` | click, then − / + | `paddingY` on the spacing scale |
-| `grid` | not a toggle: **auto** finds blocks sitting a few px off a column line and puts them back; `data-jig="grid"` opts a row into − / 0 / + by hand | `marginLeft` |
+| `grid` | not a toggle: **auto fix** finds blocks sitting a few px off a column line and puts them back; `data-jig="grid"` opts a row into − / 0 / + by hand | `marginLeft` |
 
 Nothing is live until you switch a jig on. The HUD's top row has five press-state toggles, **images · type · buttons · spacing · ax** (type covers the ramp, placement to the grid, and scrims; **ax** is on by default and paints everything that fails protection pink, with a chip saying why; the notes list jumps to each one); only the active kinds get outlines and respond to the mouse, so a busy page stays readable while you work on one thing. The choice is remembered per site. Protection scans everything regardless.
 
-HUD: **grid** (or press **g**) with a column picker (2 to 16), **foundation** (inspect and edit the scales the jig is using: rename or retune steps, add or remove them, set the grid; apply live, remember for this site, copy as `jig.foundation.json`, or re-infer), **auto** with a strength picker (one click snaps every font-size, padding, margin, and gap on the page to the nearest step and then fixes what protection flagged: scrims escalate gradient → tint → glass until text over an image passes, short buttons step up to 44px, buttons that sit together are brought to one size (the primary's), an h2 that outgrew the h1 steps down, blocks sitting up to 16px off a column line go back on the grid, images re-centre on their subject (faces where the browser can detect them, otherwise the densest detail), and text that fails contrast on a plain background moves to the nearest passing shade of the same hue (a button that paints its own background darkens the background instead). Alt text is the one thing left as a note; nothing on the page can know what the picture is. Strength: light uses the page's own steps (its tokens, or the inferred scales) and just removes drift; it's the default on a site that has tokens; medium uses a 1.25 modular scale off the body size (8 sizes) and a 4 to 96 ladder (9 spaces); strict is four sizes and four spaces, the brutal setting; the patch lists the snaps grouped by rule so the AI changes CSS rules, not elements), **rescan** protection, a **device** button (iPhone 15 Pro, iPhone SE, Pixel 8, Galaxy S24, iPad Mini; opens the page in a true-size frame that starts from the desktop's current state (your changes and auto carry over; only placement stays per breakpoint), the button shows which device is live, and "back to desktop" or Esc closes it; changes made there land in the same patch tagged with the device), **reset all**, **Copy patch**. The HUD drags by its header, minimizes with –, and resizes from its corner. Esc deselects. Click × on any change to undo just that one.
+HUD: **grid** (or press **g**) with a column picker (2 to 16), **foundation** (inspect and edit the scales the jig is using: rename or retune steps, add or remove them, set the grid; apply live, remember for this site, copy as `jig.foundation.json`, or re-infer), **auto fix** with a strength picker (one click snaps every font-size, padding, margin, and gap on the page to the nearest step and then fixes what protection flagged: scrims escalate gradient → tint → glass until text over an image passes, short buttons step up to 44px, buttons that sit together are brought to one size (the primary's), an h2 that outgrew the h1 steps down, blocks sitting up to 16px off a column line go back on the grid, images re-centre on their subject (faces where the browser can detect them, otherwise the densest detail), and text that fails contrast on a plain background moves to the nearest passing shade of the same hue (a button that paints its own background darkens the background instead). Alt text is the one thing left as a note; nothing on the page can know what the picture is. Strength: light uses the page's own steps (its tokens, or the inferred scales) and just removes drift; it's the default on a site that has tokens; medium uses a 1.25 modular scale off the body size (8 sizes) and a 4 to 96 ladder (9 spaces); strict is four sizes and four spaces, the brutal setting; the patch lists the snaps grouped by rule so the AI changes CSS rules, not elements), **rescan** protection, a **device** button (iPhone 15 Pro, iPhone SE, Pixel 8, Galaxy S24, iPad Mini; opens the page in a true-size frame that starts from the desktop's current state (your changes and auto carry over; only placement stays per breakpoint), the button shows which device is live, and "back to desktop" or Esc closes it; changes made there land in the same patch tagged with the device), **reset all**, **Copy patch**. The HUD drags by its header, minimizes with –, and resizes from its corner. Esc deselects. Click × on any change to undo just that one.
 
 ## Protection
 
@@ -162,6 +178,6 @@ Top half for the person approving. Bottom half for the AI applying. If you want 
 
 ## Status
 
-v0. Works on static sites and anything that exposes tokens as CSS custom properties. Not yet: color, new components, layout changes, a visual approval UI. Those are on purpose; the jig stays small.
+v0. Works on static sites and anything that exposes tokens as CSS custom properties. Not yet: colour beyond contrast fixes, new components, layout changes, a visual approval UI. Those are on purpose; the jig stays small.
 
 MIT. Capybara photos in the demo are from the author's own collection.

@@ -650,14 +650,21 @@
       on(el, 'pointerdown', e => {
         if (e.button !== 0 || e.altKey) return;
         if (!el.classList.contains('jig-active')) return;          // this jig is switched off; let the event reach whatever is inside
-        if (e.target.closest('[data-jig-drag], .jig-el.jig-active') !== el) return;   // the nearest active thing owns the gesture
-        e.preventDefault(); e.stopPropagation(); try { el.setPointerCapture(e.pointerId); } catch (x) {}
-        drag = { x: e.clientX, y: e.clientY, cols, rowTok, offX, offY, anchor, id: e.pointerId, gridWas: state.grid };
+        const owner = e.target.closest('[data-jig-drag], .jig-el.jig-active');
+        // words inside overlay copy (a heading, a line) can only step size, so a press-and-drag on them moves the whole overlay; a plain click still selects the words
+        const viaChild = isAbs && owner !== el && owner && el.contains(owner) && !owner.dataset.jigDrag;
+        if (owner !== el && !viaChild) return;   // the nearest active thing owns the gesture
+        e.preventDefault(); if (!viaChild) e.stopPropagation();
+        drag = { x: e.clientX, y: e.clientY, cols, rowTok, offX, offY, anchor, id: e.pointerId, gridWas: state.grid, pending: viaChild };
         if (isAbs) { const r0 = parent.getBoundingClientRect(); const p0 = (panel || el).getBoundingClientRect(); drag.baseLeft = p0.left - r0.left - padL(el) - offX; }   // where the panel sits with zero offset
-        if (!state.grid) toggleGrid(true);
+        if (!viaChild) startDrag();
       });
+      function startDrag() { drag.pending = false; drag.moved = true; try { el.setPointerCapture(drag.id); } catch (x) {} if (!state.grid) toggleGrid(true); }
+      // after a drag that began on the words, the click that follows selects the overlay, not the words
+      on(el, 'click', e => { if (!el.__jigDragged) return; el.__jigDragged = false; e.preventDefault(); e.stopPropagation(); select(el); }, true);
       on(el, 'pointermove', e => {
         if (!drag) return;
+        if (drag.pending) { if (Math.hypot(e.clientX - drag.x, e.clientY - drag.y) < 5) return; startDrag(); }
         const colW = colWidth(parent);
         const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
         if (isAbs) {
@@ -670,7 +677,7 @@
           cols = clamp(Math.round(px0 / cw), 0, maxCol);
           const fy = (e.clientY - r.top) / r.height; const v = fy < 1 / 3 ? 'top' : fy > 2 / 3 ? 'bottom' : 'center';
           if (v !== drag.anchor) { anchor = v; offY = 0; drag.y = e.clientY; drag.offY = 0; drag.anchor = v; } else offY = snapTok(drag.offY + dy);
-          offY = boundY(offY, v, r, pr);
+          offY = Math.round(boundY(offY, v, r, pr));
           offX = Math.round(cols * cw);
           el.style.justifyContent = v === 'top' ? 'flex-start' : v === 'bottom' ? 'flex-end' : 'center';
           el.style.alignItems = 'flex-start'; el.style.textAlign = 'left';
@@ -687,7 +694,7 @@
           setBadge(el, `offset ${cols} col · ${rowTok}px`);
         }
       });
-      const end = () => { if (!drag) return; try { el.releasePointerCapture(drag.id); } catch (x) {} const was = drag.gridWas; drag = null; commit(); if (!was) toggleGrid(false); };
+      const end = () => { if (!drag) return; const d0 = drag; drag = null; if (d0.pending) return; try { el.releasePointerCapture(d0.id); } catch (x) {} if (d0.moved) { el.__jigDragged = true; setTimeout(() => (el.__jigDragged = false), 400); } commit(); if (!d0.gridWas) toggleGrid(false); };
       on(el, 'pointerup', end); on(el, 'pointercancel', end); on(window, 'pointerup', end); on(window, 'blur', end);
       on(el, 'wheel', e => {
         if (!(e.ctrlKey || e.metaKey) || el.dataset.jigCtl === 'type') return; e.preventDefault();   // type owns ⌘-wheel on text
@@ -838,7 +845,7 @@
       const steps = state.F.spacingSteps.filter(x => x.px > 0); const sp = steps.map(x => x.px);
       const origTop = px(css(el).paddingTop);
       let idx = sp.indexOf(nearest(sp, origTop)); const origIdx = idx;
-      el.__jigToolbar = () => [btn('−', () => step(-1)), chip(() => `pad ${sp[idx]}`), btn('+', () => step(1))];
+      el.__jigToolbar = () => [btn('−', () => step(-1)), chip(() => `spacing ${sp[idx]}`), btn('+', () => step(1))];
       function step(d) {
         idx = clamp(idx + d, 0, sp.length - 1);
         if (idx === origIdx) el.style.removeProperty('padding-block'); else el.style.setProperty('padding-block', spaceValue(steps[idx]), 'important');
@@ -1584,7 +1591,7 @@
     </div>
     <div class="advpanel">
       <div class="arow"><label>columns</label><div><select id="jig-cols-sel" title="grid columns"></select></div></div>
-      <div class="arow"><label>auto</label><div><button id="jig-norm-btn" title="snap every size and space to the scales, and fix what protection flagged">auto</button><select id="jig-q-res" title="how many steps to snap to"><option value="32">light</option><option value="16" selected>medium</option><option value="8">strict</option></select></div></div>
+      <div class="arow"><label>auto fix</label><div><button id="jig-norm-btn" title="snap every size and space to the scales, and fix what protection flagged">auto fix</button><select id="jig-q-res" title="how many steps to snap to"><option value="32">light</option><option value="16" selected>medium</option><option value="8">strict</option></select></div></div>
       <div class="arow"><label>scales</label><div><button id="jig-found-btn">foundation</button><button id="jig-scan-btn">rescan</button><button id="jig-reset-btn">reset all</button></div></div>
       <div class="src" id="jig-src"></div>
     </div>
@@ -1613,7 +1620,7 @@
       state.autoFixes.slice(0, CAP).forEach(f => { const row = document.createElement('div'); row.className = 'row'; row.innerHTML = `<span class="n">${esc(nameOf(f.el))}</span><span class="s">${esc(f.what)}</span>`; ch.appendChild(row); });
     }
     if (state.normalize) {
-      const g = normalizeGroups(); const h = document.createElement('h6'); h.textContent = `auto ${resName(state.normalizeRes)} · ${g.reduce((a, x) => a + x.els.length, 0)} snaps · ${(state.autoFixes || []).length} fixes`; ch.appendChild(h);
+      const g = normalizeGroups(); const h = document.createElement('h6'); h.textContent = `auto fix ${resName(state.normalizeRes)} · ${g.reduce((a, x) => a + x.els.length, 0)} snaps · ${(state.autoFixes || []).length} fixes`; ch.appendChild(h);
       (state.autoFixes || []).slice(0, CAP).forEach(f => { const row = document.createElement('div'); row.className = 'row'; row.innerHTML = `<span class="n">${esc(nameOf(f.el))}</span><span class="s">${esc(f.what)}</span>`; ch.appendChild(row); });
       g.slice(0, 12).forEach(x => { const row = document.createElement('div'); row.className = 'row'; row.innerHTML = `<span class="n">${esc(x.prop)}</span><span class="s">${x.from}px → ${x.to}px · ${x.els.length} element${x.els.length === 1 ? '' : 's'}</span>`; ch.appendChild(row); });
       if (g.length > 12) { const m = document.createElement('div'); m.className = 'empty'; m.textContent = `+ ${g.length - 12} more groups in the patch`; ch.appendChild(m); }
@@ -1903,7 +1910,7 @@
     });
     if (!R.rules.length) list.innerHTML = '<div class="empty">Nothing flagged on this page.</div>';
     const fb = $('#jig-axfix'); const can = R.rules.some(r => r.auto && r.open);
-    fb.textContent = state.normalize ? 'fixed by auto' : state.axFix ? 'undo fixes' : 'Fix what I can'; fb.disabled = !!state.normalize || (!state.axFix && !can); fb.classList.toggle('on', !!state.axFix);
+    fb.textContent = state.normalize ? 'fixed by auto fix' : state.axFix ? 'undo fixes' : 'Fix what I can'; fb.disabled = !!state.normalize || (!state.axFix && !can); fb.classList.toggle('on', !!state.axFix);
   }
 
   // ------------------------------------------------------------ normalize: snap the whole page to the scales

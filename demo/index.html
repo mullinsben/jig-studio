@@ -356,6 +356,17 @@
     a.href = 'mailto:' + to + '?subject=' + encodeURIComponent('Capybutz membership application') + '&body=' + encodeURIComponent('Dear David,\n\nI would like to become a member. I understand the wait is six months and that the yuzu is not communal.\n\n');
   });
 </script>
-<script src="../jig.js" data-foundation="../jig.foundation.json"></script>
+<script>
+  /* Jig Studio: costs nothing until someone adds ?jig to the URL */
+  (function () {
+    var on = /[?&]jig(=|&|$)/.test(location.search) || location.hash === '#jig';
+    try { on = on || localStorage.getItem('__jig') === '1'; } catch (e) {}
+    if (!on) return;
+    var s = document.createElement('script');
+    s.src = '../jig.js';
+    s.setAttribute('data-foundation', '../jig.foundation.json');
+    document.head.appendChild(s);
+  })();
+</script>
 </body>
 </html>
