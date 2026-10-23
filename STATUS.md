@@ -52,3 +52,24 @@ Done and pushed:
 Sweep notes: GOV.UK and Stripe block injection (CSP) → browser extension matters. Stale tests to fix: scr.js, scrimc.js (predate second banner and scrim panels).
 
 Next: optional round 3 round trip; AX report as a "copy as report" mode on the copy button; section grids for hierarchical pages; extension.
+
+## Oct 23 2026 (Opus)
+
+Context: capybutz.com is live on its own (Cloudflare Worker, repo mullinsben/capybutz.com, own GA property G-LTJ20HD0VD); the .tv copy is gone and /lab/capybutz/* 301s to capybutz.com. The primary use case is installing the jig on your own site; the bookmarklet is the demo, zero-setup use on your own site, and an audit tool on anyone else's (the jig never writes to a site either way).
+
+Positioning (Ben's draft reasons to believe): 1) 80% to 100% faster; 2) an AX tool you can use on any website to audit and publish findings; 3) fixes design and tech debt by inferring tokens for non-token sites (wording to massage).
+
+Done:
+- **AX report.** The ax pill opens a panel: headline WCAG A/AA count, rule rows with WCAG refs (click to walk), **Fix what I can** (auto's AX half, no snapping, undoable, folds into auto), **Download report** (single-file styled HTML; print stylesheet = the PDF), **Copy markdown**. Rules are tagged wcag / best practice / design; only wcag counts in the headline. Findings compare against the page as it opened (baseline freezes at the first change), so reports read "found / fixed / open". Lists cap at 50 per rule; counts are complete. Selectors and snippets are only computed for what a report lists.
+- Real phones hide the device menu (it was meant to already, but `all: revert` beat the `.devwrap` rule; landscape phones also slipped past the width check).
+- **Undo bugs fixed (these predate today):** type reset wiped a site's own inline font-size (the demo h3s' `var(--text-md)`), so auto-off left headings changed; auto-off now undoes fixes before snaps, and both in reverse order (an element snapped then fixed came back at the snapped size); undo keeps `!important` priority. Capybutz 8 → 1 → 8 and Dave 32 → 2 → 32 with styles byte-identical after Fix-what-I-can undo.
+- Perf: on a 3,000-failure page, scan went from 6.2s to 0.45s (the baseline had been computing every selector on every scan).
+- **AX rules batch 1:** page `lang` (3.1.1), page `<title>` (2.4.2), unlabeled form fields (1.3.1/4.1.2), colour-only links in running text (1.4.1, under 3:1 vs surrounding text with no underline/border/weight/style cue), vague link text and empty headings (best practice). Page-level findings don't paint pink. Dave's 2016 site now also notes its missing `lang` (true, and period-appropriate). Fixture: `tests/rules1.html`, checked by `tests/rules1.js`.
+- Tests: `tests/axreport.js` (panel, fix/undo, fix→auto→off, download, markdown, print PDF, 390px report). Tests that pointed at the old .tv checkout (8766/lab/capybutz) now use the repo demo on 8765. `roundtrip.js`/`roundtrip2.js` need the AI round-trip files (index-ai*.html) that lived on the old .tv copy; they're gone, so those two can't run until we keep round-trip output in the repo.
+
+Open:
+1. Install path: a tiny inline loader that only fetches jig.js when `?jig` is present (today every visitor downloads ~200KB of inert script); then a clean install test from the README; then open capybutz.com/?jig on a phone. README should lead with install.
+2. Hosting jig.js for other people's installs: capybutz.com/jig.js works today; jsDelivr from GitHub once the repo is public.
+3. AX rule batch 2: focus visible (needs programmatic focus; careful on real sites: menus open, pages scroll), target spacing, 200% zoom reflow, reduced motion, autoplaying media.
+4. Report v2 ideas: element screenshots, device-frame findings as their own section (today a short list), a sitemap-wide report.
+5. Real-site QA of the report needs this build hosted (push capybutz.com) since the container can't reach outside sites.

@@ -9,14 +9,14 @@ fs.mkdirSync(OUT, { recursive: true });
   for (const [w, h] of [[1920, 1080], [1440, 900], [1366, 768], [1280, 800]]) {
     const page = await browser.newPage({ viewport: { width: w, height: h } });
     page.on('pageerror', e => errs.push(`${w}: ${e.message}`));
-    await page.goto('http://localhost:8765/demo/index.html', { waitUntil: 'networkidle' });
+    await page.goto('http://localhost:8765/demo/', { waitUntil: 'networkidle' });
     const sw = await page.evaluate(() => document.documentElement.scrollWidth);
     console.log(`${w}x${h}: scrollWidth=${sw}${sw > w ? '  <-- OVERFLOW' : ''}`);
     await page.screenshot({ path: `${OUT}/plain-${w}.png` });
     await page.close();
   }
   const phone = await browser.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2 });
-  await phone.goto('http://localhost:8765/demo/index.html', { waitUntil: 'networkidle' });
+  await phone.goto('http://localhost:8765/demo/', { waitUntil: 'networkidle' });
   const psw = await phone.evaluate(() => document.documentElement.scrollWidth);
   console.log(`390: scrollWidth=${psw}${psw > 390 ? '  <-- OVERFLOW' : ''}`);
   await phone.screenshot({ path: `${OUT}/plain-390.png`, fullPage: true });
@@ -26,7 +26,7 @@ fs.mkdirSync(OUT, { recursive: true });
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
   page.on('pageerror', e => errs.push('jig: ' + e.message));
   page.on('console', m => { if (m.type() === 'error') errs.push('console: ' + m.text()); });
-  await page.goto('http://localhost:8765/demo/index.html?jig', { waitUntil: 'networkidle' });
+  await page.goto('http://localhost:8765/demo/?jig', { waitUntil: 'networkidle' });
   await page.waitForFunction(() => window.__jig);
   await page.evaluate(() => document.querySelectorAll('[data-jig-toggle]').forEach(b => { if (!b.classList.contains('on')) b.click(); }));
   const info = await page.evaluate(() => ({

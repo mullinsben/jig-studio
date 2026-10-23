@@ -1,7 +1,7 @@
 const { chromium } = require('playwright');
 (async () => { const b = await chromium.launch(); const p = await b.newPage({ viewport: { width: 1440, height: 900 } });
 const errs=[]; p.on('pageerror', e => errs.push(e.message));
-await p.goto('http://localhost:8766/lab/capybutz/?jig', { waitUntil: 'networkidle' }); await p.waitForFunction(() => window.__jig);
+await p.goto('http://localhost:8765/demo/?jig', { waitUntil: 'networkidle' }); await p.waitForFunction(() => window.__jig);
 await p.evaluate(() => document.querySelectorAll('[data-jig-toggle]').forEach(b => { if (!b.classList.contains('on')) b.click(); }));
 const hero = p.locator('[data-jig-name="Hero image"]');
 console.log('hero before:', await hero.evaluate(e => e.style.objectPosition));

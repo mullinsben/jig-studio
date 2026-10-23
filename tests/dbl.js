@@ -1,7 +1,7 @@
 const { chromium } = require('playwright');
 (async () => {
   const b = await chromium.launch(); const p = await b.newPage({ viewport: { width: 1440, height: 900 } });
-  await p.goto('http://localhost:8766/lab/capybutz/?jig'); await p.waitForTimeout(1200);
+  await p.goto('http://localhost:8765/demo/?jig'); await p.waitForTimeout(1200);
   await p.click('[data-jig-toggle="spacing"]');
   await p.click('#jig-device-btn'); await p.click('#jig-device-menu [data-device="iphone-se"]'); await p.waitForTimeout(2500);
   const fr = p.frames().find(f => f.url().includes('embed'));

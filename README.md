@@ -48,6 +48,8 @@ Either way, "editable" means "has a scale to move along." The HUD says which sou
 
 `bookmarklet.html` gives you a "🦆 Jig this page" button for your bookmarks bar. Click it on any page: the hosted `jig.js` is injected, the jig turns on, nothing is written to the page. Infer, drag, copy the patch, send the patch to whoever owns the site. Sites with a strict Content-Security-Policy will block the injection (the button tells you); an extension is the way past that, and it's on the list.
 
+The jig never changes a site, installed or not; whoever can edit the code applies the patch. So the bookmarklet is the zero-setup way to try the jig on your own site (copy the patch, hand it to your AI with your code), and an audit tool on anyone else's: turn on **ax** and download the report.
+
 ## Install on your site
 
 1. Copy `jig.js`. A `jig.foundation.json` is optional: without one the jig reads your CSS variables or infers scales from the page, and the patch proposes a foundation file you can commit.
@@ -100,8 +102,24 @@ Every time jig mode opens, and after every change, the whole page is scanned:
 - more than one h1
 - images rendered past their native pixels (soft), and a detected face the crop leaves out
 - text over an image that couldn't be sampled
+- no `lang` on `<html>`, no `<title>`
+- form fields with no label (a placeholder isn't one)
+- links inside running text told apart by colour alone (no underline and under 3:1 against the words around them)
+- link text that doesn't say where it goes ("read more", "click here") and empty headings
 
 They're listed in the HUD under **notes** and included in the patch. They never block a change; the approver decides.
+
+## Accessibility report
+
+Turn on the **ax** pill and the HUD shows the scan as a report: a headline count of WCAG A/AA failures, one row per rule with its WCAG reference (click a row to walk its elements), and three buttons:
+
+- **Fix what I can**: the accessibility half of auto on its own (contrast shades, scrims and tints, tap target sizes, heading steps, small body copy, long measures), with no snapping. Press again to undo. The fixes land in the patch like any other change.
+- **Download report**: one self-contained HTML file, dark on screen and clean on paper; print it to get the PDF. Header with the URL, date and viewport; a summary table by rule; findings grouped as *Accessibility failures (WCAG A/AA)*, *Best practice* and *Design quality*, each with the selector, the text it's about, the measured value against the requirement, and whether the jig can fix it; a "how this was checked" section. If you fixed things in the session, fixed findings are marked and the patch rides along at the bottom.
+- **Copy markdown**: the same report for a ticket, an issue or Slack.
+
+Findings are compared against what the page had when the jig opened, so a report after fixing reads "20 found, 18 fixed, 2 open." Long rules list their first 50 findings; the counts are always complete.
+
+What it is and isn't: contrast is measured from rendered pixels (text over photos included), which most checkers can't do. It does not validate ARIA, keyboard order, focus visibility or screen reader output; pair it with axe DevTools and a keyboard pass. A clean report is a good sign, not a conformance claim.
 
 ## Foundation file
 

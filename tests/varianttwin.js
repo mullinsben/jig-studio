@@ -1,6 +1,6 @@
 const { chromium } = require('playwright');
 (async () => { const b = await chromium.launch(); const p = await b.newPage({ viewport: { width: 1440, height: 900 } }); p.on('pageerror', e => console.log('ERR', e.message));
-await p.goto('http://localhost:8766/lab/capybutz/legacy/index.html?jig', { waitUntil: 'networkidle' }); await p.waitForFunction(() => window.__jig && document.querySelector('#jig-wn-n').textContent !== '…');
+await p.goto('http://localhost:8765/demo/legacy/index.html?jig', { waitUntil: 'networkidle' }); await p.waitForFunction(() => window.__jig && document.querySelector('#jig-wn-n').textContent !== '…');
 await p.click('#jig-adv-btn'); await p.click('#jig-norm-btn'); await p.waitForTimeout(2500);
 const look = () => p.evaluate(() => [...document.querySelectorAll('#content .left p a')].slice(0, 2).map(a => { const c = getComputedStyle(a); return a.textContent.trim() + ': ' + c.backgroundColor + ' ' + c.fontWeight + ' ' + c.color; }));
 console.log('after auto', await look());

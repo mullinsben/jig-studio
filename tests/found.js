@@ -2,7 +2,7 @@ const { chromium } = require('playwright');
 (async () => {
   const b = await chromium.launch(); const p = await b.newPage({ viewport: { width: 1440, height: 900 } });
   const errs=[]; p.on('pageerror', e => errs.push(e.message));
-  await p.goto('http://localhost:8766/lab/capybutz/legacy/?jig', { waitUntil: 'networkidle' }); await p.waitForFunction(() => window.__jig);
+  await p.goto('http://localhost:8765/demo/legacy/?jig', { waitUntil: 'networkidle' }); await p.waitForFunction(() => window.__jig);
   await p.click('#jig-adv-btn'); await p.click('#jig-found-btn');
   console.log('rows:', await p.evaluate(() => ({ type: document.querySelectorAll('#jf-type .frow').length, space: document.querySelectorAll('#jf-space .frow').length })));
   // rename md->body, bump 3xl to 32, remove the 2px spacing step, set 8 columns, apply

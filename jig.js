@@ -7,6 +7,7 @@
   'use strict';
 
   // ------------------------------------------------------------ activation
+  const JIG_VERSION = '0.1.0';
   const url = new URL(location.href);
   const wanted = url.searchParams.has('jig') || location.hash === '#jig' || safeGet('jig') === '1' || (document.currentScript && document.currentScript.dataset.jigInjected);
   if (!wanted) return;
@@ -569,8 +570,11 @@
       const texty = d => Array.from(d.childNodes).some(n => n.nodeType === 3 && n.textContent.trim());
       const riders = $$('*', el).filter(d => !d.closest('.jig-tb, .jig-badge') && Math.abs(px(css(d).fontSize) - origPx) <= Math.max(2, origPx * 0.12));
       const forced = [];
+      // the site's own inline font-size (CMS output, a planted style="font-size: var(--x)") is what reset goes back to; removing it would leave the page changed
+      const inline0 = new Map(); const keep = n => { if (!inline0.has(n)) inline0.set(n, [n.style.getPropertyValue('font-size'), n.style.getPropertyPriority('font-size')]); };
+      keep(el); riders.forEach(keep);
       const setSize = v => {
-        const f = (n) => { if (v) n.style.setProperty('font-size', v, 'important'); else n.style.removeProperty('font-size'); };
+        const f = (n) => { if (v) { keep(n); n.style.setProperty('font-size', v, 'important'); } else { const o = inline0.get(n); if (o && o[0]) n.style.setProperty('font-size', o[0], o[1]); else n.style.removeProperty('font-size'); } };
         f(el); riders.forEach(f); forced.forEach(f); forced.length = 0;
         if (!v) return;
         // verify: the first text-bearing node must now render at the new size; if not, the text lives in a descendant that sets its own size
@@ -1054,7 +1058,7 @@
     #jig-hud .arow button, #jig-hud .arow select { font: 600 12px ui-sans-serif, system-ui; background: #262833; color: #fff; border: 0; border-radius: 6px; padding: 6px 10px; cursor: pointer; }
     #jig-hud .arow button:hover { background: #3f6fff; } #jig-hud .arow button.on { background: #3f6fff; }
     #jig-hud .hint { padding: 6px 12px 8px; font: 11px ui-monospace, Menlo, monospace; opacity: .4; background: #13141a; }
-    #jig-hud .tools button, #jig-hud footer button { font: 600 12px ui-sans-serif, system-ui; background: #262833; color: #fff; border: 0; border-radius: 6px; padding: 6px 10px; cursor: pointer; }
+    #jig-hud .tools button, #jig-hud footer button, #jig-hud .axb button { font: 600 12px ui-sans-serif, system-ui; background: #262833; color: #fff; border: 0; border-radius: 6px; padding: 6px 10px; cursor: pointer; }
     #jig-hud .tools button.on { background: #2bb673; }
     #jig-hud .devwrap { position: relative; }
     #jig-hud #jig-device-btn.on { background: #3f6fff; }
@@ -1067,8 +1071,14 @@
     #jig-device-menu[hidden] { display: none !important; }
     #jig-hud .tools button.ghost { background: transparent; color: #9aa3b8; border: 1px solid #262833; }
     #jig-hud .tools button.ghost.on { background: transparent; color: #fff; border-color: #3f6fff; }
-    #jig-hud .tools button:hover, #jig-hud footer button:hover { background: #3f6fff; }
+    #jig-hud .tools button:hover, #jig-hud footer button:hover, #jig-hud .axb button:hover:not(:disabled) { background: #3f6fff; }
+    #jig-hud .axb button.ghost { background: transparent; color: #9aa3b8; border: 1px solid #262833; } #jig-hud .axb button.ghost:hover { color: #fff; }
     #jig-hud .list { overflow: auto; padding: 8px 12px; flex: 1; }
+    #jig-hud .axr { padding: 10px 12px 10px; border-bottom: 1px solid #262833; max-height: 42vh; overflow: auto; flex: none; }
+    #jig-hud .axh { display: flex; align-items: baseline; gap: 8px; margin-bottom: 6px; } #jig-hud .axh b { font: 700 26px/1 ui-sans-serif, system-ui; color: #ff2d9b; } #jig-hud .axh b.ok { color: #35c186; } #jig-hud .axh span { font: 12px ui-sans-serif, system-ui; color: #9aa3b8; }
+    #jig-hud .axrow { align-items: center; } #jig-hud .axrow .c { flex: 0 0 26px; font: 700 12px ui-monospace, Menlo, monospace; text-align: right; color: #ffb84d; } #jig-hud .axrow .c.wcag { color: #ff2d9b; } #jig-hud .axrow.done .c { color: #35c186; } #jig-hud .axrow.done { opacity: .55; }
+    #jig-hud .axrow .s small { display: block; font: 10.5px ui-monospace, Menlo, monospace; opacity: .6; }
+    #jig-hud .axb { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; } #jig-hud .axb button { flex: 1 1 auto; } #jig-hud #jig-axfix.on { background: #35c186; border-color: #35c186; color: #0b0b0d; } #jig-hud .axb button:disabled { opacity: .45; cursor: default; }
     #jig-hud h6 { margin: 8px 0 4px; font-size: 11px; letter-spacing: .14em; text-transform: uppercase; opacity: .6; }
     #jig-hud h6.fold { display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; opacity: .85; padding: 4px 0; }
     #jig-hud h6.fold::before { content: "▸"; font-size: 10px; opacity: .7; transition: transform .12s; }
@@ -1089,7 +1099,7 @@
       #jig-hud header { cursor: pointer; }
       #jig-hud header::before { content: ""; width: 36px; height: 4px; border-radius: 2px; background: #3a3d4a; position: absolute; left: 50%; top: 5px; transform: translateX(-50%); }
       #jig-hud header { position: relative; padding-top: 14px; }
-      .devwrap { display: none; }
+      #jig-hud .devwrap { display: none !important; }
       #jig-hud { resize: none; }
       .jig-tb button { width: 36px; height: 36px; }
     }
@@ -1408,8 +1418,33 @@
       if (ratio < need) W.push({ kind: 'contrast', el: t, msg: `contrast ${ratio.toFixed(1)} ${how}${over ? ' (worst patch)' : ''}, min ${need}${large ? ' (large text)' : ''}`, value: +ratio.toFixed(1), min: need });
     });
     W.forEach(w => { if (w.el && w.el.classList && w.el.classList.contains('jig-scrim-panel') && w.el.parentElement) w.el = w.el.parentElement; });
+    // 9. page and form basics, links and empty headings: the first things a screen reader user runs into
+    { const root = document.documentElement; const jigUI = x => x.closest('#jig-hud, .jig-tb, #jig-found, #jig-device, #jig-axtags, .jig-badge');
+      if (!(root.getAttribute('lang') || '').trim()) W.push({ kind: 'lang', el: root, page: true, msg: 'no lang attribute on <html>; screen readers have to guess the language and may read every word with the wrong accent' });
+      if (!(document.title || '').trim()) W.push({ kind: 'title', el: root, page: true, msg: 'the page has no <title>' });
+      $$('input, select, textarea').forEach(f => {
+        if (jigUI(f) || !visible(f)) return; const type = (f.getAttribute('type') || '').toLowerCase(); if (/^(hidden|submit|button|reset|image)$/.test(type)) return;
+        const named = (f.getAttribute('aria-label') || '').trim() || (f.getAttribute('aria-labelledby') || '').split(/\s+/).some(id => { const n = id && document.getElementById(id); return n && n.textContent.trim(); }) || (f.labels && Array.from(f.labels).some(l => l.textContent.trim())) || (f.getAttribute('title') || '').trim();
+        if (!named) W.push({ kind: 'label', el: f, msg: `${f.tagName === 'INPUT' ? (type || 'text') + ' field' : f.tagName.toLowerCase()} has no label${f.placeholder ? ` (the placeholder "${f.placeholder.slice(0, 30)}" disappears as you type; it isn't a label)` : ''}` });
+      });
+      const VAGUE = /^(click here|click|here|read more|more|learn more|find out more|details|more info|more details|link|this|go|continue|see more|view more|see all)$/i;
+      $$('a[href]').forEach(a => {
+        if (jigUI(a) || !visible(a)) return;
+        const name = ((a.getAttribute('aria-label') || '').trim() || (a.textContent || '').trim().replace(/\s+/g, ' ').replace(/[\s›»→>….]+$/, '').trim());
+        if (VAGUE.test(name) && !a.getAttribute('aria-describedby')) W.push({ kind: 'vague-link', el: a, msg: `link text "${name}" doesn't say where it goes` });
+        // colour-only link: sits in a sentence, no underline/border/background/weight cue, and under 3:1 against the words around it
+        const p = a.parentElement; if (!p || !/^(P|LI|TD|DD|BLOCKQUOTE|SPAN|DIV|FIGCAPTION)$/.test(p.tagName)) return;
+        const own = Array.from(p.childNodes).filter(n => n.nodeType === 3).map(n => n.textContent).join('').replace(/\s+/g, ' ').trim(); if (own.length < 20) return;
+        const ca = css(a), cp = css(p);
+        if (/underline/.test(ca.textDecorationLine + ' ' + cp.textDecorationLine) || px(ca.borderBottomWidth) > 0 || (parseColor(ca.backgroundColor) || [0, 0, 0, 0])[3] > 0.1 || (px(ca.fontWeight) >= 600 && px(cp.fontWeight) < 600) || (ca.fontStyle !== cp.fontStyle)) return;
+        if ($$('*', a).some(d => /underline/.test(css(d).textDecorationLine) || px(css(d).borderBottomWidth) > 0)) return;
+        const fa = parseColor(ca.color), fp = parseColor(cp.color); if (!fa || !fp) return; const r = contrast(fa, fp);
+        if (r < 3) W.push({ kind: 'colour-link', el: a, msg: `link marked by colour alone (${r.toFixed(1)}:1 against the text around it; needs an underline, or 3:1 plus a hover/focus cue)`, value: +r.toFixed(1), min: 3 });
+      });
+      $$('h1,h2,h3,h4,h5,h6').forEach(h => { if (jigUI(h) || !h.offsetParent && css(h).position !== 'fixed') return; if (!(h.textContent || '').trim() && !h.querySelector('img[alt]:not([alt=""]), svg[aria-label], [aria-label]') && !(h.getAttribute('aria-label') || '').trim()) W.push({ kind: 'empty-heading', el: h, msg: `empty ${h.tagName.toLowerCase()}; screen reader users jump between headings and land on nothing` }); });
+    }
     const hid = new Map(); const hidden = el => { if (!hid.has(el)) hid.set(el, srOnly(el)); return hid.get(el); };   // visually hidden text is for screen readers; size, contrast and clipping rules don't apply
-    state.warnings = W.filter((w, i) => W.findIndex(x => x.el === w.el && x.kind === w.kind) === i && (/heading|h1/.test(w.kind) || !hidden(w.el))); renderHUD(); postToParent(); paintAX();
+    state.warnings = W.filter((w, i) => W.findIndex(x => x.el === w.el && x.kind === w.kind) === i && (/heading|h1|^lang$|^title$/.test(w.kind) || !hidden(w.el))); axTrackBaseline(); renderHUD(); postToParent(); paintAX();
   }
   // ax jig: every element with a protection warning gets a pink outline and a chip saying why
   let axTags = null;
@@ -1421,10 +1456,10 @@
     const frameOpen = !!(deviceEl && $('iframe', deviceEl));
     if (!axOn || frameOpen) { $$('.jig-ax').forEach(el => el.classList.remove('jig-ax')); return; }
     const byEl = new Map();
-    state.warnings.forEach(w => { if (!w.el || !w.el.isConnected) return; w.el.classList.add('jig-ax'); byEl.set(w.el, (byEl.get(w.el) || []).concat(w)); });
+    state.warnings.forEach(w => { if (!w.el || !w.el.isConnected || w.page) return; w.el.classList.add('jig-ax'); byEl.set(w.el, (byEl.get(w.el) || []).concat(w)); });
     byEl.forEach((ws, el) => {
       const tag = document.createElement('div'); tag.className = 'tag'; tag.__el = el;
-      tag.textContent = ws.map(w => w.kind === 'contrast' ? `contrast ${w.value} / ${w.min}` : w.kind === 'tap-target' ? `tap ${w.msg.replace(/.*×(\d+)px.*/, '$1')}px tall` : w.kind === 'alt' ? 'no alt' : w.kind === 'small-text' ? 'small text' : w.kind === 'measure' ? `${Math.round(w.cpl)} cpl` : w.kind === 'button-wrap' ? 'label wraps' : w.kind === 'no-name' ? 'no name' : w.kind === 'overflow' ? 'overflows' : w.kind === 'soft' ? 'soft' : w.kind === 'face' ? 'face cropped' : w.kind === 'h1-role' ? 'h1 is the logo?' : w.kind === 'dup-link' ? 'duplicate link' : w.kind).join(' · ');
+      tag.textContent = ws.map(w => w.kind === 'contrast' ? `contrast ${w.value} / ${w.min}` : w.kind === 'tap-target' ? `tap ${w.msg.replace(/.*×(\d+)px.*/, '$1')}px tall` : w.kind === 'alt' ? 'no alt' : w.kind === 'small-text' ? 'small text' : w.kind === 'measure' ? `${Math.round(w.cpl)} cpl` : w.kind === 'button-wrap' ? 'label wraps' : w.kind === 'no-name' ? 'no name' : w.kind === 'overflow' ? 'overflows' : w.kind === 'soft' ? 'soft' : w.kind === 'face' ? 'face cropped' : w.kind === 'h1-role' ? 'h1 is the logo?' : w.kind === 'dup-link' ? 'duplicate link' : w.kind === 'label' ? 'no label' : w.kind === 'vague-link' ? 'vague link' : w.kind === 'colour-link' ? `colour only ${w.value}` : w.kind === 'empty-heading' ? 'empty heading' : w.kind).join(' · ');
       tag.title = ws.map(w => w.msg).join('\n');
       axTags.appendChild(tag);
     });
@@ -1551,6 +1586,7 @@
       <div class="arow"><label>scales</label><div><button id="jig-found-btn">foundation</button><button id="jig-scan-btn">rescan</button><button id="jig-reset-btn">reset all</button></div></div>
       <div class="src" id="jig-src"></div>
     </div>
+    <div class="axr" id="jig-axr" hidden><div class="axh"><b id="jig-axr-n">0</b><span id="jig-axr-l">accessibility failures</span></div><div id="jig-axr-rules"></div><div class="axb"><button id="jig-axfix" title="fix the accessibility failures the jig knows how to fix; no other changes">Fix what I can</button><button id="jig-axdl" title="a styled report you can share or print to PDF">Download report</button><button id="jig-axmd" class="ghost" title="the same report as markdown, for a ticket">Copy markdown</button></div></div>
     <div class="list"><h6 class="fold" data-fold="changes" aria-expanded="false"><span>changes</span><em id="jig-ch-n">0</em></h6><div id="jig-changes" hidden></div><h6 class="fold" data-fold="warn" aria-expanded="false"><span>notes</span><em id="jig-wn-n">0</em></h6><div id="jig-warn" hidden></div></div>
     <footer><button class="primary" id="jig-copy-btn">Copy patch</button><small id="jig-count"></small></footer>
     <div class="hint">page is inert while the jig is on · hold Alt to click through · Esc deselects</div>`;
@@ -1569,6 +1605,10 @@
       row.querySelector('.x').onclick = e => { e.stopPropagation(); const el = $(c.el); if (el && el.__jigReset) el.__jigReset(); else state.changes.delete(k); renderHUD(); };
       row.onclick = () => { const el = $(c.el); if (el) { el.scrollIntoView({ block: 'center', behavior: 'smooth' }); select(el); } };
       ch.appendChild(row);
+    }
+    if (state.axFix && !state.normalize && (state.autoFixes || []).length) {
+      const h = document.createElement('h6'); h.textContent = `ax fixes · ${state.autoFixes.length}`; ch.appendChild(h);
+      state.autoFixes.slice(0, CAP).forEach(f => { const row = document.createElement('div'); row.className = 'row'; row.innerHTML = `<span class="n">${esc(nameOf(f.el))}</span><span class="s">${esc(f.what)}</span>`; ch.appendChild(row); });
     }
     if (state.normalize) {
       const g = normalizeGroups(); const h = document.createElement('h6'); h.textContent = `auto ${resName(state.normalizeRes)} · ${g.reduce((a, x) => a + x.els.length, 0)} snaps · ${(state.autoFixes || []).length} fixes`; ch.appendChild(h);
@@ -1605,6 +1645,7 @@
     $('#jig-count').textContent = `${total} change${total === 1 ? '' : 's'} · ${nW} note${nW === 1 ? '' : 's'}`;
     const chN = $('#jig-ch-n'), wnN = $('#jig-wn-n'); if (chN) chN.textContent = total; if (wnN) { wnN.textContent = nW; wnN.classList.toggle('warn', nW > 0); }
     if (!state.device) $('#jig-bp').textContent = `${state.bp} · ${window.innerWidth}px`;
+    renderAXPanel();
     const F = state.F; const inf = F.mode === 'inferred' || F.type.inferred || F.buttons.inferred;
     $('#jig-src').textContent = `${INJECTED ? 'injected by bookmarklet · ' : ''}foundation: ${F.name} · ${state.foundationSource}${inf ? ` · ${F.type.steps.length} type steps, ${F.spacingSteps.length} spacing steps, ${F.buttons.sizes.length} button size${F.buttons.sizes.length === 1 ? '' : 's'} · proposed tokens ride in the patch` : ''}`;
   }
@@ -1632,6 +1673,7 @@
     const json = [];
     all.forEach(c => { const { name, summary, ...rest } = c; json.push(rest); });
     warns.forEach(w => json.push({ warn: w.kind, el: w.el, msg: w.msg, ...(w.value ? { value: w.value, min: w.min } : {}) }));
+    if (state.axFix && !state.normalize && (state.autoFixes || []).length) { lines.push('', `# ax fixes · ${state.autoFixes.length}`, '', 'Accessibility failures fixed with "Fix what I can" (no other snapping); each is also listed under changes above with its values.', ''); state.autoFixes.forEach(f => lines.push(`- ${nameOf(f.el)}: ${f.what}`)); }
     if (state.normalize) {
       const g = normalizeGroups();
       const qs = quantizeScales(state.normalizeRes || '16');
@@ -1665,15 +1707,212 @@
   }
   function flash(msg) { const b = $('#jig-copy-btn'); const t = b.textContent; b.textContent = msg; setTimeout(() => (b.textContent = t), 1800); }
 
+  // ------------------------------------------------------------ ax report: what the scan found, as something a person can read, share and print
+  // cat: wcag = a WCAG A/AA failure; practice = best practice or AAA; design = quality the eye notices. Only wcag counts toward the headline.
+  const AX_RULES = {
+    'no-name':         { t: 'Links and buttons with no name', ref: '4.1.2 Name, Role, Value', lvl: 'A', cat: 'wcag', auto: false, fix: 'Give each one visible text, an aria-label, or alt text on the image inside it. Screen readers announce these as just "link" or "button".' },
+    'lang':            { t: 'Page language not set', ref: '3.1.1 Language of Page', lvl: 'A', cat: 'wcag', auto: false, fix: 'Add the language to the html element, for example <html lang="en">.' },
+    'title':           { t: 'Page has no title', ref: '2.4.2 Page Titled', lvl: 'A', cat: 'wcag', auto: false, fix: 'Give every page a <title> that says what it is; it\'s the first thing a screen reader announces and the name of the tab.' },
+    'label':           { t: 'Form fields with no label', ref: '1.3.1 Info and Relationships · 4.1.2', lvl: 'A', cat: 'wcag', auto: false, fix: 'Connect a visible <label for="…"> to each field, or an aria-label when there is truly no room. Placeholders vanish as you type; they aren\'t labels.' },
+    'colour-link':     { t: 'Links marked by colour alone', ref: '1.4.1 Use of Color', lvl: 'A', cat: 'wcag', auto: false, fix: 'Underline links that sit inside running text. If you won\'t underline, make the link colour at least 3:1 against the surrounding words and add an underline on hover and focus.' },
+    'alt':             { t: 'Missing or placeholder alt text', ref: '1.1.1 Non-text Content', lvl: 'A', cat: 'wcag', auto: false, fix: 'Describe what the image shows in a short phrase. Use alt="" for images that are purely decorative.' },
+    'contrast':        { t: 'Text contrast too low', ref: '1.4.3 Contrast (Minimum)', lvl: 'AA', cat: 'wcag', auto: true, fix: 'Move the text colour (or its background) to a shade that reaches 4.5:1, or 3:1 for large text. Over photos, add a scrim or a tint behind the words.' },
+    'busy-background': { t: 'Text over a busy image', ref: '1.4.3 Contrast (Minimum)', lvl: 'AA', cat: 'wcag', auto: true, fix: 'Add a scrim or text shadow, or move the words to a calmer part of the image.' },
+    'tap-target':      { t: 'Tap targets too small', ref: '2.5.8 Target Size (Minimum)', lvl: 'AA', cat: 'wcag', auto: true, fix: 'Make every button and link at least 24 × 24px. 44px is the comfortable size on a phone.' },
+    'text-over-image': { t: 'Text over an image (not measured)', ref: '1.4.3 Contrast (Minimum)', lvl: 'AA', cat: 'practice', auto: false, fix: 'The image is served from another domain, so its pixels couldn\'t be sampled. Check these by eye.' },
+    'heading-order':   { t: 'Heading structure', ref: '1.3.1 Info and Relationships', lvl: 'best practice', cat: 'practice', auto: false, fix: 'Use one h1 per page and don\'t skip levels (an h2 followed by an h4).' },
+    'h1-role':         { t: 'The h1 isn\'t the main headline', ref: '1.3.1 Info and Relationships', lvl: 'best practice', cat: 'practice', auto: false, fix: 'Make the page\'s main headline the h1. If the logo is the h1 on purpose, ignore this.' },
+    'dup-link':        { t: 'Repeated links', ref: '2.4.4 Link Purpose', lvl: 'best practice', cat: 'practice', auto: false, fix: 'An image link that repeats the headline link beside it doubles every stop for keyboard and screen reader users. Add aria-hidden="true" tabindex="-1" to the image link.' },
+    'vague-link':      { t: 'Link text that doesn\'t say where it goes', ref: '2.4.4 Link Purpose (In Context)', lvl: 'best practice', cat: 'practice', auto: false, fix: 'Say where the link goes ("Read the membership rules"), or add the context with aria-label or aria-describedby. Screen reader users often browse a list of links with no surrounding text.' },
+    'empty-heading':   { t: 'Empty headings', ref: '2.4.6 Headings and Labels', lvl: 'best practice', cat: 'practice', auto: false, fix: 'Give the heading text or remove it; an empty heading is a dead stop for anyone navigating by headings.' },
+    'measure':         { t: 'Lines too long to read comfortably', ref: '1.4.8 Visual Presentation', lvl: 'AAA', cat: 'practice', auto: true, fix: 'Cap text columns at about 65 to 75 characters per line (max-width: 68ch is a good start).' },
+    'hierarchy':       { t: 'Headings that don\'t read as headings', ref: 'visual hierarchy', lvl: 'design', cat: 'design', auto: true, fix: 'A heading should be clearly larger than the body copy beside it (about 15% or more), or bold. An h2 shouldn\'t outsize the h1.' },
+    'small-text':      { t: 'Body copy too small', ref: 'readability', lvl: 'design', cat: 'design', auto: true, fix: 'Set body copy at 14px or more; 16px is the usual default.' },
+    'overflow':        { t: 'Clipped or overflowing text', ref: 'related: 1.4.10 Reflow', lvl: 'design', cat: 'design', auto: false, fix: 'Let the box grow with its text, or give it room to wrap. Clipped words are lost words.' },
+    'button-wrap':     { t: 'Button labels that wrap', ref: 'design', lvl: 'design', cat: 'design', auto: true, fix: 'Shorten the label or give the button room; a two-line button reads as two buttons.' },
+    'soft':            { t: 'Images shown larger than their pixels', ref: 'image quality', lvl: 'design', cat: 'design', auto: false, fix: 'Serve a larger file (or a srcset) so the image isn\'t upscaled and soft.' },
+    'face':            { t: 'Faces cropped out', ref: 'image crop', lvl: 'design', cat: 'design', auto: true, fix: 'Re-centre the crop (object-position) on the face.' }
+  };
+  const AX_CATS = [['wcag', 'Accessibility failures (WCAG A/AA)'], ['practice', 'Best practice'], ['design', 'Design quality']];
+  const ruleOf = k => AX_RULES[k] || { t: k, ref: '', lvl: '', cat: 'design', auto: false, fix: '' };
+  function axSnippet(el) {
+    if (!el) return ''; if (el === document.documentElement) return '';
+    if (el.tagName === 'IMG') { const a = el.getAttribute('alt'); const f = (el.currentSrc || el.src || '').split('/').pop().split('?')[0]; return (a ? 'alt "' + a.slice(0, 50) + '" · ' : '') + f.slice(0, 60); }
+    const t = (el.innerText || el.textContent || el.getAttribute('aria-label') || '').trim().replace(/\s+/g, ' ');
+    if (t) return t.length > 80 ? t.slice(0, 79) + '…' : t;
+    const img = el.querySelector && el.querySelector('img'); return img ? 'image: ' + (img.currentSrc || img.src || '').split('/').pop().split('?')[0].slice(0, 60) : '';
+  }
+  // findings are matched by element + rule (cheap); selectors and snippets are only worked out for what a report actually lists
+  const AX_LIST_CAP = 50;
+  const axKey = (el, kind) => { let m = axKey.ids.get(el); if (!m) { m = ++axKey.n; axKey.ids.set(el, m); } return kind + '|' + m; }; axKey.ids = new WeakMap(); axKey.n = 0;
+  const axLite = w => ({ kind: w.kind, el: w.el, msg: w.msg });
+  // the baseline is what the page had before anyone touched it; it keeps refreshing while the page settles, and freezes at the first change
+  function axTrackBaseline() {
+    const untouched = !state.changes.size && !state.normalize && !state.axFix && !state.frame.changes.length;
+    if (untouched || !state.axBase) state.axBase = state.warnings.filter(w => w.el && w.el.isConnected).map(axLite);
+  }
+  function buildAXReport(detail) {
+    const now = state.warnings.filter(w => w.el && w.el.isConnected).map(axLite);
+    const nowKeys = new Map(now.map(f => [axKey(f.el, f.kind), f]));
+    const base = (state.axBase || now).filter(f => f.el); const baseKeys = new Set(base.map(f => axKey(f.el, f.kind)));
+    const items = base.map(f => { const k = axKey(f.el, f.kind); return nowKeys.has(k) ? { ...nowKeys.get(k), status: 'open' } : { ...f, status: 'fixed' }; })
+      .concat(now.filter(f => !baseKeys.has(axKey(f.el, f.kind))).map(f => ({ ...f, status: 'open', fresh: true })));
+    const rules = [];
+    Object.keys(AX_RULES).concat(Array.from(new Set(items.map(i => i.kind))).filter(k => !AX_RULES[k])).forEach(k => {
+      const list = items.filter(i => i.kind === k); if (!list.length) return;
+      list.sort((a, b) => (a.status === 'fixed') - (b.status === 'fixed'));
+      if (detail) list.slice(0, AX_LIST_CAP).forEach(i => { i.sel = i.el === document.documentElement ? 'html' : selectorOf(i.el); i.snippet = axSnippet(i.el); });
+      const r = ruleOf(k); rules.push({ kind: k, ...r, items: list, open: list.filter(i => i.status === 'open').length, fixed: list.filter(i => i.status === 'fixed').length });
+    });
+    const count = (cat, st) => rules.filter(r => r.cat === cat).reduce((a, r) => a + (st ? r[st] : r.items.length), 0);
+    const frame = state.device && deviceEl ? { device: state.device.name, notes: (state.frame.warnings || []).map(w => ({ kind: w.kind, name: w.name || w.kind, msg: w.msg })) } : null;
+    const F = state.F;
+    return {
+      title: (document.title || location.hostname).trim(), url: (() => { const u = new URL(location.href); u.searchParams.delete('jig'); if (u.hash === '#jig') u.hash = ''; return u.href; })(),
+      host: location.hostname, when: new Date(), viewport: `${window.innerWidth} × ${window.innerHeight}`, bp: state.bp, version: JIG_VERSION,
+      foundation: `${F.name} (${state.foundationSource || F.mode || 'inferred'})`,
+      rules, frame,
+      totals: { wcag: count('wcag'), wcagOpen: count('wcag', 'open'), practice: count('practice'), design: count('design'), all: items.length, open: items.filter(i => i.status === 'open').length, fixed: items.filter(i => i.status === 'fixed').length },
+      changed: state.changes.size + state.frame.changes.length > 0 || !!state.normalize || !!state.axFix
+    };
+  }
+  const AX_METHOD = [
+    'Checked in a live browser by Jig Studio. Contrast is measured from the rendered pixels, including text over photos (graded on the worst patch under the words), not read from the CSS.',
+    'Covers what renders on this page at this viewport. Other pages, other screen sizes, closed menus and content behind interactions are not included.',
+    'Not checked: ARIA validity, keyboard order, focus visibility, form labels and screen reader output. Pair this with axe DevTools and a keyboard pass.',
+    'Automated checks catch part of the picture. A clean report is a good sign, not a conformance claim.'
+  ];
+  const fmtDate = d => d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) + ' ' + d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+  function axHeadline(R) {
+    const T = R.totals;
+    const main = T.wcag === 0 ? 'No WCAG A/AA failures found' : `${T.wcag} accessibility failure${T.wcag === 1 ? '' : 's'}`;
+    const extra = T.practice + T.design ? ` · ${T.practice + T.design} more note${T.practice + T.design === 1 ? '' : 's'}` : '';
+    const fixed = T.fixed ? ` · ${T.fixed} fixed in this session, ${T.open} still open` : '';
+    return main + extra + fixed;
+  }
+  function reportMarkdown(R) {
+    R = R || buildAXReport(true); const L = [];
+    L.push(`# Accessibility report: ${R.title}`, '', `${R.url}  `, `${fmtDate(R.when)} · viewport ${R.viewport} (${R.bp}) · Jig Studio ${R.version}`, '', `**${axHeadline(R)}**`, '');
+    if (!R.rules.length) L.push('Nothing flagged on this page at this viewport.', '');
+    else {
+      L.push('| Rule | WCAG | Level | Found | Open | Jig can fix |', '|---|---|---|---:|---:|---|');
+      R.rules.forEach(r => L.push(`| ${r.t} | ${r.ref} | ${r.lvl} | ${r.items.length} | ${r.open} | ${r.auto ? 'yes' : 'no'} |`)); L.push('');
+      AX_CATS.forEach(([cat, label]) => {
+        const rs = R.rules.filter(r => r.cat === cat); if (!rs.length) return;
+        L.push(`## ${label}`, '');
+        rs.forEach(r => {
+          L.push(`### ${r.t} (${r.items.length})`, '', `${r.ref}${r.lvl && r.lvl !== r.ref ? ' · ' + r.lvl : ''}. ${r.fix}`, '');
+          r.items.slice(0, AX_LIST_CAP).forEach(i => L.push(`- \`${i.sel}\`${i.snippet ? ' "' + i.snippet.replace(/"/g, "'") + '"' : ''}: ${i.msg}${i.status === 'fixed' ? ' (fixed)' : ''}`));
+          if (r.items.length > AX_LIST_CAP) L.push(`- … and ${r.items.length - AX_LIST_CAP} more like these`);
+          L.push('');
+        });
+      });
+    }
+    if (R.frame && R.frame.notes.length) { L.push(`## Also seen on ${R.frame.device}`, ''); R.frame.notes.forEach(n => L.push(`- ${n.name}: ${n.msg}`)); L.push(''); }
+    L.push('## How this was checked', ''); AX_METHOD.forEach(m => L.push(`- ${m}`));
+    L.push('', `Audited with [Jig Studio](https://capybutz.com/) · foundation: ${R.foundation}`);
+    return L.join('\n');
+  }
+  function reportHTML(R) {
+    R = R || buildAXReport(true); const e = esc;
+    const T = R.totals;
+    const cards = [[T.wcag, 'WCAG A/AA failures', T.wcag ? 'bad' : 'ok'], [T.practice, 'best practice', ''], [T.design, 'design quality', ''], ...(T.fixed ? [[T.fixed, 'fixed in this session', 'ok']] : [])];
+    const sum = R.rules.map(r => `<tr><td><a href="#r-${e(r.kind)}">${e(r.t)}</a></td><td>${e(r.ref)}</td><td><span class="lvl l-${e(r.cat)}">${e(r.lvl)}</span></td><td class="n">${r.items.length}</td><td class="n">${r.open}</td><td>${r.auto ? '<span class="tag auto">jig can fix</span>' : '<span class="tag">by hand</span>'}</td></tr>`).join('');
+    const sections = AX_CATS.map(([cat, label]) => {
+      const rs = R.rules.filter(r => r.cat === cat); if (!rs.length) return '';
+      return `<h2>${e(label)}</h2>` + rs.map(r => `<section class="rule" id="r-${e(r.kind)}"><header><h3>${e(r.t)}</h3><span class="cnt">${r.items.length}</span></header>
+        <p class="meta"><span class="lvl l-${e(r.cat)}">${e(r.lvl)}</span> ${e(r.ref)}${r.auto ? ' · <span class="tag auto">jig can fix</span>' : ''}</p><p class="fix">${e(r.fix)}</p>
+        <ol>${r.items.slice(0, AX_LIST_CAP).map(i => `<li class="${i.status}"><div class="what"><code>${e(i.sel)}</code>${i.status === 'fixed' ? '<span class="tag ok">fixed</span>' : i.fresh ? '<span class="tag">new since load</span>' : ''}</div>${i.snippet ? `<div class="snip">${e(i.snippet)}</div>` : ''}<div class="msg">${e(i.msg)}</div></li>`).join('')}</ol>${r.items.length > AX_LIST_CAP ? `<p class="more">… and ${r.items.length - AX_LIST_CAP} more like these (${r.items.filter(i => i.status === 'open').length} open in total).</p>` : ''}</section>`).join('');
+    }).join('');
+    const frame = R.frame && R.frame.notes.length ? `<h2>Also seen on ${e(R.frame.device)}</h2><ul class="plain">${R.frame.notes.map(n => `<li><b>${e(n.name)}</b>: ${e(n.msg)}</li>`).join('')}</ul>` : '';
+    const patch = R.changed ? `<details class="patch"><summary>The fixes made in this session, as a jig patch</summary><p>Hand this to your AI or developer to make the changes permanent.</p><pre>${e(buildPatch())}</pre></details>` : '';
+    const css = `
+      :root{--bg:#0b0b0d;--panel:#13141a;--line:#262833;--ink:#dfe6ff;--mute:#9aa3b8;--blue:#3f6fff;--pink:#ff2d9b;--ok:#35c186;color-scheme:dark}
+      *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.55 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+      main{max-width:920px;margin:0 auto;padding:48px 24px 64px}a{color:#8fb0ff}code{font:12.5px ui-monospace,SFMono-Regular,Menlo,monospace;color:#c9d4ff;word-break:break-all}
+      .eyebrow{font:600 11px ui-monospace,Menlo,monospace;letter-spacing:.14em;text-transform:uppercase;color:var(--pink)}
+      h1{font-size:32px;line-height:1.15;margin:8px 0 6px;color:#fff;letter-spacing:-.01em}.sub{color:var(--mute);margin:0;word-break:break-all}.sub a{color:var(--mute)}
+      .headline{margin:28px 0 8px;font-size:19px;color:#fff;font-weight:600}
+      .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:16px 0 36px}
+      .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px}.card b{display:block;font-size:30px;line-height:1.1;color:#fff}.card span{color:var(--mute);font-size:13px}
+      .card.bad{border-color:var(--pink)}.card.bad b{color:var(--pink)}.card.ok b{color:var(--ok)}
+      table{width:100%;border-collapse:collapse;font-size:14px;margin:0 0 40px}th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:top}th{color:var(--mute);font-weight:500;font-size:12px;text-transform:uppercase;letter-spacing:.06em}td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
+      h2{font-size:13px;text-transform:uppercase;letter-spacing:.12em;color:var(--mute);margin:44px 0 12px;padding-bottom:8px;border-bottom:1px solid var(--line)}
+      .rule{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px 20px;margin:0 0 14px}.rule header,.rule .meta,.rule .fix,h2{break-after:avoid}
+      .rule header{display:flex;justify-content:space-between;align-items:baseline;gap:12px}.rule h3{margin:0;font-size:18px;color:#fff}.cnt{font:700 14px ui-monospace,Menlo,monospace;color:var(--pink)}
+      .meta{margin:4px 0 6px;color:var(--mute);font-size:13px}.fix{margin:0 0 12px}
+      ol{margin:0;padding-left:22px}li{padding:8px 0;border-top:1px dashed var(--line);break-inside:avoid}li .what{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.snip{color:#fff;margin:2px 0}.msg{color:var(--mute);font-size:13.5px}
+      li.fixed{opacity:.5}
+      .tag{display:inline-block;font:600 10.5px ui-monospace,Menlo,monospace;letter-spacing:.04em;padding:2px 7px;border-radius:999px;border:1px solid var(--line);color:var(--mute);white-space:nowrap}.tag.auto{border-color:var(--blue);color:#8fb0ff}.tag.ok{border-color:var(--ok);color:var(--ok)}
+      .lvl{display:inline-block;font:700 10.5px ui-monospace,Menlo,monospace;padding:2px 6px;border-radius:4px;background:#262833;color:#fff}.lvl.l-wcag{background:var(--pink)}
+      .more{color:var(--mute);font-size:13.5px;margin:10px 0 0}.method{color:var(--mute);font-size:14px}.method li{border:0;padding:3px 0}.plain{padding-left:20px}.plain li{border:0;padding:3px 0}
+      details.patch{margin:32px 0 0;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 18px}details.patch summary{cursor:pointer;color:#fff;font-weight:600}details.patch pre{white-space:pre-wrap;word-break:break-word;font:12px/1.5 ui-monospace,Menlo,monospace;color:#c9d4ff;max-height:480px;overflow:auto}
+      footer{margin-top:48px;padding-top:16px;border-top:1px solid var(--line);color:var(--mute);font-size:13px;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
+      .clean{background:var(--panel);border:1px solid var(--ok);border-radius:12px;padding:18px 20px}
+      @media print{:root{--bg:#fff;--panel:#fff;--line:#d9dbe3;--ink:#16171d;--mute:#5a6072;--blue:#2347c9;--pink:#c4106c;--ok:#167a50;color-scheme:light}
+        body{font-size:11pt}main{padding:0;max-width:none}h1,.card b,.rule h3,.headline,.snip,details.patch summary{color:#000}code,details.patch pre{color:#1b2a6b}a{color:inherit;text-decoration:none}
+        .rule,.card{border-color:#d9dbe3}details.patch{display:none}.lvl{background:none;border:1px solid #9a9fb0;color:#000}.lvl.l-wcag{border-color:#c4106c;color:#c4106c}.tag{border-color:#9a9fb0}@page{margin:16mm}}
+      @media (max-width:560px){main{padding:28px 16px 48px}h1{font-size:26px}th:nth-child(2),td:nth-child(2),th:nth-child(5),td:nth-child(5){display:none}}`;
+    return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Accessibility report · ${e(R.host)}</title><style>${css}</style></head><body><main>
+      <div class="eyebrow">Accessibility report</div><h1>${e(R.title)}</h1><p class="sub"><a href="${e(R.url)}">${e(R.url)}</a></p><p class="sub">${e(fmtDate(R.when))} · viewport ${e(R.viewport)} (${e(R.bp)})</p>
+      <p class="headline">${e(axHeadline(R))}</p>
+      <div class="cards">${cards.map(([n, l, c]) => `<div class="card ${c}"><b>${n}</b><span>${e(l)}</span></div>`).join('')}</div>
+      ${R.rules.length ? `<table><thead><tr><th>Rule</th><th>WCAG</th><th>Level</th><th class="n">Found</th><th class="n">Open</th><th>Fix</th></tr></thead><tbody>${sum}</tbody></table>${sections}` : '<div class="clean">Nothing flagged on this page at this viewport.</div>'}
+      ${frame}
+      <h2>How this was checked</h2><ul class="method">${AX_METHOD.map(m => `<li>${e(m)}</li>`).join('')}</ul>
+      ${patch}
+      <footer><span>Audited with <a href="https://capybutz.com/">Jig Studio</a> ${e(R.version)}</span><span>foundation: ${e(R.foundation)}</span></footer>
+    </main></body></html>`;
+  }
+  function downloadReport() {
+    const R = buildAXReport(true); const html = reportHTML(R);
+    const d = R.when; const stamp = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const name = `ax-report-${R.host.replace(/^www\./, '').replace(/[^a-z0-9.-]/gi, '-')}-${stamp}.html`;
+    try {
+      const url = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
+      const a = document.createElement('a'); a.href = url; a.download = name; a.style.display = 'none'; hud.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 4000); return name;
+    } catch (err) {   // a policy that blocks blob downloads: open it in a tab instead, where save-as still works
+      const w = window.open('', '_blank'); if (w) { w.document.write(html); w.document.close(); return 'opened'; } return null;
+    }
+  }
+  // "Fix what I can": auto's accessibility half on its own; no snapping. Undoable, and folded into auto if auto is turned on.
+  function undoAutoFixes() { (state.autoFixes || []).slice().reverse().forEach(f => { if (f.undo) { f.undo(); unrecord(f.el, f.ctl || 'grid', f.sub); } else if (f.el.__jigReset) f.el.__jigReset(); }); state.autoFixes = []; }
+  function fixAX(on) {
+    if (state.normalize) return;   // auto already does this
+    state.batch = true;
+    if (on) { autoFixAX(); state.axFix = true; } else { undoAutoFixes(); state.axFix = false; }
+    state.batch = false; scanProtection(); renderHUD(); postToParent();
+  }
+  function renderAXPanel() {
+    const box = $('#jig-axr'); if (!box) return;
+    const on = state.jigs.has('ax') && !(state.device && deviceEl); box.hidden = !on; if (!on) return;
+    const R = buildAXReport(); const T = R.totals;
+    $('#jig-axr-n').textContent = T.wcagOpen; $('#jig-axr-n').classList.toggle('ok', !T.wcagOpen);
+    $('#jig-axr-l').textContent = (T.wcagOpen === 1 ? 'accessibility failure' : 'accessibility failures') + (T.practice + T.design ? ` · ${T.practice + T.design} more` : '') + (T.fixed ? ` · ${T.fixed} fixed` : '');
+    const list = $('#jig-axr-rules'); list.innerHTML = '';
+    R.rules.forEach(r => {
+      const row = document.createElement('div'); row.className = 'row axrow' + (r.open ? '' : ' done');
+      row.innerHTML = `<span class="c ${r.cat}">${r.open}</span><span class="s">${esc(r.t)}<small>${esc(r.ref)}${r.auto ? ' · auto' : ''}</small></span>`;
+      let i = 0; const open = r.items.filter(x => x.status === 'open');
+      row.onclick = () => { if (!open.length) return; const t = open[i++ % open.length].el; if (t && t.isConnected) { t.scrollIntoView({ block: 'center', behavior: 'smooth' }); if (t.classList.contains('jig-el') && state.jigs.has(groupOf(t.dataset.jigCtl))) select(t); } };
+      list.appendChild(row);
+    });
+    if (!R.rules.length) list.innerHTML = '<div class="empty">Nothing flagged on this page.</div>';
+    const fb = $('#jig-axfix'); const can = R.rules.some(r => r.auto && r.open);
+    fb.textContent = state.normalize ? 'fixed by auto' : state.axFix ? 'undo fixes' : 'Fix what I can'; fb.disabled = !!state.normalize || (!state.axFix && !can); fb.classList.toggle('on', !!state.axFix);
+  }
+
   // ------------------------------------------------------------ normalize: snap the whole page to the scales
   function normalizePage(on) {
     if (!on) {
       state.batch = true;
-      (state.normalize || []).forEach(n => { n.el.style.removeProperty(n.prop); if (n.prev) n.el.style.setProperty(n.prop, n.prev); });
-      (state.autoFixes || []).forEach(f => { if (f.undo) { f.undo(); unrecord(f.el, f.ctl || 'grid', f.sub); } else if (f.el.__jigReset) f.el.__jigReset(); });
+      undoAutoFixes();   // fixes ran after the snaps, so they come off first
+      (state.normalize || []).slice().reverse().forEach(n => { n.el.style.removeProperty(n.prop); if (n.prev) n.el.style.setProperty(n.prop, n.prev, n.prevP || ''); });   // reverse: an element snapped twice must end on its first value
       state.normalize = null; state.autoFixes = []; state.batch = false; { const nb = $('#jig-norm-btn'); if (nb) nb.classList.remove('on'); } renderHUD(); postToParent(); scanSoon(); return;
     }
     state.batch = true;
+    if (state.axFix) { undoAutoFixes(); state.axFix = false; }   // auto includes the ax fixes; start them over inside auto so its undo covers them
     const F = state.F; const out = [];
     const res = state.autoRes || ($('#jig-q-res') && $('#jig-q-res').value) || '16';
     const { typeSteps, spaceSteps } = quantizeScales(res);
@@ -1692,7 +1931,7 @@
       if (prop === 'font-size' && cur < 14 && to < cur) to = steps.find(x => x >= cur) || to;   // never shrink text that's already small
       if (prop === 'font-size') { const up = steps.find(x => x > cur), dn = steps.slice().reverse().find(x => x < cur); if (up != null && dn != null && Math.abs((up - cur) - (cur - dn)) < 0.01) to = up; }   // type ties round up, toward readable
       if (Math.abs(to - cur) < 0.1) return;   // sub-pixel drift counts; it's the most common kind
-      out.push({ el, prop, from: Math.round(cur * 10) / 10, to, prev: el.style.getPropertyValue(prop) || '' });
+      out.push({ el, prop, from: Math.round(cur * 10) / 10, to, prev: el.style.getPropertyValue(prop) || '', prevP: el.style.getPropertyPriority(prop) });
       el.style.setProperty(prop, to + 'px', 'important');
     };
     // 1. type: elements with their own text (and their same-size riders, so headline links follow their headings)
@@ -1854,19 +2093,19 @@
         if (w.kind === 'small-text' && !w.el.__jigStepType && !seen.has(key(w.el, w.kind))) {
           // not wired as a type target (a span, an inline-styled div): set it straight to the first ramp step that clears the floor
           seen.add(key(w.el, w.kind)); const steps = ((state.F.type && state.F.type.steps) || []).map(x => x.px).filter(v => v >= w.min).sort((a, b) => a - b);
-          const to = steps[0] || w.min; const el = w.el; const prev = el.style.getPropertyValue('font-size'); const from = px(css(el).fontSize);
+          const to = steps[0] || w.min; const el = w.el; const prev = el.style.getPropertyValue('font-size'); const prevP = el.style.getPropertyPriority('font-size'); const from = px(css(el).fontSize);
           el.style.setProperty('font-size', to + 'px', 'important');
           const stepTok = ((state.F.type && state.F.type.steps) || []).find(x => x.px === to);
           record(el, 'type', { from: Math.round(from), to: stepTok ? stepTok.token : to + 'px', px: to, ...(stepTok && stepTok.var ? { var: stepTok.var } : { inferred: true }) }, `font-size ${r1(from)}px → ${to}px (body copy floor)`);
-          state.autoFixes.push({ el, ctl: 'type', what: `font-size ${r1(from)} → ${to}px (body copy floor)`, undo: () => { el.style.removeProperty('font-size'); if (prev) el.style.setProperty('font-size', prev); } }); did = true;
+          state.autoFixes.push({ el, ctl: 'type', what: `font-size ${r1(from)} → ${to}px (body copy floor)`, undo: () => { el.style.removeProperty('font-size'); if (prev) el.style.setProperty('font-size', prev, prevP); } }); did = true;
         }
         if (w.kind === 'small-text' && !w.el.__jigStepType && !seen.has(key(w.el, w.kind))) {
           seen.add(key(w.el, w.kind)); const steps = ((state.F.type && state.F.type.steps) || []).map(x => x.px).filter(v => v >= w.min).sort((a, b) => a - b);
-          const to = steps[0] || w.min; const el = w.el; const prev = el.style.getPropertyValue('font-size'); const from = px(css(el).fontSize);
+          const to = steps[0] || w.min; const el = w.el; const prev = el.style.getPropertyValue('font-size'); const prevP = el.style.getPropertyPriority('font-size'); const from = px(css(el).fontSize);
           el.style.setProperty('font-size', to + 'px', 'important');
           const stepTok = ((state.F.type && state.F.type.steps) || []).find(x => x.px === to);
           record(el, 'type', { from: Math.round(from), to: stepTok ? stepTok.token : to + 'px', px: to, ...(stepTok && stepTok.var ? { var: stepTok.var } : { inferred: true }) }, `font-size ${r1(from)}px → ${to}px (body copy floor)`);
-          state.autoFixes.push({ el, ctl: 'type', what: `font-size ${r1(from)} → ${to}px (body copy floor)`, undo: () => { el.style.removeProperty('font-size'); if (prev) el.style.setProperty('font-size', prev); } }); did = true;
+          state.autoFixes.push({ el, ctl: 'type', what: `font-size ${r1(from)} → ${to}px (body copy floor)`, undo: () => { el.style.removeProperty('font-size'); if (prev) el.style.setProperty('font-size', prev, prevP); } }); did = true;
         }
         if (w.kind === 'small-text' && w.el.__jigStepType && !seen.has(key(w.el, w.kind))) {
           seen.add(key(w.el, w.kind)); let steps = 0; while (steps < 3 && px(css(w.el).fontSize) < w.min - 0.5) { const b0 = px(css(w.el).fontSize); w.el.__jigStepType(1); if (px(css(w.el).fontSize) <= b0 + 0.1) break; steps++; }
@@ -2125,6 +2364,8 @@
     devBtn.onclick = e => { e.stopPropagation(); showDevMenu(devMenu.hidden); };
     $$('[data-device]', devMenu).forEach(m => m.onclick = e => { e.stopPropagation(); showDevMenu(false); if (m.dataset.device) openDevice(m.dataset.device); else closeDevice(); });
     on(document, 'pointerdown', e => { if (!devMenu.hidden && !e.target.closest('.devwrap')) showDevMenu(false); }, true);
+    // on a real phone the device previews make no sense: you're already holding one
+    { const coarse = window.matchMedia && matchMedia('(hover: none) and (pointer: coarse)').matches; if (state.bp === 'phone' || coarse && Math.min(screen.width, screen.height) <= 600) $('.devwrap', hud).hidden = true; }
     syncDeviceBtn();
     let firstRun = false;
     try { const saved = safeGet('jig-jigs:' + location.host); firstRun = !saved; (saved ? JSON.parse(saved) : ['ax']).forEach(id => state.jigs.add(id)); } catch (e) { state.jigs.add('ax'); }
@@ -2162,8 +2403,11 @@
     };
     $('#jig-q-res').onchange = () => { if (state.normalize) { normalizePage(false); normalizePage(true); } };
     if (state.F.mode && state.F.mode !== 'inferred') $('#jig-q-res').value = '32';   // the site has tokens: light = its own steps; medium/strict stay on offer
-    $('#jig-reset-btn').onclick = () => { normalizePage(false); $$('.jig-el').forEach(el => el.__jigReset && el.__jigReset()); state.changes.clear(); state.frame = { changes: [], warnings: [] }; closeDevice(); scanProtection(); };
+    $('#jig-reset-btn').onclick = () => { if (state.axFix) fixAX(false); normalizePage(false); $$('.jig-el').forEach(el => el.__jigReset && el.__jigReset()); state.changes.clear(); state.frame = { changes: [], warnings: [] }; closeDevice(); scanProtection(); };
     $('#jig-copy-btn').onclick = copyPatch;
+    $('#jig-axfix').onclick = () => { const b = $('#jig-axfix'); if (b.dataset.busy) return; b.dataset.busy = '1'; b.textContent = 'working…'; setTimeout(() => { try { fixAX(!state.axFix); } finally { delete b.dataset.busy; renderAXPanel(); } }, 30); };
+    $('#jig-axdl').onclick = () => { const r = downloadReport(); const b = $('#jig-axdl'); const t = b.textContent; b.textContent = r ? 'Downloaded' : 'Blocked here'; setTimeout(() => (b.textContent = t), 1600); };
+    $('#jig-axmd').onclick = async () => { const r = await copyText(reportMarkdown()); const b = $('#jig-axmd'); const t = b.textContent; b.textContent = r === 'ok' ? 'Copied' : 'Press ⌘C'; setTimeout(() => (b.textContent = t), 1600); };
 
     // HUD drag
     let d = null; const hdr = $('header', hud);
@@ -2185,7 +2429,7 @@
       if (!scanTimer && ms.some(m => !(m.target.closest && m.target.closest('#jig-hud, #jig-axtags, #jig-device, .jig-tb, #jig-found, .jig-scrim-panel')) && Array.from(m.addedNodes).some(n => n.nodeType === 1 && !(n.id || '').startsWith('jig-') && !(n.className && String(n.className).includes('jig-'))))) { settles++; scanSoon(); }
     });
     mo.observe(document.body, { childList: true, subtree: true });
-    window.__jig = { state, patch: buildPatch, scan: scanProtection, Controls, get gridDebug() { return gridDebug; } };   // gridDebug: what the grid measuring saw
+    window.__jig = { state, patch: buildPatch, scan: scanProtection, Controls, report: buildAXReport, reportHTML, reportMarkdown, fixAX, get gridDebug() { return gridDebug; } };   // gridDebug: what the grid measuring saw
     console.log('%cjig studio%c ready · ' + $$('.jig-el').length + ' elements · foundation ' + state.F.name, 'color:#3f6fff;font-weight:700', '');
   }
   function r1(v) { return Math.round(v * 10) / 10; }
