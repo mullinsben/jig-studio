@@ -1183,13 +1183,14 @@
   // The page is inert while the jig is on: clicks never navigate, submit, or reach the site's own handlers.
   // Hold Alt to let a click through on purpose.
   const inJigUI = t => !!(t && t.closest && t.closest('#jig-hud, .jig-tb, #jig-found, #jig-device, .jig-badge'));
-  on(document, 'click', e => {
+  // on window, not document: a click reaches window first, and sites that swallow clicks there (Wired) would otherwise beat us to it
+  on(window, 'click', e => {
     if (inJigUI(e.target) || e.altKey) return;
     e.preventDefault();
     if (!e.target.closest('.jig-el')) { e.stopPropagation(); $$('.jig-selected').forEach(x => x.classList.remove('jig-selected')); state.selected = null; toolbar.hidden = true; }
   }, true);
-  on(document, 'auxclick', e => { if (!inJigUI(e.target) && !e.altKey) { e.preventDefault(); e.stopPropagation(); } }, true);
-  on(document, 'submit', e => { if (!inJigUI(e.target)) { e.preventDefault(); e.stopPropagation(); } }, true);
+  on(window, 'auxclick', e => { if (!inJigUI(e.target) && !e.altKey) { e.preventDefault(); e.stopPropagation(); } }, true);
+  on(window, 'submit', e => { if (!inJigUI(e.target)) { e.preventDefault(); e.stopPropagation(); } }, true);
   on(document, 'dragstart', e => { if (!inJigUI(e.target)) e.preventDefault(); }, true);  // native image/link drag fights our drag
   on(document, 'contextmenu', e => { if (!inJigUI(e.target) && e.target.closest('.jig-el')) e.preventDefault(); }, true);
   on(window, 'scroll', () => { if (state.selected) refreshToolbar(state.selected); }, { passive: true });
