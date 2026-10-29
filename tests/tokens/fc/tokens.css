@@ -1,0 +1,262 @@
+/* ============================================================
+   FONTS — Frontier Creatives
+   Display : Inter (Rasmus Andersson; neutral, precise, modern grotesque)
+   Body    : Krub (Cadson Demak; warm loopless humanist sans)
+   No monospace — the system has no clinical / techy register.
+   ============================================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Krub:wght@400;500;600;700&display=swap');
+/* ============================================================
+   COLORS — Frontier Creatives
+   A four-color palette on warm neutrals. Coral is the single
+   interaction accent; sand, sage, and teal are gentle, sparing
+   category / illustrative tints. Color never carries structure,
+   which comes from editorial flow and whitespace.
+   ============================================================ */
+
+:root {
+  /* ---- The four palette colors ---- */
+  --coral: #E76F51; /* the accent family: tints, large graphic moments; not for small text or text-bearing fills */
+  --coral-strong: #BE4A2B; /* interactive solid: CTA fills, white text at 5.0:1 */
+  --sand:  #F4A261; /* warm secondary tint */
+  --sage:  #A8D5BA; /* soft supporting tint */
+  --teal:  #3B7A9D; /* cool supporting tint (use most sparingly) */
+
+  /* interaction shades derived from coral (all AA vs paper / their tints) */
+  --coral-deep: #A64226; /* hover / pressed, white text at 6.1:1 */
+  --coral-ink:  #A64226; /* coral-colored text on light, 5.9:1 on paper */
+  --sand-ink:   #9A6410; /* sand-colored text on light, 4.8:1 */
+  --sage-ink:   #3E7A58; /* sage-colored text on light, 4.9:1 */
+  --teal-ink:   #2F6683; /* teal-colored text on light and teal-tint */
+
+  /* light tints for tags / quiet washes (never large loud fields) */
+  --coral-tint: #FBE3DB;
+  --sand-tint:  #FDEEDD;
+  --sage-tint:  #EAF4EE;
+  --teal-tint:  #E3EDF3;
+
+  /* on-color ink */
+  --on-coral: #FFFFFF;
+  --on-sand:  #3A2A1C; /* sand wants dark text */
+  --on-sage:  #23372B; /* sage wants dark text */
+  --on-teal:  #FFFFFF;
+
+  /* ---- Warm neutral ramp ---- */
+  --ink-900: #2A2521; /* warm near-black, primary text */
+  --ink-800: #3A342E;
+  --ink-700: #4C443C;
+  --ink-600: #6A625B; /* secondary text */
+  --ink-500: #877E74;
+  --ink-400: #A69C92; /* tertiary text */
+  --ink-300: #C8C0B5;
+  --ink-450: #7A7166; /* tertiary text, 4.6:1 on paper (AA) */
+  --ink-200: #E5DED4; /* faint hairline, last resort */
+  --ink-150: #EBE5DB;
+  --ink-100: #EFEAE1; /* subtle warm wash */
+  --paper-2: #FDFBF8; /* slightly lifted warm white */
+  --paper:   #FCFAF6; /* light warm off-white page */
+  --white:   #FFFFFF;
+
+  /* ============================================================
+     SEMANTIC ALIASES — use these
+     ============================================================ */
+  --surface-page:      var(--paper);
+  --surface-card:      var(--white);   /* used for gently lifted items */
+  --surface-card-warm: var(--paper-2);
+  --surface-alt:       var(--ink-100);
+
+  --text-primary:   var(--ink-900);
+  --text-secondary: var(--ink-600);
+  --text-tertiary:  var(--ink-450); /* ink-400 is decorative only; it fails AA as text */
+  --text-inverse:   #FFFFFF;
+  --text-accent:    var(--coral-ink);
+
+  --brand:          var(--coral-strong);
+  --brand-hover:    var(--coral-deep);
+  --accent:         var(--coral-strong); /* focus/interaction accent (was undefined; Input.jsx uses it) */
+  --brand-contrast: #FFFFFF;
+
+  --accent-tint: var(--coral-tint);
+  --accent-ink:  var(--coral-ink);
+
+  --border:      var(--ink-200); /* hairline, avoid where air will do */
+  --border-soft: var(--ink-150);
+
+  --danger: var(--coral-deep); /* form errors reuse the warm accent family */
+  --focus-ring: var(--brand);
+}
+
+/* ============================================================
+   DARK MODE (the default). True black ground, coral geometry.
+   Light warm-paper mode is the secondary variant.
+   ============================================================ */
+:root{
+  --dark-bg:          #000000; /* true black; on OLED the page disappears */
+  --dark-text:        #F2EDE5;
+  --dark-text-2nd:    #C4BBB0;
+  --dark-text-3rd:    #9C9287; /* 4.5+ on black */
+  --dark-accent-text: #E9805E; /* coral ink, brightened for dark */
+  /* warm near-black tones on the true-black ground; each earns its job */
+  --dark-well:        #0C0A09; /* recessed fill: input / textarea / select interiors, sunk just below the ground so fields read as wells, not floating cards */
+  --dark-surface:     #1A1714; /* raised surface: cards, code chips, quiet buttons */
+  --dark-hairline:    #221D18; /* faint divider / rule on black */
+  --dark-border:      #3E362F; /* border: inputs, outlines, the interactive lift */
+  --dark-lines:       #E76F51; /* the stitch figures, at 0.38 opacity */
+  --dark-protection:  rgba(0,0,0,.94); /* highlight bars match the ground */
+  /* washes on dark: coral/sand at .05/.06 only */
+}
+/* ============================================================
+   TYPOGRAPHY — Frontier Creatives
+   Type does the hierarchy work: clear size jumps, ample line
+   height, left-aligned, warm geometric display.
+   ============================================================ */
+
+:root {
+  --font-display: 'Inter', system-ui, sans-serif;
+  --font-body:    'Krub', system-ui, sans-serif;
+
+  /* type scale (px) */
+  --text-2xs: 0.75rem;   /* 12 */
+  --text-xs:  0.8125rem; /* 13 */
+  --text-sm:  0.875rem;  /* 14 */
+  --text-md:  1rem;      /* 16 */
+  --text-lg:  1.0625rem; /* 17 — body default */
+  --text-xl:  1.375rem;  /* 22 */
+  --text-2xl: 1.75rem;   /* 28 */
+  --text-3xl: 2.25rem;   /* 36 */
+  --text-4xl: 3rem;      /* 48 */
+  --text-5xl: 4rem;      /* 64 */
+  --text-6xl: 5rem;      /* 80 */
+
+  --weight-regular:  400;
+  --weight-medium:   500;
+  --weight-semibold: 600;
+  --weight-bold:     700;
+
+  --leading-tight:  1.08;
+  --leading-snug:   1.25;
+  --leading-normal: 1.45;
+  --leading-body:   1.7;   /* generous reading room */
+
+  --tracking-tight:   -0.015em;
+  --tracking-normal:  0;
+  --tracking-eyebrow: 0.08em;
+}
+
+/* ---- semantic type utilities ---- */
+.t-display {
+  font-family: var(--font-display);
+  font-weight: var(--weight-bold);
+  font-size: clamp(2.5rem, 6vw, var(--text-6xl));
+  line-height: var(--leading-tight);
+  letter-spacing: var(--tracking-tight);
+  text-wrap: balance;
+  color: var(--text-primary);
+}
+.t-h1 {
+  font-family: var(--font-display);
+  font-weight: var(--weight-bold);
+  font-size: var(--text-4xl);
+  line-height: var(--leading-snug);
+  letter-spacing: var(--tracking-tight);
+  text-wrap: balance;
+  color: var(--text-primary);
+}
+.t-h2 {
+  font-family: var(--font-display);
+  font-weight: var(--weight-semibold);
+  font-size: var(--text-2xl);
+  line-height: var(--leading-snug);
+  color: var(--text-primary);
+}
+.t-h3 {
+  font-family: var(--font-display);
+  font-weight: var(--weight-semibold);
+  font-size: var(--text-xl);
+  line-height: var(--leading-snug);
+  color: var(--text-primary);
+}
+.t-lede {
+  font-family: var(--font-body);
+  font-weight: var(--weight-regular);
+  font-size: var(--text-xl);
+  line-height: var(--leading-normal);
+  color: var(--text-secondary);
+  text-wrap: pretty;
+}
+.t-body {
+  font-family: var(--font-body);
+  font-weight: var(--weight-regular);
+  font-size: var(--text-lg);
+  line-height: var(--leading-body);
+  color: var(--text-primary);
+  text-wrap: pretty;
+}
+.t-small {
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+  color: var(--text-secondary);
+}
+/* eyebrow — warm editorial kicker, NOT clinical mono chrome */
+.t-eyebrow {
+  font-family: var(--font-display);
+  font-weight: var(--weight-semibold);
+  font-size: var(--text-xs);
+  letter-spacing: var(--tracking-eyebrow);
+  text-transform: uppercase;
+  color: var(--text-accent);
+}
+/* ============================================================
+   SPACING, RADIUS, SHADOW, MOTION, LAYOUT, Frontier Creatives
+   Whitespace-first, single-column editorial. Generous, consistent
+   spacing and vertical rhythm carry the hierarchy.
+   ============================================================ */
+
+:root {
+  /* spacing (4px base) */
+  --space-1:  0.25rem;  /*  4 */
+  --space-2:  0.5rem;   /*  8 */
+  --space-3:  0.75rem;  /* 12 */
+  --space-4:  1rem;     /* 16 */
+  --space-5:  1.25rem;  /* 20 */
+  --space-6:  1.5rem;   /* 24 */
+  --space-8:  2rem;     /* 32 */
+  --space-10: 2.5rem;   /* 40 */
+  --space-12: 3rem;     /* 48 */
+  --space-16: 4rem;     /* 64 */
+  --space-20: 5rem;     /* 80 */
+  --space-24: 6rem;     /* 96 */
+  --space-32: 8rem;     /* 128 */
+
+  /* radius, gently rounded where corners exist */
+  --radius-sm:   8px;
+  --radius-md:   14px;
+  --radius-lg:   20px;
+  --radius-xl:   28px;
+  --radius-full: 999px;
+
+  /* borders, used rarely; prefer air, then a soft lift */
+  --border-width: 1px;
+
+  /* shadows, light and soft, only to lift an element gently */
+  --shadow-sm: 0 1px 2px rgba(42, 35, 32, 0.03),
+               0 8px 20px rgba(42, 35, 32, 0.04);
+  --shadow-md: 0 2px 6px rgba(42, 35, 32, 0.04),
+               0 16px 36px rgba(42, 35, 32, 0.06);
+
+  /* motion — gentle */
+  --ease:        cubic-bezier(0.22, 0.61, 0.36, 1);
+  --dur-fast:    140ms;
+  --dur-base:    240ms;
+
+  /* layout, single-column editorial */
+  --container:    960px;  /* page max */
+  --reading:      680px;  /* prose column */
+  --narrow:       540px;  /* forms, tight blocks */
+  --section-gap:  var(--space-32); /* 128px between sections */
+  --grid-gap:     var(--space-8);  /* restrained sub-grids (presenters, links) */
+
+  --z-nav:   100;
+  --z-modal: 400;
+}

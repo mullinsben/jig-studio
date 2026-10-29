@@ -40,6 +40,7 @@
   };
 
   // jig toggles: nothing is live until the person switches a jig on
+  const JIG_UI = '#jig-hud, .jig-tb, .jig-badge, #jig-grid, #jig-found, #jig-device, #jig-axtags, #jig-welcome, #jig-warn, #jig-copybox';   // the jig's own furniture: never scanned, never wired, never in a patch
   const JIGS = [
     { id: 'images', label: 'images', ctls: ['crop'] },
     { id: 'text', label: 'type', ctls: ['type', 'heading', 'text'] },
@@ -107,6 +108,13 @@
     }
     return { error: 'not JSON or CSS' };
   }
+  // a tokens file called tokens.css / theme.json / variables.css is named after the site it came from
+  function foundationName(src) {
+    const base = (src.split('?')[0].split('/').pop() || '').replace(/\.\w+$/, '');
+    let host = ''; try { host = new URL(src, location.href).hostname.replace(/^www\./, ''); } catch (e) {}
+    if (!base || /^(tokens?|theme|themes?|styles?|variables|vars|design-?tokens|foundation|jig\.foundation|index|main|base|global)$/i.test(base)) return host || base || 'tokens';
+    return base;
+  }
   // design tokens → foundation. Walks any depth; a token is a node with $value (W3C) or value (Tokens Studio / Style Dictionary).
   // Sorted by what the token's path says it is: font sizes become the type ramp, spacing becomes the spacing scale, grid and
   // breakpoints come along when present. Names are kept, so the patch speaks the site's own language.
@@ -142,9 +150,9 @@
     const type = dedupe(typeT), space = dedupe(spaceT).filter(x => x.px > 0);
     if (type.length < 3 && space.length < 3) return null;
     const F = JSON.parse(JSON.stringify(DEFAULT_FOUNDATION));
-    F.name = (src.split('/').pop() || 'tokens').replace(/\.\w+(\?.*)?$/, '') || 'tokens'; F.mode = 'tokens'; F.source = src;
-    if (type.length >= 3) F.type = { ramp: type.map(t => t.token), steps: type.map(t => ({ token: t.token, px: t.px, var: '--' + t.token })), fromTokens: true }; else F.type = inferType();
-    if (space.length >= 3) { F.spacing = space.map(x => x.px); F.spacingSteps = space.map(x => ({ token: x.token, px: x.px, var: '--' + x.token })); } else { const sp = inferSpacing(); F.spacing = sp.map(x => x.px); F.spacingSteps = sp; }
+    F.name = foundationName(src); F.mode = 'tokens'; F.source = src;
+    if (type.length >= 3) F.type = { ramp: type.map(t => t.token), sizes: Object.fromEntries(type.map(t => [t.token, t.px])), steps: type.map(t => ({ token: t.token, px: t.px, var: '--' + t.token })), fromTokens: true }; else F.type = inferType();
+    if (space.length >= 3) { F.spacing = space.map(x => x.px); F.spacingEdited = space.map(x => ({ token: x.token, px: x.px })); F.spacingSteps = space.map(x => ({ token: x.token, px: x.px, var: '--' + x.token })); } else { const sp = inferSpacing(); F.spacing = sp.map(x => x.px); F.spacingSteps = sp; }
     if (radiusT.length) F.radius = dedupe(radiusT);
     const bps = Object.entries(bpT).sort((a, b) => a[1] - b[1]); if (bps.length) F.breakpoints = { phone: Math.min(390, bps[0][1]), desktop: bps[bps.length - 1][1] };
     F.buttons = inferButtons(); F.grid = Object.assign(inferGrid(), grid);
@@ -160,11 +168,11 @@
     while ((m = re.exec(hay))) found[m[1]] = m[2].trim();
     const scales = scalesFromVars(found, false); if (!scales) return null;
     const F = JSON.parse(JSON.stringify(DEFAULT_FOUNDATION));
-    F.name = (src.split('/').pop() || 'tokens').replace(/\.\w+(\?.*)?$/, '') || 'tokens'; F.mode = 'tokens'; F.source = src;
+    F.name = foundationName(src); F.mode = 'tokens'; F.source = src;
     const full = arr => arr.map(x => ({ ...x, token: x.var.slice(2) }));   // keep the whole variable name as the token: 'font-size-100', not '100'
     const T = full(scales.type), S = full(scales.space);
-    if (T.length >= 3) F.type = { ramp: T.map(t => t.token), steps: T, fromTokens: true }; else F.type = inferType();
-    if (S.length >= 3) { F.spacing = S.map(x => x.px); F.spacingSteps = S; } else { const sp = inferSpacing(); F.spacing = sp.map(x => x.px); F.spacingSteps = sp; }
+    if (T.length >= 3) F.type = { ramp: T.map(t => t.token), sizes: Object.fromEntries(T.map(t => [t.token, t.px])), steps: T, fromTokens: true }; else F.type = inferType();
+    if (S.length >= 3) { F.spacing = S.map(x => x.px); F.spacingEdited = S.map(x => ({ token: x.token, px: x.px })); F.spacingSteps = S; } else { const sp = inferSpacing(); F.spacing = sp.map(x => x.px); F.spacingSteps = sp; }
     F.buttons = inferButtons(); F.grid = inferGrid();
     F.tokenCounts = { type: T.length, space: S.length, all: Object.keys(found).length };
     return F;
@@ -242,7 +250,7 @@
   function inferType() {
     const counts = new Map(), pCounts = new Map();
     $$('body *').forEach(el => {
-      if (el.closest('#jig-hud, .jig-tb, script, style') || !visible(el)) return;
+      if (el.closest(JIG_UI + ', script, style') || !visible(el)) return;
       const own = Array.from(el.childNodes).some(n => n.nodeType === 3 && n.textContent.trim().length > 1); if (!own) return;
       const fs = Math.round(px(css(el).fontSize) * 2) / 2; const w = (el.textContent || '').trim().length;
       counts.set(fs, (counts.get(fs) || 0) + Math.min(w, 200));
@@ -262,7 +270,7 @@
   function inferSpacing() {
     const counts = new Map();
     $$('body *').forEach(el => {
-      if (el.closest('#jig-hud, .jig-tb') || !visible(el)) return; const c = css(el);
+      if (el.closest(JIG_UI) || !visible(el)) return; const c = css(el);
       if (!/block|flex|grid|table/.test(c.display)) return;
       ['paddingTop', 'paddingBottom', 'paddingLeft', 'paddingRight', 'marginTop', 'marginBottom', 'rowGap', 'columnGap'].forEach(k => { const v = Math.round(px(c[k])); if (v >= 2 && v <= 200) counts.set(v, (counts.get(v) || 0) + 1); });
     });
@@ -275,7 +283,7 @@
     return steps.map(st => ({ token: String(st.px), px: st.px, observed: Array.from(new Set(st.observed)).sort((a, b) => a - b), n: st.n }));
   }
   function looksLikeButton(el) {
-    if (!visible(el) || el.closest('#jig-hud, .jig-tb')) return false;
+    if (!visible(el) || el.closest(JIG_UI)) return false;
     if (el.tagName === 'BUTTON' || el.getAttribute('role') === 'button' || (el.tagName === 'INPUT' && /button|submit/.test(el.type))) return true;
     if (el.tagName !== 'A') return false;
     const c = css(el); const bg = parseColor(c.backgroundColor); const bw = px(c.borderTopWidth);
@@ -301,7 +309,7 @@
     const els = $$('body *').filter(el => { if (!visible(el)) return false; const r = el.getBoundingClientRect(); return r.width >= vw * 0.5 && r.width <= vw - 16 && Math.abs(r.left - (vw - r.right)) < 3 && r.height >= 40; });
     const byW = new Map(); els.forEach(el => { const w = Math.round(el.getBoundingClientRect().width / 4) * 4; const e = byW.get(w) || { w, n: 0, el, els: [] }; e.n++; e.els.push(el); byW.set(w, e); });
     // the grid belongs on the edge real content sits on (logo, nav, images, headings), not whichever wrapper width recurs most
-    const marks = $$('img, svg, picture, video, h1, h2, h3, h4, p, a, button, input').filter(m => visible(m) && !m.closest('#jig-hud, #jig-axtags, .jig-tb')).map(m => Math.round(m.getBoundingClientRect().left));
+    const marks = $$('img, svg, picture, video, h1, h2, h3, h4, p, a, button, input').filter(m => visible(m) && !m.closest(JIG_UI)).map(m => Math.round(m.getBoundingClientRect().left));
     const near = x => marks.reduce((n, l) => n + (Math.abs(l - x) <= 2 ? 1 : 0), 0);
     Array.from(byW.values()).forEach(e => { const r = e.el.getBoundingClientRect(); const pl = px(css(e.el).paddingLeft), pr = px(css(e.el).paddingRight);
       const outer = near(r.left), inner = pl > 2 ? near(r.left + pl) : 0;
@@ -312,7 +320,7 @@
     let columns = 12, gutter = 24, maxWidth = best ? Math.round(best.box.width) : Math.min(1200, vw - 64);
     if (best) {
       // measure the grid the content actually uses: where the blocks start and end, the gap between neighbours, and the column count that puts the most block edges on lines
-      const A = best.box; const kids = Array.from(new Set(best.els.flatMap(c => $$('*', c)))).filter(k => { if (!visible(k) || k.closest('#jig-hud, #jig-axtags, .jig-tb')) return false; const r = k.getBoundingClientRect(); return r.height >= 60 && r.width >= 60 && r.left >= A.left - 1 && r.right <= A.left + A.width + 1; }).map(k => { const r = k.getBoundingClientRect(), c = css(k); const pl = px(c.paddingLeft) + px(c.borderLeftWidth), pr = px(c.paddingRight) + px(c.borderRightWidth); return { left: r.left + pl, right: r.right - pr, width: r.width - pl - pr, height: r.height, top: r.top }; });   // content boxes: a Bootstrap column's padding is gutter, not content
+      const A = best.box; const kids = Array.from(new Set(best.els.flatMap(c => $$('*', c)))).filter(k => { if (!visible(k) || k.closest(JIG_UI)) return false; const r = k.getBoundingClientRect(); return r.height >= 60 && r.width >= 60 && r.left >= A.left - 1 && r.right <= A.left + A.width + 1; }).map(k => { const r = k.getBoundingClientRect(), c = css(k); const pl = px(c.paddingLeft) + px(c.borderLeftWidth), pr = px(c.paddingRight) + px(c.borderRightWidth); return { left: r.left + pl, right: r.right - pr, width: r.width - pl - pr, height: r.height, top: r.top }; });   // content boxes: a Bootstrap column's padding is gutter, not content
       const mode = arr => { const m = new Map(); arr.forEach(v => m.set(v, (m.get(v) || 0) + 1)); return Array.from(m).sort((a, b) => b[1] - a[1] || a[0] - b[0])[0]; };
       const wide = kids.filter(r => r.width >= A.width * 0.5);
       if (wide.length >= 2) {
@@ -323,7 +331,7 @@
       { const cb0 = k => { const r = k.getBoundingClientRect(), c = css(k); const pl = px(c.paddingLeft) + px(c.borderLeftWidth), pr = px(c.paddingRight) + px(c.borderRightWidth); return { left: r.left + pl, right: r.right - pr, width: r.width - pl - pr, top: r.top, bottom: r.bottom, height: r.height }; };
         const starts = [], ends = [];
         [document.body].forEach(c => $$('*', c).forEach(row => {   // rows anywhere on the page within the grid's range; content often lives outside the box that set the edges
-          if (row.children.length < 2 || row.closest('#jig-hud, #jig-axtags, .jig-tb, #jig-grid, #jig-device')) return;
+          if (row.children.length < 2 || row.closest(JIG_UI)) return;
           const ks = Array.from(row.children).filter(visible).map(cb0).filter(k => k.width >= A.width * 0.15 && k.height >= 60 && k.left >= A.left - 2 && k.right <= A.left + A.width + 2);
           const side = ks.filter((k, i) => ks.some((o, j) => j !== i && o.top < k.bottom - 10 && k.top < o.bottom - 10 && (o.left >= k.right - 1 || o.right <= k.left + 1)));
           if (side.length < 2) return; const st = Math.round(Math.min(...side.map(k => k.left))), en = Math.round(Math.max(...side.map(k => k.right)));
@@ -337,7 +345,7 @@
       const cbox = k => { const r = k.getBoundingClientRect(), c = css(k); const pl = px(c.paddingLeft) + px(c.borderLeftWidth), pr = px(c.paddingRight) + px(c.borderRightWidth); return { left: r.left + pl, right: r.right - pr, width: r.width - pl - pr, top: r.top, bottom: r.bottom, height: r.height }; };
       const Lset = new Set(), Rset = new Set(), gaps = [], pairs = new Map();   // pairs: right edge + the next block's left edge, one gutter apart; the strongest evidence a grid leaves
       [document.body].forEach(c => $$('*', c).forEach(row => {   // rows anywhere on the page within the grid's range; content often lives outside the box that set the edges
-        if (row.children.length < 2 || row.closest('#jig-hud, #jig-axtags, .jig-tb, #jig-grid, #jig-device')) return;
+        if (row.children.length < 2 || row.closest(JIG_UI)) return;
         const ks = Array.from(row.children).filter(visible).map(cbox).filter(k => k.width >= W * 0.15 && k.height >= 60 && k.left >= L0 - 2 && k.right <= L0 + W + 2);
         const side = ks.filter((k, i) => ks.some((o, j) => j !== i && o.top < k.bottom - 10 && k.top < o.bottom - 10 && (o.left >= k.right - 1 || o.right <= k.left + 1)));
         if (side.length < 2) return;
@@ -377,7 +385,7 @@
     // type steps: explicit sizes in the file, else resolve the site's --text-* vars, else infer
     if (!F.type) F.type = { ramp: DEFAULT_FOUNDATION.type.ramp };
     if (!F.type.steps) {
-      if (F.type.sizes) F.type.steps = F.type.ramp.map(t => ({ token: t, px: toPx(F.type.sizes[t]), var: '--text-' + t })).sort((a, b) => a.px - b.px);
+      if (F.type.sizes) F.type.steps = F.type.ramp.map(t => ({ token: t, px: toPx(F.type.sizes[t]), var: (F.mode === 'tokens' ? '--' : '--text-') + t })).sort((a, b) => a.px - b.px);   // a tokens foundation's names ARE the variables
       else {
         const steps = F.type.ramp.map(t => ({ token: t, px: varPx('--text-' + t), var: '--text-' + t }));
         if (steps.every(x => x.px > 0)) F.type.steps = steps;
@@ -385,7 +393,7 @@
       }
     }
     if (!F.spacingSteps) {
-      const steps = (F.spacingEdited || (F.spacing || []).map(v => ({ token: String(v), px: v }))).map(x => ({ token: x.token, px: x.px, var: '--space-' + x.token }));
+      const steps = (F.spacingEdited || (F.spacing || []).map(v => ({ token: String(v), px: v }))).map(x => ({ token: x.token, px: x.px, var: (F.mode === 'tokens' ? '--' : '--space-') + x.token }));
       const ok = steps.length && steps.every(x => varPx(x.var, 'paddingTop') > 0);
       F.spacingSteps = ok ? steps : steps.map(x => ({ token: x.token, px: x.px }));   // px fallback is fine for spacing
     }
@@ -1038,7 +1046,7 @@
   // data-jig="off" excludes an element (and its subtree), data-jig-name names it.
   function autoTargets() {
     const out = new Map(); // el -> ctl
-    const skip = el => !el.offsetParent && css(el).position !== 'fixed' || el.closest('#jig-hud, .jig-tb, .jig-badge, #jig-grid, #jig-found, #jig-device, #jig-axtags, ' + OFF) || el.classList.contains('jig-crop-box') || el.classList.contains('jig-scrim-panel');
+    const skip = el => !el.offsetParent && css(el).position !== 'fixed' || el.closest(JIG_UI + ', ' + OFF) || el.classList.contains('jig-crop-box') || el.classList.contains('jig-scrim-panel');
     const add = (el, ctl) => { if (!out.has(el) && !skip(el) && Controls[ctl]) out.set(el, ctl); };
     // explicit first
     $$('[data-jig]').forEach(el => { let c = el.dataset.jig; if (c === 'heading') c = 'type'; if (c && c !== 'off') add(el, c); });
@@ -1316,7 +1324,7 @@
 
   // The page is inert while the jig is on: clicks never navigate, submit, or reach the site's own handlers.
   // Hold Alt to let a click through on purpose.
-  const inJigUI = t => !!(t && t.closest && t.closest('#jig-hud, .jig-tb, #jig-found, #jig-device, .jig-badge'));
+  const inJigUI = t => !!(t && t.closest && t.closest(JIG_UI));
   // on window, not document: a click reaches window first, and sites that swallow clicks there (Wired) would otherwise beat us to it
   on(window, 'click', e => {
     if (inJigUI(e.target) || e.altKey) return;
@@ -1379,7 +1387,7 @@
     const ci = Array.from(cols.querySelectorAll('i')).map(i => i.getBoundingClientRect()); if (ci.length < 2) return 0;
     const L = ci[0].left, R = ci[ci.length - 1].right, W = R - L; const gr = gridEl.getBoundingClientRect(); let n = 0; const done = [];
     for (const box of $$('body *')) {
-      if (n >= 8) break; if (box.closest('#jig-hud, #jig-grid, #jig-axtags, .jig-tb, #jig-device') || done.some(d => d.contains(box))) continue;
+      if (n >= 8) break; if (box.closest(JIG_UI) || done.some(d => d.contains(box))) continue;
       const fit = k => k.width >= W * 0.12 && k.height >= 60 && k.left >= L - 2 && k.right <= R + 2;
       const test = ks => {
         if (ks.length < 4) return null;
@@ -1405,7 +1413,7 @@
   function markRegions(r) {
     const gr = gridEl.getBoundingClientRect(); const L = r.left, W = r.width; const regs = [];
     for (const row of $$('body *')) {
-      if (row.closest('#jig-hud, #jig-grid, #jig-axtags, .jig-tb, #jig-device') || regs.some(g => g.el.contains(row) || row.contains(g.el))) continue;
+      if (row.closest(JIG_UI) || regs.some(g => g.el.contains(row) || row.contains(g.el))) continue;
       const ks = Array.from(row.children).filter(visible).map(k => ({ k, b: k.getBoundingClientRect() })).filter(o => o.b.width >= W * 0.2 && o.b.height >= 120 && o.b.left >= L - 40 && o.b.right <= L + W + 40);
       const side = ks.filter((o, i) => ks.some((p, j) => j !== i && p.b.top < o.b.bottom - 10 && o.b.top < p.b.bottom - 10 && (p.b.left >= o.b.right - 1 || p.b.right <= o.b.left + 1)));
       if (side.length < 2) continue;
@@ -1422,7 +1430,7 @@
     const L = ci[0].left, R = ci[ci.length - 1].right, W = R - L; const lines = ci.flatMap(c => [c.left, c.right]); const on = x => lines.some(l => Math.abs(l - x) <= 2);
     const gr = gridEl.getBoundingClientRect(); const flagged = []; let n = 0;
     for (const row of $$('body *')) {
-      if (n >= 12) break; if (row.closest('#jig-hud, #jig-grid, #jig-axtags, .jig-tb, #jig-device') || flagged.some(f => f.contains(row))) continue;
+      if (n >= 12) break; if (row.closest(JIG_UI) || flagged.some(f => f.contains(row))) continue;
       const kids = Array.from(row.children).map(k => { const r = k.getBoundingClientRect(), c = css(k); const pl = px(c.paddingLeft) + px(c.borderLeftWidth), pr = px(c.paddingRight) + px(c.borderRightWidth); return { left: r.left + pl, right: r.right - pr, top: r.top, bottom: r.bottom, width: r.width - pl - pr, height: r.height }; }).filter(k => k.width >= W * 0.08 && k.height >= 60 && k.left >= L - 2 && k.right <= R + 2);
       if (kids.length < 2) continue;
       const side = kids.filter((k, i) => kids.some((o, j) => j !== i && o.top < k.bottom - 10 && k.top < o.bottom - 10 && (o.left >= k.right - 1 || o.right <= k.left + 1)));
@@ -1464,7 +1472,7 @@
   // grade one element's own words against what's behind them; pushes contrast / busy-background / text-over-image into W.
   // Shared by the page scan and by auto fix, which re-grades just the element it changed instead of rescanning the page.
   function gradeText(t, W, seen, P) {   // any element that carries its own words: old sites put text straight into divs, tds, fonts
-    if (/^(SCRIPT|STYLE|NOSCRIPT|TEMPLATE|SVG|OPTION)$/.test(t.tagName) || !t.offsetParent || t.closest('#jig-hud, .jig-tb, #jig-found, #jig-device, #jig-axtags, .jig-badge, #jig-grid')) return;
+    if (/^(SCRIPT|STYLE|NOSCRIPT|TEMPLATE|SVG|OPTION)$/.test(t.tagName) || !t.offsetParent || t.closest(JIG_UI)) return;
     const own = Array.from(t.childNodes).some(n => n.nodeType === 3 && n.textContent.trim());
     if (!own) return;
     const fg = parseColor(css(t).color); if (!fg || fg[3] === 0) return;
@@ -1513,12 +1521,12 @@
   function scanNow() {
     const P = state.F.protect || {}; const W = [];
     // 1. heading order
-    const hs = $$('h1,h2,h3,h4,h5,h6').filter(h => h.offsetParent && !h.closest('#jig-hud'));
+    const hs = $$('h1,h2,h3,h4,h5,h6').filter(h => h.offsetParent && !h.closest(JIG_UI));
     let last = 0;
     hs.forEach(h => { const n = +h.tagName[1]; if (last && n > last + 1) W.push({ kind: 'heading-order', el: h, msg: `h${last} → h${n} skips a level` }); last = n; });
     // 0. alt text: every visible content image needs an alt attribute; "" is fine (decorative), a filename is not
     $$('img').forEach(img => {
-      if (!img.offsetParent || img.closest('#jig-hud, .jig-tb, #jig-found, #jig-device') || img.width < 24 || img.height < 24) return;
+      if (!img.offsetParent || img.closest(JIG_UI) || img.width < 24 || img.height < 24) return;
       if (img.getAttribute('role') === 'presentation' || img.getAttribute('aria-hidden') === 'true') return;
       if (!img.hasAttribute('alt')) W.push({ kind: 'alt', el: img, msg: 'image has no alt attribute' });
       else { const a = img.getAttribute('alt').trim(); if (a && (/\.(jpe?g|png|gif|webp|svg|avif)$/i.test(a) || /^(image|img|photo|picture|dsc|img_)[\s_\-\d]*$/i.test(a))) W.push({ kind: 'alt', el: img, msg: `alt text looks like a placeholder: "${a.slice(0, 40)}"` }); }
@@ -1527,7 +1535,7 @@
     const h1 = hs.find(h => h.tagName === 'H1');
     if (h1) {
       const h1px = px(css(h1).fontSize); const big = hs.filter(h => h.tagName === 'H2' && px(css(h).fontSize) > h1px);
-      const pv = $$('p, li').filter(t => t.offsetParent && (t.textContent || '').trim().length >= 40 && !t.closest('#jig-hud, #jig-found')).map(t => px(css(t).fontSize)).sort((a, b) => a - b); const body0 = pv.length ? pv[pv.length >> 1] : 16;
+      const pv = $$('p, li').filter(t => t.offsetParent && (t.textContent || '').trim().length >= 40 && !t.closest(JIG_UI)).map(t => px(css(t).fontSize)).sort((a, b) => a - b); const body0 = pv.length ? pv[pv.length >> 1] : 16;
       // a logo or hidden h1 isn't a size reference: the h1 is what's wrong, not every headline on the page
       const weakH1 = srOnly(h1) || !!h1.querySelector('img, svg, picture') || h1.closest('header, nav, [class*="logo"], [class*="brand"]') || h1px <= body0 * 1.1;
       if (big.length && (weakH1 || big.length > 3)) { const top = big.slice().sort((a, b) => px(css(b).fontSize) - px(css(a).fontSize))[0];
@@ -1535,7 +1543,7 @@
       else big.forEach(h => W.push({ kind: 'hierarchy', el: h, msg: `h2 renders at ${r1(px(css(h).fontSize))}px, larger than the h1 (${r1(h1px)}px)` }));
     }
     // 1c. a heading that renders no larger than body copy isn't reading as a heading
-    const bodyPx = (() => { const ps = $$('p, li, dd, td').filter(t => t.offsetParent && (t.textContent || '').trim().length >= 40 && !t.closest('#jig-hud, #jig-found')); if (!ps.length) return 16; const v = ps.map(t => px(css(t).fontSize)).sort((a, b) => a - b); return v[Math.floor(v.length / 2)]; })();
+    const bodyPx = (() => { const ps = $$('p, li, dd, td').filter(t => t.offsetParent && (t.textContent || '').trim().length >= 40 && !t.closest(JIG_UI)); if (!ps.length) return 16; const v = ps.map(t => px(css(t).fontSize)).sort((a, b) => a - b); return v[Math.floor(v.length / 2)]; })();
     const localBody = h => {   // the body text this heading sits with: a following sibling text block, else one inside the same parent, else the page's
       const ok = t => t && t !== h && !h.contains(t) && /^(P|LI|DD|TD|FIGCAPTION|SMALL|SPAN|DIV)$/.test(t.tagName) && (t.textContent || '').trim().length >= 20 && !/^H[1-6]$/.test(t.tagName);
       let n = h.nextElementSibling; while (n && !ok(n)) n = n.nextElementSibling; if (n) return px(css(n).fontSize);
@@ -1554,7 +1562,7 @@
     const taps = new Set($$('button, [role=button], [data-jig=button], .jig-el[data-jig-ctl="button"], input[type=submit], input[type=button]'));
     $$('a').forEach(a => { if (looksLikeButton(a)) taps.add(a); });
     taps.forEach(b => {
-      if (!b.offsetParent || b.closest('#jig-hud, .jig-tb, #jig-found, #jig-device')) return; const r = b.getBoundingClientRect();
+      if (!b.offsetParent || b.closest(JIG_UI)) return; const r = b.getBoundingClientRect();
       if (r.height < min - 0.5) W.push({ kind: 'tap-target', el: b, msg: `tap target ${Math.round(r.width)}×${Math.round(r.height)}px, min ${min}px tall${min <= 24 ? ' (WCAG 2.2 AA)' : ''}` });
       else if (r.width < min - 0.5) W.push({ kind: 'tap-target', el: b, narrow: true, msg: `tap target ${Math.round(r.width)}×${Math.round(r.height)}px, min ${min}px wide` });
       // a label that wraps inside a button reads as two buttons
@@ -1565,13 +1573,13 @@
     });
     // 2b. buttons and links with nothing a screen reader can say
     $$('a, button, [role=button]').forEach(b => {
-      if (!b.offsetParent || b.closest('#jig-hud, .jig-tb, #jig-found, #jig-device, #jig-axtags')) return;
+      if (!b.offsetParent || b.closest(JIG_UI)) return;
       if (b.getAttribute('aria-hidden') === 'true' || b.closest('[aria-hidden="true"]') || b.getAttribute('tabindex') === '-1' || srOnly(b) || (b.tagName === 'A' && !b.hasAttribute('href'))) return;   // not reachable by keyboard or screen reader
       const name = (b.getAttribute('aria-label') || b.getAttribute('title') || b.textContent || '').trim() || Array.from(b.querySelectorAll('img[alt], [aria-label], svg title')).map(i => (i.getAttribute('alt') || i.getAttribute('aria-label') || i.textContent || '').trim()).join(' ').trim() || (b.getAttribute('aria-labelledby') ? 'x' : '');
       if (!name) {
         // the common case: a thumbnail link to the same page as the headline link beside it. The headline already names it; the thumbnail should step out of the way.
         const href = b.tagName === 'A' && b.getAttribute('href');
-        const twin = href && $$('a[href]').find(x => x !== b && x.getAttribute('href') === href && (x.textContent || '').trim().length > 2 && !x.closest('#jig-hud'));
+        const twin = href && $$('a[href]').find(x => x !== b && x.getAttribute('href') === href && (x.textContent || '').trim().length > 2 && !x.closest(JIG_UI));
         if (twin) W.push({ kind: 'dup-link', el: b, msg: 'image link repeats the headline link beside it; hide it from keyboard and screen readers (aria-hidden="true" tabindex="-1")' });
         else W.push({ kind: 'no-name', el: b, msg: `${b.tagName === 'A' ? 'link' : 'button'} has no accessible name (no text, alt, or aria-label)` });
       }
@@ -1581,7 +1589,7 @@
     // 2d. body copy too small to read, and measures too long or short to read comfortably
     const phone = state.bp === 'phone'; const minBody = 14;
     $$('body *').forEach(t => {
-      if (/^(SCRIPT|STYLE|NOSCRIPT|TEMPLATE|SVG|H[1-6]|BUTTON|A|LABEL|OPTION)$/.test(t.tagName) || !t.offsetParent || t.closest('#jig-hud, .jig-tb, #jig-found, #jig-device, #jig-axtags, nav, footer, small, .jig-badge')) return;
+      if (/^(SCRIPT|STYLE|NOSCRIPT|TEMPLATE|SVG|H[1-6]|BUTTON|A|LABEL|OPTION)$/.test(t.tagName) || !t.offsetParent || t.closest(JIG_UI + ', nav, footer, small')) return;
       const ownTxt = Array.from(t.childNodes).filter(n => n.nodeType === 3).map(n => n.textContent).join(' ').trim(); if (ownTxt.length < 40) return; const txt = ownTxt;
       if (css(t).textTransform === 'uppercase' || /footer|copyright|legal|colophon|credit/i.test((t.id || '') + ' ' + (t.className || '') + ' ' + ((t.closest('[id*="footer"],[class*="footer"]') || {}).tagName || ''))) return;   // labels and fine print aren't body copy
       const c = css(t); const f = px(c.fontSize);
@@ -1593,7 +1601,7 @@
     });
     // 2e. text spilling out of its box
     $$('h1, h2, h3, h4, h5, h6, p, li, a, button, span, div').forEach(t => {
-      if (!t.offsetParent || t.closest('#jig-hud, .jig-tb, #jig-found, #jig-device, #jig-axtags, .jig-crop-box') || t.tagName === 'DIV' && !Array.from(t.childNodes).some(n => n.nodeType === 3 && n.textContent.trim())) return;
+      if (!t.offsetParent || t.closest(JIG_UI) || t.tagName === 'DIV' && !Array.from(t.childNodes).some(n => n.nodeType === 3 && n.textContent.trim())) return;
       if (srOnly(t)) return;   // visually hidden on purpose (skip links, screen-reader labels)
       const c = css(t); if (c.overflow !== 'visible' && c.overflow !== '') return;
       if (!onPage(t)) return;   // off-canvas menus, collapsed drawers and faded-out panels aren't overflowing, they're parked
@@ -1607,7 +1615,7 @@
     });
     // 2f. images rendering past their native resolution (soft), and faces the crop leaves out
     $$('img').forEach(img => {
-      if (!img.offsetParent || !img.naturalWidth || img.closest('#jig-hud, #jig-device')) return;
+      if (!img.offsetParent || !img.naturalWidth || img.closest(JIG_UI)) return;
       const r = img.getBoundingClientRect(); const z = (img.__jigZoom ? img.__jigZoom() : 1);
       const scale = Math.max(r.width / img.naturalWidth, r.height / img.naturalHeight) * z;
       if (scale > 1.5) W.push({ kind: 'soft', el: img, msg: `image rendered at ${scale.toFixed(1)}× its native pixels${z > 1 ? ` (zoom ${z.toFixed(2)})` : ''}; it will look soft` });
@@ -1617,7 +1625,7 @@
     { const seen = new Set(); $$('body *').forEach(t => gradeText(t, W, seen, P)); }
     W.forEach(w => { if (w.el && w.el.classList && w.el.classList.contains('jig-scrim-panel') && w.el.parentElement) w.el = w.el.parentElement; });
     // 9. page and form basics, links and empty headings: the first things a screen reader user runs into
-    { const root = document.documentElement; const jigUI = x => x.closest('#jig-hud, .jig-tb, #jig-found, #jig-device, #jig-axtags, .jig-badge');
+    { const root = document.documentElement; const jigUI = x => x.closest(JIG_UI);
       // out of everyone's reach: hidden from assistive tech, or parked off the page (spam traps like Mailchimp's sit at left: -5000px)
       const unreachable = x => { if (x.closest('[aria-hidden="true"], [inert]')) return true; const r = x.getBoundingClientRect(); return r.right <= 0 || r.bottom + window.scrollY <= 0 || r.left >= document.documentElement.scrollWidth; };
       if (!(root.getAttribute('lang') || '').trim()) W.push({ kind: 'lang', el: root, page: true, msg: 'no lang attribute on <html>; screen readers have to guess the language and may read every word with the wrong accent' });
@@ -1735,7 +1743,7 @@
   function getPainters() {
     if (painters) return painters; painters = [];
     for (const e of document.body.querySelectorAll('*')) {
-      if (e.closest('#jig-hud, #jig-axtags, .jig-tb, .jig-badge, #jig-grid, #jig-found, #jig-device') || /^(SCRIPT|STYLE|TEMPLATE|LINK|META)$/.test(e.tagName)) continue;
+      if (e.closest(JIG_UI) || /^(SCRIPT|STYLE|TEMPLATE|LINK|META)$/.test(e.tagName)) continue;
       const c = css(e); const bg = parseColor(c.backgroundColor); const pic = /^(IMG|VIDEO|CANVAS)$/.test(e.tagName) || /url\(/.test(c.backgroundImage) || (/gradient\(/.test(c.backgroundImage) && gradientStops(c.backgroundImage).every(g => g[3] >= 0.9));
       if (!(bg && bg[3] > 0.9) && !pic) continue;
       const r = e.getBoundingClientRect(); if (r.width < 8 || r.height < 8 || c.visibility === 'hidden' || +c.opacity === 0) continue;
@@ -2311,7 +2319,7 @@
     const { typeSteps, spaceSteps } = quantizeScales(res);
     state.normalizeRes = res;
     // buttons are left to the button control (their padding IS their size); snapping them would shrink tap targets the scan then has to grow back
-    const skipEl = el => el.closest('#jig-hud, .jig-tb, #jig-found, #jig-device, .jig-badge, #jig-axtags, #jig-grid, script, style, svg, ' + OFF) || el === document.body || el === document.documentElement || !visible(el) || el.dataset.jigCtl === 'button' || el.closest('.jig-el[data-jig-ctl="button"]') || srOnly(el);
+    const skipEl = el => el.closest(JIG_UI + ', script, style, svg, ' + OFF) || el === document.body || el === document.documentElement || !visible(el) || el.dataset.jigCtl === 'button' || el.closest('.jig-el[data-jig-ctl="button"]') || srOnly(el);
     const autoMargin = (() => {   // margins authored as auto compute to px; snapping that number would break the layout
       const rules = []; for (const sh of Array.from(document.styleSheets)) { try { for (const r of Array.from(sh.cssRules || [])) if (r.style && /auto/.test(r.style.margin + r.style.marginTop + r.style.marginBottom + r.style.marginLeft + r.style.marginRight + r.style.marginBlock + r.style.marginInline)) rules.push(r); } catch (e) {} }
       return (el, prop) => { if (/auto/.test(el.style.getPropertyValue(prop) + el.style.margin)) return true; const side = prop.replace('margin-', ''); return rules.some(r => { try { if (!el.matches(r.selectorText)) return false; } catch (e) { return false; } const st = r.style; const v = st.getPropertyValue(prop) || ((side === 'top' || side === 'bottom') ? st.marginBlock : st.marginInline) || ''; if (/auto/.test(v)) return true; const m = (st.margin || '').split(/\s+/); if (!m[0]) return false; const idx = { top: 0, right: 1, bottom: m.length > 2 ? 2 : 0, left: m.length > 3 ? 3 : (m.length > 1 ? 1 : 0) }[side]; return /auto/.test(m[idx] || ''); }); };
@@ -2385,7 +2393,7 @@
     // "Off grid" means off from its neighbours: a block that sits a few px left or right of the edge its siblings share.
     // That's what a nudged card row looks like on any site, with or without a declared grid.
     const done = new Set();
-    const blocks = $$('body *').filter(el => { if (el.closest('#jig-hud, .jig-tb, #jig-found, #jig-device, #jig-axtags, .jig-crop-box, .jig-scrim-panel') || !visible(el)) return false; const c = css(el); return /block|flex|grid|table/.test(c.display) && c.position !== 'fixed' && c.position !== 'absolute' && c.float === 'none'; });
+    const blocks = $$('body *').filter(el => { if (el.closest(JIG_UI) || !visible(el)) return false; const c = css(el); return /block|flex|grid|table/.test(c.display) && c.position !== 'fixed' && c.position !== 'absolute' && c.float === 'none'; });
     const byParent = new Map(); blocks.forEach(el => { const p0 = el.parentElement; if (!byParent.has(p0)) byParent.set(p0, []); byParent.get(p0).push(el); });
     byParent.forEach(kids => {
       if (kids.length < 3) return;
@@ -2719,7 +2727,7 @@
     const F = state.F; const A = autoScale(); const steps = A ? A.type : (F.type.steps || []);
     const G = F.grid.desktop ? { ...F.grid.desktop, maxWidth: F.grid.maxWidth, phone: { columns: F.grid.columns, gutter: F.grid.gutter, margin: F.grid.margin } } : { columns: F.grid.columns, gutter: F.grid.gutter, margin: F.grid.margin, maxWidth: F.grid.maxWidth, phone: F.grid.phone || { columns: 4, gutter: 16, margin: 16 } };
     // a tokens foundation keeps its token names and source, so a reload (or the saved copy) speaks the same language
-    const tok = F.mode === 'tokens' ? { mode: 'tokens', source: F.source, tokenCounts: F.tokenCounts, spacingSteps: F.spacingSteps, radius: F.radius } : {};
+    const tok = F.mode === 'tokens' ? { mode: 'tokens', source: F.source, tokenCounts: F.tokenCounts, spacingSteps: F.spacingSteps, spacingEdited: F.spacingEdited, radius: F.radius } : {};
     return { name: F.name, version: 1, grid: G, breakpoints: F.breakpoints || DEFAULT_FOUNDATION.breakpoints, ...tok,
       spacing: (A ? A.space : (F.spacingSteps || [])).map(x => x.px), type: { ramp: steps.map(x => x.token), sizes: Object.fromEntries(steps.map(x => [x.token, x.px])), ...(F.mode === 'tokens' ? { steps: F.type.steps, fromTokens: true } : {}) },
       buttons: F.buttons.mode === 'measured' ? { sizes: F.buttons.sizes.map(x => x.token), variants: F.buttons.variants.map(x => x.token), classPrefix: 'btn-', measured: { sizes: F.buttons.sizes, variants: F.buttons.variants } } : F.buttons, protect: F.protect };
@@ -2891,7 +2899,7 @@
     const t0 = Date.now(); let settles = 0;
     const mo = new MutationObserver(ms => {
       if (Date.now() - t0 > 20000 || settles >= 4 || state.lastScanMs > 250) { mo.disconnect(); return; }   // busy pages (ads, carousels) don't get to keep the jig rescanning
-      if (!scanTimer && ms.some(m => !(m.target.closest && m.target.closest('#jig-hud, #jig-axtags, #jig-device, .jig-tb, #jig-found, .jig-scrim-panel')) && Array.from(m.addedNodes).some(n => n.nodeType === 1 && !(n.id || '').startsWith('jig-') && !(n.className && String(n.className).includes('jig-'))))) { settles++; scanSoon(); }
+      if (!scanTimer && ms.some(m => !(m.target.closest && m.target.closest(JIG_UI)) && Array.from(m.addedNodes).some(n => n.nodeType === 1 && !(n.id || '').startsWith('jig-') && !(n.className && String(n.className).includes('jig-'))))) { settles++; scanSoon(); }
     });
     mo.observe(document.body, { childList: true, subtree: true });
     window.__jig = { state, patch: buildPatch, scan: scanProtection, Controls, report: buildAXReport, reportHTML, reportMarkdown, fixAX, get gridDebug() { return gridDebug; } };   // gridDebug: what the grid measuring saw

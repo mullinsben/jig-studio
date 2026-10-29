@@ -1,8 +1,9 @@
 // a site that points at its design system (data-foundation=URL) gets its own type ramp and spacing scale, by name
 const { chromium } = require('playwright');
 const want = {
-  'page-json': { type: ['font-size-xs', 'font-size-sm', 'font-size-base', 'font-size-lg', 'font-size-xl', 'font-size-2xl', 'font-size-3xl'], typePx: [12, 14, 16, 20, 24, 32, 48], space: [4, 8, 12, 16, 24, 32, 48, 64], grid: { columns: 12, gutter: 24 } },
-  'page-studio': { type: ['global-fontsizes-caption', 'global-fontsizes-body', 'global-fontsizes-h3', 'global-fontsizes-h2', 'global-fontsizes-h1', 'global-typography-hero'], typePx: [12, 16, 20, 28, 40, 56], space: [4, 8, 16, 24, 40] },
+  'page-json': { name: 'localhost', type: ['font-size-xs', 'font-size-sm', 'font-size-base', 'font-size-lg', 'font-size-xl', 'font-size-2xl', 'font-size-3xl'], typePx: [12, 14, 16, 20, 24, 32, 48], space: [4, 8, 12, 16, 24, 32, 48, 64], grid: { columns: 12, gutter: 24 } },
+  'page-studio': { name: 'tokens-studio', type: ['global-fontsizes-caption', 'global-fontsizes-body', 'global-fontsizes-h3', 'global-fontsizes-h2', 'global-fontsizes-h1', 'global-typography-hero'], typePx: [12, 16, 20, 28, 40, 56], space: [4, 8, 16, 24, 40] },
+  'page-fc': { type: ['text-2xs', 'text-xs', 'text-sm', 'text-md', 'text-lg', 'text-xl', 'text-2xl', 'text-3xl', 'text-4xl', 'text-5xl', 'text-6xl'], typePx: [12, 13, 14, 16, 17, 22, 28, 36, 48, 64, 80], space: [4, 8, 12, 16, 20, 24, 32, 40, 48, 64, 80, 96, 128] },   // Frontier Creatives' real tokens.css
   'page-css': { type: ['font-size-100', 'font-size-200', 'font-size-300', 'font-size-400', 'font-size-500', 'font-size-600'], typePx: [12, 14, 16, 20, 25, 31], space: [4, 8, 16, 24, 40] },
 };
 (async () => {
@@ -12,7 +13,8 @@ const want = {
     await p.goto(`http://localhost:8765/tests/tokens/${pg}.html?jig`); await p.waitForSelector('#jig-hud'); await p.waitForTimeout(1200);
     const r = await p.evaluate(() => { const F = window.__jig.state.F; return { mode: F.mode, name: F.name, src: document.getElementById('jig-src').textContent, type: F.type.steps.map(x => x.token), typePx: F.type.steps.map(x => x.px), vars: F.type.steps.map(x => x.var), space: F.spacingSteps.map(x => x.px), spaceTok: F.spacingSteps.map(x => x.token), grid: { columns: F.grid.columns, gutter: F.grid.gutter }, radius: F.radius, bp: F.breakpoints, patch: window.__jig.patch().split('\n').filter(l => /^foundation:/.test(l))[0] }; });
     const eq = (a, b) => JSON.stringify(a) === JSON.stringify(b);
-    const ok = r.mode === 'tokens' && eq(r.type, w.type) && eq(r.typePx, w.typePx) && eq(r.space, w.space) && (!w.grid || (r.grid.columns === w.grid.columns && r.grid.gutter === w.grid.gutter)) && !errs.length;
+    const nameOk = w.name ? r.name === w.name : true;
+    const ok = nameOk && r.mode === 'tokens' && eq(r.type, w.type) && eq(r.typePx, w.typePx) && eq(r.space, w.space) && (!w.grid || (r.grid.columns === w.grid.columns && r.grid.gutter === w.grid.gutter)) && !errs.length;
     if (!ok) bad++;
     console.log(ok ? 'OK  ' : 'FAIL', pg, JSON.stringify({ mode: r.mode, name: r.name, type: r.type, typePx: r.typePx, space: r.space, spaceTok: r.spaceTok, grid: r.grid, radius: r.radius, bp: r.bp }), errs);
     if (pg === 'page-json') console.log('   hud:', r.src, '\n   patch:', r.patch, '\n   vars:', r.vars.slice(0, 3).join(', '));
@@ -33,7 +35,13 @@ const want = {
     const a = await p.evaluate(() => ({ mode: window.__jig.state.F.mode, name: window.__jig.state.F.name, first: window.__jig.state.F.type.steps[0].token }));
     await p.reload(); await p.waitForSelector('#jig-hud'); await p.waitForTimeout(800);
     const r = await p.evaluate(() => ({ mode: window.__jig.state.F.mode, name: window.__jig.state.F.name, first: window.__jig.state.F.type.steps[0].token, src: document.getElementById('jig-src').textContent.slice(0, 90) }));
-    const ok = a.name === 'tokens-studio' && r.mode === 'tokens' && r.first === 'global-fontsizes-caption'; if (!ok) bad++; console.log(ok ? 'OK  ' : 'FAIL', 'panel load + reload →', JSON.stringify({ a, r }));
+    const chk = await p.evaluate(() => { const F = window.__jig.state.F; return { s0: F.type.steps[0], s3: F.type.steps[3], sp: F.spacingSteps[1] }; });
+    const ok = a.name === 'tokens-studio' && r.mode === 'tokens' && r.first === 'global-fontsizes-caption' && chk.s0.px === 12 && chk.s0.var === '--global-fontsizes-caption' && chk.s3.px === 28 && chk.sp.token === 'global-spacing-sm' && chk.sp.px === 8 && chk.sp.var === '--global-spacing-sm'; if (!ok) bad++; console.log('   after reload:', JSON.stringify(chk)); console.log(ok ? 'OK  ' : 'FAIL', 'panel load + reload →', JSON.stringify({ a, r }));
     await p.evaluate(() => localStorage.removeItem('__jig-foundation:' + location.host)); await p.close(); }
+  // the jig's own panels are furniture, not page: open the foundation panel, rescan, nothing in it may be a finding
+  { const p = await b.newPage({ viewport: { width: 1280, height: 800 } }); await p.goto('http://localhost:8765/tests/tokens/page-json.html?jig'); await p.waitForSelector('#jig-hud'); await p.waitForTimeout(600);
+    await p.evaluate(() => { document.getElementById('jig-adv-btn').click(); document.getElementById('jig-found-btn').click(); }); await p.waitForSelector('#jf-url');
+    const n = await p.evaluate(() => { window.__jig.scan(); return window.__jig.state.warnings.filter(w => w.el && w.el.closest && w.el.closest('#jig-found, #jig-hud')).map(w => w.kind + ' ' + (w.el.id || w.el.tagName)); });
+    const ok = n.length === 0; if (!ok) bad++; console.log(ok ? 'OK  ' : 'FAIL', 'jig UI never audited →', JSON.stringify(n)); await p.close(); }
   await b.close(); process.exit(bad ? 1 : 0);
 })();
