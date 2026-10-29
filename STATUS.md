@@ -1,4 +1,4 @@
-# Jig Studio · status · 2026-10-22 (end of day)
+# Jig Studio · status · 2026-10-29
 
 Read this first in a new session. Memory has the decisions; this has the state.
 
@@ -73,3 +73,18 @@ Open:
 3. AX rule batch 2: focus visible (needs programmatic focus; careful on real sites: menus open, pages scroll), target spacing, 200% zoom reflow, reduced motion, autoplaying media.
 4. Report v2 ideas: element screenshots, device-frame findings as their own section (today a short list), a sitemap-wide report.
 5. Real-site QA of the report needs this build hosted (push capybutz.com) since the container can't reach outside sites.
+
+## Oct 24 to 29 2026 (Fable)
+Theme: stop the whack-a-mole. Rule adopted: **loading `?jig` changes nothing on the page until someone touches it.** Two checks enforce it:
+- `tests/zeropixel.js`: screenshots a page twice without the jig (the page's own motion is masked), then with it (jig UI and highlight classes hidden); any other changed pixel fails, diff images land in `tests/zeropixel-out/`. Takes real URLs on a machine that can reach them. Corpus: demo, legacy, layers, builder, overlay-header, rules1, inline-img, bigpage. Catches the Oct 23 logo bug when it's put back.
+- `tests/zerochange-probe.js`: the same idea at the DOM level (rects + rendering styles of every element), pasteable into any site's console or run through a browser tool. Used on GeekWire, Engadget, Choober Doobers, Three Seasons and Cliff Mass with the live build: it found the two load-time changes below.
+Fixed from real-site patches (Cliff Mass, Engadget, ESD, AP News, Capybutz):
+- the crop control set `overflow:hidden` on every image's parent at load (could clip badges/menus) and wrapped images in the clip box at load (an inline `<img>` at `width:100%` fell back to natural size; Cliff Mass lost 107px of page). Both now happen at the first zoom only; the wrap is pinned to the image's pre-wrap size if wrapping would change it, and waits until a drag gesture ends (a DOM move mid-gesture eats the click).
+- the scrim panel hugged the words (`fit-content`) even with no scrim on; now only with a scrim (`.jig-on`).
+- Fix what I can shipped unverified tints behind text over images it couldn't read (AP: 33 of them) and tried three tint strengths with a full-page rescan each (AP: 189 scans; Chrome's "unresponsive" dialog). Unreadable images now stay notes and cost no scans; fixes verify themselves by re-grading only their own element (`gradeText` / `textFails`, split out of the scan); a 3.5s budget hands control back with the button reading **Fix more**. 200 fixes on `tests/bigpage.html` take ~0.5s.
+- Fix what I can is WCAG A/AA only (plus dup-link's aria-only fix); hierarchy / small text / wrapping buttons stay with auto fix. Cliff Mass had +3-step heading bumps labelled as accessibility fixes.
+- the overflow rule measured off-canvas menus (Engadget: 38 "8px past its box" in a hidden nav) and padded children; it now requires the element to be on the page (`onPage`) and measures the text range itself.
+- `readRootVars` took any `--text-*` variable as a type size (Engadget: `--text-body-family: 10px`, `--text-header-height: 216px`); now only length values, names not about family/weight/height/etc., and at least half the ramp must appear as rendered font sizes, else it falls back to inference.
+- "serve over http to enable" wording replaced: the image is served from another domain, so the browser hides its pixels.
+- click blocker listens on window (Wired swallows document-level clicks; still unconfirmed there, the pane can't open wired.com).
+Open from these sessions: Wired "advanced" button (need Ben's console output); the tap-target fix on AP stepped buttons md → xl (49px), check the inferred button scale; ESD left two 2.9:1 contrasts unfixed (why?); Ben wants the jig to **load someone's design system** (tokens file) and infer from it; real-site zero-pixel runs from Ben's terminal (needs `npm i playwright sharp` in the repo).

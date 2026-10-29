@@ -29,7 +29,7 @@ for (let i = 0; i < args.length; i++) {
 }
 const LOCAL = 'http://localhost:8765/';
 if (!urls.length) urls.push(...[
-  'demo/', 'demo/legacy/', 'tests/layers.html', 'tests/builder.html', 'tests/overlay-header.html', 'tests/rules1.html',
+  'demo/', 'demo/legacy/', 'tests/layers.html', 'tests/builder.html', 'tests/overlay-header.html', 'tests/rules1.html', 'tests/inline-img.html', 'tests/bigpage.html',
 ].map(u => LOCAL + u));
 
 const JIG = fs.readFileSync(jigPath, 'utf8');

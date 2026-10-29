@@ -108,9 +108,19 @@
       }
     }
     const names = Object.keys(found); if (!names.length) return null;
-    const pick = (re) => names.filter(n => re.test(n)).map(n => ({ var: n, token: n.replace(re, ''), px: toPx(found[n]) })).filter(x => x.px > 0 && x.px < 400).sort((a, b) => a.px - b.px);
-    const type = pick(/^--(?:text|font-size|fs|type|typo|size)-/i);
-    const space = pick(/^--(?:space|spacing|sp|gap)-/i);
+    // a scale step is a length (px/rem/em, or a calc/clamp of one), named for a size and not for something else: Engadget's
+    // --text-body-family and --text-header-height both start with "text" and neither is a type size
+    const isLen = v => /^-?[\d.]+(px|rem|em)$/.test(v) || /^(calc|clamp|min|max)\(/.test(v);
+    const NOT = /family|weight|transform|letter|tracking|line|leading|height|width|icon|logo|header|footer|nav|radius|shadow|colou?r|opacity|duration|ease|index|offset/i;
+    const pick = (re, lo, hi) => names.filter(n => re.test(n) && !NOT.test(n.replace(re, '')) && isLen(found[n])).map(n => ({ var: n, token: n.replace(re, ''), px: toPx(found[n]) })).filter(x => x.px >= lo && x.px <= hi).sort((a, b) => a.px - b.px);
+    let type = pick(/^--(?:text|font-size|font|fs|type|typo|size)-/i, 9, 120);
+    const space = pick(/^--(?:space|spacing|sp|gap)-/i, 1, 200);
+    // the ramp must be the one the page is set in: at least half its steps have to show up as rendered font sizes
+    if (type.length >= 3) {
+      const used = new Set(); $$('h1, h2, h3, h4, h5, h6, p, li, a, span, button, label, td').slice(0, 1500).forEach(el => used.add(Math.round(px(css(el).fontSize) * 2) / 2));
+      const hits = type.filter(t => used.has(Math.round(t.px * 2) / 2)).length;
+      if (hits < Math.ceil(type.length / 2)) type = [];
+    }
     if (type.length < 3 && space.length < 3) return null;   // vars exist but say nothing about scales
     const F = JSON.parse(JSON.stringify(DEFAULT_FOUNDATION));
     F.name = (location.hostname || 'site').replace(/^www\./, ''); F.mode = 'vars';
@@ -370,6 +380,14 @@
   const srOnly = el => { const r = el.getBoundingClientRect(); if (r.width <= 2 || r.height <= 2) return true; const c = css(el); if (/rect\(0|inset\(50%|inset\(100%/.test(c.clip + ' ' + c.clipPath) || px(c.textIndent) <= -500) return true;
     for (let p = el.parentElement, d = 0; p && d < 3; p = p.parentElement, d++) { const pc = css(p); if (px(pc.textIndent) <= -500) return true; if (/hidden|clip/.test(pc.overflow + pc.overflowX + pc.overflowY)) { const pr = p.getBoundingClientRect(); const ix = Math.min(r.right, pr.right) - Math.max(r.left, pr.left), iy = Math.min(r.bottom, pr.bottom) - Math.max(r.top, pr.top); if (ix <= 2 || iy <= 2) return true; } }
     return false; };
+  // on the page as a reader would meet it: not faded out, not hidden, and inside the document's box (an off-canvas
+  // menu slid out to the left is still "rendered", but nobody is reading it)
+  const onPage = el => {
+    if (el.checkVisibility && !el.checkVisibility({ opacityProperty: true, visibilityProperty: true })) return false;
+    for (let p = el, d = 0; p && p !== document.body && d < 12; p = p.parentElement, d++) { const c = css(p); if (c.visibility === 'hidden' || parseFloat(c.opacity) === 0) return false; }
+    const r = el.getBoundingClientRect(); const dw = Math.max(document.documentElement.scrollWidth, window.innerWidth);
+    return r.right > 0 && r.left < dw && r.bottom + window.scrollY > 0;
+  };
   function nearest(list, value, get) {
     let best = list[0], d = Infinity;
     for (const it of list) { const dd = Math.abs((get ? get(it) : it) - value); if (dd < d) { d = dd; best = it; } }
@@ -420,21 +438,39 @@
         tr: el.style.transform || '', to: el.style.transformOrigin || '', opInline: isImg ? (el.style.objectPosition || '') : (el.style.backgroundPosition || ''),
         fit: isImg ? css(el).objectFit : ''
       };
-      let parent = el.parentElement;
-      if (isImg) {
-        // the image needs a box of its own to be clipped in. If its parent holds other things too (a caption, a paragraph), a scaled image would
-        // paint over them, so the jig wraps the image in a tight block that clips. The wrapper is removed on unwire.
+      const parent = el.parentElement;
+      // the image needs a box of its own to be clipped in. If its parent holds other things too (a caption, a paragraph), a scaled image
+      // would paint over them, so the jig wraps the image in a tight block that clips. Nothing happens at load: the wrapper is made at the
+      // first zoom (the only time it's needed), because wrapping an image can change its size (an inline <img> at width:100% inside a
+      // shrink-wrapped box falls back to its natural size; Cliff Mass lost 107px of page that way). The wrapper is removed on unwire.
+      const needsWrap = isImg && (() => {
         const siblings = Array.from(parent.children).filter(c => c !== el && css(c).position !== 'absolute');
         const loose = parent.getBoundingClientRect().height > el.getBoundingClientRect().height + 6;
-        if ((siblings.length || loose) && !/^(PICTURE|A)$/.test(parent.tagName) && !/absolute|fixed/.test(css(el).position)) {   // a positioned image is already its own layer; wrapping it would collapse it to nothing
-          const w = document.createElement('div'); w.className = 'jig-crop-box';
-          const d = css(el).display; w.style.cssText = `display:${d === 'inline' || d === 'inline-block' ? 'inline-block' : 'block'};overflow:hidden;position:relative;line-height:0;width:${d === 'inline' || d === 'inline-block' ? 'auto' : '100%'};`;
-          ['margin', 'float', 'border-radius'].forEach(k => { const v = el.style.getPropertyValue(k); if (v) w.style.setProperty(k, v); });
-          const cm = css(el); if (cm.float !== 'none') { w.style.float = cm.float; w.style.width = cm.width; w.style.marginRight = cm.marginRight; w.style.marginLeft = cm.marginLeft; }
-          parent.insertBefore(w, el); w.appendChild(el); el.__jigWrap = w; parent = w;
+        return (siblings.length || loose) && !/^(PICTURE|A)$/.test(parent.tagName) && !/absolute|fixed/.test(css(el).position);   // a positioned image is already its own layer; wrapping it would collapse it
+      })();
+      const wrapNow = () => {
+        if (el.__jigWrap || !needsWrap) return el.__jigWrap || null;
+        const r0 = el.getBoundingClientRect();
+        const w = document.createElement('div'); w.className = 'jig-crop-box';
+        const d = css(el).display; w.style.cssText = `display:${d === 'inline' || d === 'inline-block' ? 'inline-block' : 'block'};overflow:hidden;position:relative;line-height:0;width:${d === 'inline' || d === 'inline-block' ? 'auto' : '100%'};`;
+        ['margin', 'float', 'border-radius'].forEach(k => { const v = el.style.getPropertyValue(k); if (v) w.style.setProperty(k, v); });
+        const cm = css(el); if (cm.float !== 'none') { w.style.float = cm.float; w.style.width = cm.width; w.style.marginRight = cm.marginRight; w.style.marginLeft = cm.marginLeft; }
+        parent.insertBefore(w, el); w.appendChild(el); el.__jigWrap = w;
+        // if the wrap changed the picture's size, pin the box to the size the picture had and let the picture fill it
+        const r1 = el.getBoundingClientRect();
+        if (Math.abs(r1.width - r0.width) > 1 || Math.abs(r1.height - r0.height) > 1) {
+          el.__jigWrapStyles = { width: el.style.width, height: el.style.height, maxWidth: el.style.maxWidth };
+          w.style.width = r0.width + 'px'; w.style.height = r0.height + 'px'; w.style.maxWidth = '100%';
+          el.style.setProperty('width', '100%', 'important'); el.style.setProperty('height', '100%', 'important'); el.style.setProperty('max-width', 'none', 'important');
         }
-        if (css(parent).overflow === 'visible') parent.style.overflow = 'hidden';
-      }
+        return w;
+      };
+      // the box only needs to clip once the image is zoomed past it; clipping it at load would silently cut off a badge,
+      // tooltip or menu that hangs outside the picture on a page the jig was only meant to look at
+      let clipHost = null, clipOrig = '', clipped = false;
+      const clip = () => { if (clipped) return; clipped = true; const host = wrapNow() || parent; if (css(host).overflow !== 'visible') return; clipHost = host; clipOrig = host.style.overflow; host.style.overflow = 'hidden'; };
+      const unclip = () => { if (!clipped) return; clipped = false; if (!clipHost) return; if (clipOrig) clipHost.style.overflow = clipOrig; else clipHost.style.removeProperty('overflow'); clipHost = null; };
+      el.__jigUnclip = unclip;
       // a plain <img> (fill / scale-down) has nothing to pan; in jig mode it becomes a cover crop
       const aspectSame = isImg && el.naturalWidth && el.offsetHeight && Math.abs((el.offsetWidth / el.offsetHeight) / (el.naturalWidth / el.naturalHeight) - 1) < 0.03;
       const upgraded = isImg && orig.fit === 'fill' && aspectSame;   // contain and scale-down are the site's choice (logos, product shots): never forced to cover
@@ -452,8 +488,8 @@
         if (!el.classList.contains('jig-active')) return;
         if (e.target.closest('[data-jig-drag], .jig-el.jig-active') !== el) return;
         e.preventDefault(); e.stopPropagation(); try { el.setPointerCapture(e.pointerId); } catch (x) {}
-        if (isImg) { const f = naturalFit(el, zoom); if (f.ovx < 2 && f.ovy < 2) { zoom = Math.max(zoom, 1.2); apply(); } }
         drag = { x: e.clientX, y: e.clientY, ox, oy, id: e.pointerId }; el.style.cursor = 'grabbing';
+        if (isImg) { const f = naturalFit(el, zoom); if (f.ovx < 2 && f.ovy < 2) { zoom = Math.max(zoom, 1.2); apply(); } }   // after drag is set, so the wrap waits for the gesture to end
       });
       on(el, 'pointermove', e => {
         if (!drag) return;
@@ -465,7 +501,7 @@
         oy = clamp(drag.oy - (nat.ovy > 0 ? dy / nat.ovy * 100 : 0), 0, 100);
         apply();
       });
-      const end = () => { if (drag) { try { el.releasePointerCapture(drag.id); } catch (x) {} drag = null; el.style.cursor = 'grab'; commit(); } };
+      const end = () => { if (drag) { try { el.releasePointerCapture(drag.id); } catch (x) {} drag = null; el.style.cursor = 'grab'; commit(); if (zoom !== 1) setTimeout(clip, 0); } };   // after the click has been dispatched
       on(el, 'pointerup', end); on(el, 'pointercancel', end); on(window, 'pointerup', end); on(window, 'blur', end);
       on(el, 'wheel', e => {
         if (!(e.ctrlKey || e.metaKey) || !isImg) return;
@@ -507,7 +543,7 @@
         if (isImg) {
           el.style.setProperty('object-position', pos, 'important');
           el.style.setProperty('transform-origin', pos, 'important');
-          if (zoom !== 1) el.style.setProperty('transform', `scale(${r2(zoom)})`, 'important'); else el.style.removeProperty('transform');
+          if (zoom !== 1) { if (!drag) clip(); el.style.setProperty('transform', `scale(${r2(zoom)})`, 'important'); } else el.style.removeProperty('transform');   // mid-drag the wrap waits: moving the node in the DOM would end the gesture
         } else el.style.setProperty('background-position', pos, 'important');
         setBadge(el, `${isImg ? 'object' : 'background'}-position ${pos}${zoom !== 1 ? ' · zoom ' + r2(zoom) : ''}`);
       }
@@ -540,7 +576,7 @@
       };
       el.__jigSetCrop = (x, y, z) => { if (typeof x === 'number') ox = x; if (typeof y === 'number') oy = y; if (isImg && typeof z === 'number') zoom = clamp(z, 1, 4); apply(); commit(); };
       el.__jigReset = () => {
-        ox = parsePos(orig.op)[0]; oy = parsePos(orig.op)[1]; zoom = zoom0; apply(); ['object-position', 'transform-origin', 'transform'].forEach(k => el.style.removeProperty(k)); if (orig.opInline) el.style[isImg ? 'objectPosition' : 'backgroundPosition'] = orig.opInline; if (orig.tr) el.style.transform = orig.tr; if (orig.to) el.style.transformOrigin = orig.to; unrecord(el, 'crop');
+        ox = parsePos(orig.op)[0]; oy = parsePos(orig.op)[1]; zoom = zoom0; apply(); ['object-position', 'transform-origin', 'transform'].forEach(k => el.style.removeProperty(k)); if (orig.opInline) el.style[isImg ? 'objectPosition' : 'backgroundPosition'] = orig.opInline; if (orig.tr) el.style.transform = orig.tr; if (orig.to) el.style.transformOrigin = orig.to; if (zoom === 1) unclip(); unrecord(el, 'crop');
         if (wCols != null) { ['width', 'max-width'].forEach(k => box.style.removeProperty(k)); if (origBox.w) box.style.width = origBox.w; if (origBox.mw) box.style.maxWidth = origBox.mw; if (box !== el) el.style.removeProperty('width'); wCols = null; unrecord(el, 'size'); }
       };
     }
@@ -642,7 +678,7 @@
       const dirFor = () => { const [v, h] = (anchor || 'center-center').split('-'); return v === 'top' ? 'to bottom' : v === 'bottom' ? 'to top' : h === 'left' ? 'to right' : h === 'right' ? 'to left' : 'to top'; };
       function applyScrim() {
         if (!panel) return;
-        el.style.background = ''; panel.style.cssText = '';
+        el.style.background = ''; panel.style.cssText = ''; panel.classList.toggle('jig-on', scrim !== 'none');
         if (scrim === 'gradient') el.style.background = `linear-gradient(${dirFor()}, rgba(0,0,0,.62), rgba(0,0,0,0) 65%)`;
         if (scrim === 'tint') panel.style.cssText = 'background: rgba(10,10,12,.48); padding: 20px 24px; border-radius: 12px;';
         if (scrim === 'glass') panel.style.cssText = 'background: rgba(10,10,12,.32); backdrop-filter: blur(14px) saturate(1.2); -webkit-backdrop-filter: blur(14px) saturate(1.2); padding: 20px 24px; border-radius: 14px; border: 1px solid rgba(255,255,255,.14);';
@@ -895,9 +931,9 @@
   const listeners = [];
   function on(el, ev, fn, opt) { el.addEventListener(ev, fn, opt); listeners.push([el, ev, fn, opt]); }
   function unwire() {
-    $$('.jig-crop-box').forEach(w => { const img = w.firstElementChild; if (img) w.parentNode.insertBefore(img, w); w.remove(); if (img) delete img.__jigWrap; });
+    $$('.jig-crop-box').forEach(w => { const img = w.firstElementChild; if (img) w.parentNode.insertBefore(img, w); w.remove(); if (img) { delete img.__jigWrap; const k = img.__jigWrapStyles; if (k) { ['width', 'height', 'max-width'].forEach(p => img.style.removeProperty(p)); if (k.width) img.style.width = k.width; if (k.height) img.style.height = k.height; if (k.maxWidth) img.style.maxWidth = k.maxWidth; delete img.__jigWrapStyles; } } });
     for (let i = listeners.length - 1; i >= 0; i--) { const [el, ev, fn, opt] = listeners[i]; if (el instanceof Element && el.classList && el.classList.contains('jig-el')) { el.removeEventListener(ev, fn, opt); listeners.splice(i, 1); } }
-    $$('.jig-el').forEach(el => { el.classList.remove('jig-el', 'jig-selected'); delete el.dataset.jigCtl; delete el.dataset.jigDrag; delete el.__jigToolbar; delete el.__jigToolbarText; delete el.__jigReset; delete el.__jigResetText; delete el.__jigNudge; const pn = el.querySelector(':scope > .jig-scrim-panel'); if (pn) { while (pn.firstChild) el.appendChild(pn.firstChild); pn.remove(); } });
+    $$('.jig-el').forEach(el => { if (el.__jigUnclip) { el.__jigUnclip(); delete el.__jigUnclip; } el.classList.remove('jig-el', 'jig-selected'); delete el.dataset.jigCtl; delete el.dataset.jigDrag; delete el.__jigToolbar; delete el.__jigToolbarText; delete el.__jigReset; delete el.__jigResetText; delete el.__jigNudge; const pn = el.querySelector(':scope > .jig-scrim-panel'); if (pn) { while (pn.firstChild) el.appendChild(pn.firstChild); pn.remove(); } });
     state.selected = null; toolbar.hidden = true;
   }
   function rewire() { unwire(); delete state.F.type.steps; delete state.F.spacingSteps; resolveFoundation(); wire(); scanProtection(); renderHUD(); }
@@ -996,7 +1032,8 @@
     #jig-hud button, .jig-tb button, #jig-found button, #jig-hud select, #jig-found input { appearance: none; -webkit-appearance: none; text-transform: none; letter-spacing: normal; box-shadow: none; }
     #jig-hud h5, #jig-hud h6, #jig-found h5, #jig-found h6, #jig-hud p, #jig-found p { margin: 0; }
     #jig-hud button:focus-visible, .jig-tb button:focus-visible, #jig-found button:focus-visible { outline: 2px solid #3f6fff; outline-offset: 2px; }
-    .jig-scrim-panel { display: flex; flex-direction: column; align-items: inherit; width: fit-content; max-width: 100%; }
+    .jig-scrim-panel { display: flex; flex-direction: column; align-items: inherit; max-width: 100%; }
+    .jig-scrim-panel.jig-on { width: fit-content; }   /* hugs the words only once a scrim is on; until then it lays out like the overlay did */
     .jig-scrim-panel.c { margin-inline: auto; } .jig-scrim-panel.r { margin-left: auto; }
     html.jig-scanning *, html.jig-scanning *::before, html.jig-scanning *::after { transition: none !important; animation: none !important; }
     html.jig-scanning #jig-axtags { display: none !important; }
@@ -1327,6 +1364,49 @@
     imgs.forEach(i => { const f = faceCache.get(i.currentSrc || i.src); const out = !!(f && !i.__jigInFrame(f.fx, f.fy)); if (out !== !!i.__jigFaceOut) changed = true; i.__jigFaceOut = out; i.__jigFace = f || null; });
     return changed;
   }
+  // grade one element's own words against what's behind them; pushes contrast / busy-background / text-over-image into W.
+  // Shared by the page scan and by auto fix, which re-grades just the element it changed instead of rescanning the page.
+  function gradeText(t, W, seen, P) {   // any element that carries its own words: old sites put text straight into divs, tds, fonts
+    if (/^(SCRIPT|STYLE|NOSCRIPT|TEMPLATE|SVG|OPTION)$/.test(t.tagName) || !t.offsetParent || t.closest('#jig-hud, .jig-tb, #jig-found, #jig-device, #jig-axtags, .jig-badge, #jig-grid')) return;
+    const own = Array.from(t.childNodes).some(n => n.nodeType === 3 && n.textContent.trim());
+    if (!own) return;
+    const fg = parseColor(css(t).color); if (!fg || fg[3] === 0) return;
+    const over = imageBehind(t);
+    let bg = null, how = '';
+    let busy = 0;
+    if (over) {
+      let patches = sampleImage(over.img, t, over); how = over.gradient ? 'over gradient' : 'over image';
+      if (patches && !over.gradient) patches = applyFilters(patches, over.img, over.box);
+      if (patches && patches.some(pc => pc[3] < 1)) { const under = solidBehind(over.img); patches = patches.map(pc => pc[3] < 1 ? blend(under, pc) : pc); }
+      if (!patches) { if ((P.textOverImage || 'warn') === 'warn' && !seen.has(over.img)) { seen.add(over.img); W.push({ kind: 'text-over-image', el: t, msg: 'text over an image the jig can\'t read (it\'s served from another domain, so the browser hides its pixels); check this one by eye' }); } return; }
+      // a scrim (gradient/translucent overlay) or a text-shadow earns some credit; otherwise grade by the WORST patch
+      const shadow = css(t).textShadow !== 'none';
+      const scrim = scrimBehind(t); const extra = overlaysAbove(t, over);   // translucent layers between the picture and the words: sibling overlay boxes, inset shadows, a gradient listed over the photo
+      if (extra.length) patches = patches.map(pc => extra.reduce((c, o) => blend(c, o), pc));
+      let pool = patches;
+      if (scrim && scrim.blur) { const m = patches.reduce((a, pc) => [a[0] + pc[0] / patches.length, a[1] + pc[1] / patches.length, a[2] + pc[2] / patches.length, 1], [0, 0, 0, 1]); pool = patches.map(() => m); }
+      const ratios = pool.map(pc => contrast(fg, scrim ? blend(pc, scrim) : pc)).sort((a, b) => a - b);
+      const worst = ratios[Math.floor(ratios.length * 0.1)];      // 10th percentile: ignores a stray pixel, not a region
+      const lums = patches.map(lum); const mean = lums.reduce((a, b) => a + b, 0) / lums.length;
+      busy = Math.sqrt(lums.reduce((a, l) => a + (l - mean) ** 2, 0) / lums.length);
+      bg = null; var ratioOverride = shadow ? Math.max(worst, ratios[Math.floor(ratios.length * 0.5)]) : worst;
+      if (busy > 0.16 && !scrim && !shadow) W.push({ kind: 'busy-background', el: t, msg: `text over a busy image (luminance spread ${busy.toFixed(2)}); add a scrim, a shadow, or move it` });
+    } else { bg = solidBehind(t); how = 'on background'; }
+    if (!bg && ratioOverride === undefined) return;
+    const ratio = bg ? contrast(fg, bg) : ratioOverride;
+    if (bg && ratio < 1.15) { if (!seen.has(t)) { seen.add(t); W.push({ kind: 'text-over-image', el: t, msg: "couldn't tell what's behind this text (it measures as the same colour as its background, so the real background is somewhere the jig can't see); check it by eye" }); } return; }
+    const fs = px(css(t).fontSize), bold = px(css(t).fontWeight) >= 700;
+    const large = fs >= 24 || (bold && fs >= 18.66);          // WCAG large text
+    const need = large ? Math.min(3, P.minContrast || 4.5) : (P.minContrast || 4.5);
+    if (ratio < need) W.push({ kind: 'contrast', el: t, msg: `contrast ${ratio.toFixed(1)} ${how}${over ? ' (worst patch)' : ''}, min ${need}${large ? ' (large text)' : ''}`, value: +ratio.toFixed(1), min: need });
+  }
+  // does this element (or anything inside it) still fail on contrast? the cheap check a fix uses to verify itself
+  function textFails(root) {
+    const W = [], seen = new Set(), P = state.F.protect || {}; painters = null;
+    document.documentElement.classList.add('jig-scanning');
+    try { [root, ...$$('*', root)].forEach(t => gradeText(t, W, seen, P)); } finally { document.documentElement.classList.remove('jig-scanning'); }
+    return W.filter(w => /contrast|busy|text-over/.test(w.kind));
+  }
   function scanProtection() {
     clearTimeout(scanTimer); checkFaces();
     document.documentElement.classList.add('jig-scanning');   // transitions off: read settled values, not a frame of an animation
@@ -1417,7 +1497,13 @@
       if (!t.offsetParent || t.closest('#jig-hud, .jig-tb, #jig-found, #jig-device, #jig-axtags, .jig-crop-box') || t.tagName === 'DIV' && !Array.from(t.childNodes).some(n => n.nodeType === 3 && n.textContent.trim())) return;
       if (srOnly(t)) return;   // visually hidden on purpose (skip links, screen-reader labels)
       const c = css(t); if (c.overflow !== 'visible' && c.overflow !== '') return;
-      if (t.scrollWidth > t.clientWidth + 4 && c.whiteSpace !== 'nowrap' && t.clientWidth > 0) W.push({ kind: 'overflow', el: t, msg: `text runs ${Math.round(t.scrollWidth - t.clientWidth)}px past its box` });
+      if (!onPage(t)) return;   // off-canvas menus, collapsed drawers and faded-out panels aren't overflowing, they're parked
+      if (t.scrollWidth > t.clientWidth + 4 && c.whiteSpace !== 'nowrap' && t.clientWidth > 0) {
+        // measure the words themselves: a padded child (a link inside a nav item) widens scrollWidth without any text leaving the box
+        const tr = t.getBoundingClientRect(); const rg = document.createRange(); rg.selectNodeContents(t); const wr = rg.getBoundingClientRect();
+        const over = wr.right - tr.right;
+        if (over > 4) W.push({ kind: 'overflow', el: t, msg: `text runs ${Math.round(over)}px past its box` });
+      }
       const par = t.parentElement; if (par && /hidden|clip/.test(css(par).overflow + css(par).overflowY)) { const pr = par.getBoundingClientRect(), tr = t.getBoundingClientRect(); if (tr.bottom > pr.bottom + 2 || tr.right > pr.right + 2) W.push({ kind: 'overflow', el: t, msg: 'text is clipped by its container' }); }
     });
     // 2f. images rendering past their native resolution (soft), and faces the crop leaves out
@@ -1429,41 +1515,7 @@
       if (img.__jigFaceOut) W.push({ kind: 'face', el: img, msg: 'a detected face sits outside the crop' });
     });
     // 3. contrast: every element with its own text, sampled under its own box
-    const seen = new Set();
-    $$('body *').forEach(t => {   // any element that carries its own words: old sites put text straight into divs, tds, fonts
-      if (/^(SCRIPT|STYLE|NOSCRIPT|TEMPLATE|SVG|OPTION)$/.test(t.tagName) || !t.offsetParent || t.closest('#jig-hud, .jig-tb, #jig-found, #jig-device, #jig-axtags, .jig-badge, #jig-grid')) return;
-      const own = Array.from(t.childNodes).some(n => n.nodeType === 3 && n.textContent.trim());
-      if (!own) return;
-      const fg = parseColor(css(t).color); if (!fg || fg[3] === 0) return;
-      const over = imageBehind(t);
-      let bg = null, how = '';
-      let busy = 0;
-      if (over) {
-        let patches = sampleImage(over.img, t, over); how = over.gradient ? 'over gradient' : 'over image';
-        if (patches && !over.gradient) patches = applyFilters(patches, over.img, over.box);
-        if (patches && patches.some(pc => pc[3] < 1)) { const under = solidBehind(over.img); patches = patches.map(pc => pc[3] < 1 ? blend(under, pc) : pc); }
-        if (!patches) { if ((P.textOverImage || 'warn') === 'warn' && !seen.has(over.img)) { seen.add(over.img); W.push({ kind: 'text-over-image', el: t, msg: 'text over an image; contrast could not be sampled (serve over http to enable)' }); } return; }
-        // a scrim (gradient/translucent overlay) or a text-shadow earns some credit; otherwise grade by the WORST patch
-        const shadow = css(t).textShadow !== 'none';
-        const scrim = scrimBehind(t); const extra = overlaysAbove(t, over);   // translucent layers between the picture and the words: sibling overlay boxes, inset shadows, a gradient listed over the photo
-        if (extra.length) patches = patches.map(pc => extra.reduce((c, o) => blend(c, o), pc));
-        let pool = patches;
-        if (scrim && scrim.blur) { const m = patches.reduce((a, pc) => [a[0] + pc[0] / patches.length, a[1] + pc[1] / patches.length, a[2] + pc[2] / patches.length, 1], [0, 0, 0, 1]); pool = patches.map(() => m); }
-        const ratios = pool.map(pc => contrast(fg, scrim ? blend(pc, scrim) : pc)).sort((a, b) => a - b);
-        const worst = ratios[Math.floor(ratios.length * 0.1)];      // 10th percentile: ignores a stray pixel, not a region
-        const lums = patches.map(lum); const mean = lums.reduce((a, b) => a + b, 0) / lums.length;
-        busy = Math.sqrt(lums.reduce((a, l) => a + (l - mean) ** 2, 0) / lums.length);
-        bg = null; var ratioOverride = shadow ? Math.max(worst, ratios[Math.floor(ratios.length * 0.5)]) : worst;
-        if (busy > 0.16 && !scrim && !shadow) W.push({ kind: 'busy-background', el: t, msg: `text over a busy image (luminance spread ${busy.toFixed(2)}); add a scrim, a shadow, or move it` });
-      } else { bg = solidBehind(t); how = 'on background'; }
-      if (!bg && ratioOverride === undefined) return;
-      const ratio = bg ? contrast(fg, bg) : ratioOverride;
-      if (bg && ratio < 1.15) { if (!seen.has(t)) { seen.add(t); W.push({ kind: 'text-over-image', el: t, msg: "couldn't tell what's behind this text (it measures as the same colour as its background, so the real background is somewhere the jig can't see); check it by eye" }); } return; }
-      const fs = px(css(t).fontSize), bold = px(css(t).fontWeight) >= 700;
-      const large = fs >= 24 || (bold && fs >= 18.66);          // WCAG large text
-      const need = large ? Math.min(3, P.minContrast || 4.5) : (P.minContrast || 4.5);
-      if (ratio < need) W.push({ kind: 'contrast', el: t, msg: `contrast ${ratio.toFixed(1)} ${how}${over ? ' (worst patch)' : ''}, min ${need}${large ? ' (large text)' : ''}`, value: +ratio.toFixed(1), min: need });
-    });
+    { const seen = new Set(); $$('body *').forEach(t => gradeText(t, W, seen, P)); }
     W.forEach(w => { if (w.el && w.el.classList && w.el.classList.contains('jig-scrim-panel') && w.el.parentElement) w.el = w.el.parentElement; });
     // 9. page and form basics, links and empty headings: the first things a screen reader user runs into
     { const root = document.documentElement; const jigUI = x => x.closest('#jig-hud, .jig-tb, #jig-found, #jig-device, #jig-axtags, .jig-badge');
@@ -2067,7 +2119,7 @@
   function fixAX(on) {
     if (state.normalize) return;   // auto already does this
     state.batch = true;
-    if (on) { autoFixAX(); state.axFix = true; } else { undoAutoFixes(); state.axFix = false; }
+    if (on) { state.axOnly = true; try { autoFixAX(); } finally { state.axOnly = false; } state.axFix = true; } else { undoAutoFixes(); state.axFix = false; }
     state.batch = false; scanProtection(); renderHUD(); postToParent();
   }
   // take the viewer to a finding: scroll it to the middle and pulse its outline and chip so it can't be missed
@@ -2115,7 +2167,9 @@
       if (open) { const box = document.createElement('div'); box.className = 'axitems'; dis.forEach(w => { const d = document.createElement('div'); d.className = 'axi fixed'; const t = document.createElement('span'); t.textContent = ruleOf(w.kind).t + ': ' + (axSnippet(w.el) || nameOf(w.el)); const x = document.createElement('button'); x.className = 'ign'; x.type = 'button'; x.textContent = 'restore'; x.onclick = ev => { ev.stopPropagation(); setDismissed(w, false); }; d.append(t, x); box.appendChild(d); }); list.appendChild(box); }
     }
     const fb = $('#jig-axfix'); const can = R.rules.some(r => r.auto && r.open);
-    fb.textContent = state.normalize ? 'fixed by auto fix' : state.axFix ? 'undo fixes' : 'Fix what I can'; fb.disabled = !!state.normalize || (!state.axFix && !can); fb.classList.toggle('on', !!state.axFix);
+    const more = state.axFix && state.axMore && can;
+    fb.textContent = state.normalize ? 'fixed by auto fix' : more ? 'Fix more' : state.axFix ? 'undo fixes' : 'Fix what I can'; fb.disabled = !!state.normalize || (!state.axFix && !can); fb.classList.toggle('on', !!state.axFix && !more);
+    fb.title = more ? 'a big page: the first pass stopped after a few seconds so the tab stays responsive; click to keep going' : 'fix the accessibility failures the jig knows how to fix; no other changes';
   }
 
   // ------------------------------------------------------------ normalize: snap the whole page to the scales
@@ -2259,11 +2313,13 @@
   // Fix what protection flagged, using the same controls a person would: scrims for text over images,
   // a size step for short tap targets, a ramp step down for an h2 that outgrew the h1. Colour stays a warning.
   function autoFixAX() {
-    state.autoFixes = [];
+    const t0 = performance.now(), BUDGET = 3500; state.axMore = false;
+    state.autoFixes = state.autoFixes || [];   // a second click ("Fix more") keeps the fixes from the first
     scanProtection();
     const seen = new Set(); const ids = new WeakMap(); let nid = 0; const key = (el, k) => { if (!ids.has(el)) ids.set(el, ++nid); return k + ':' + ids.get(el); };
     // text over an image the scrims couldn't fix (or that the jig didn't wire): a tint behind the words, as light as passes; dark tint for light text, light for dark
     const tintFallback = w => {
+            if (w.kind === 'text-over-image') return false;   // an image the jig can't read can't verify a fix either: it stays a note, and costs no scans
             let el = w.el; while (el.parentElement && /^inline/.test(css(el).display) && !/^(A|BUTTON)$/.test(el.tagName) && el.parentElement !== document.body && !el.parentElement.querySelector('img, picture, video')) el = el.parentElement;
             if (seen.has(key(el, 'tint'))) return false; seen.add(key(el, 'tint'));
             const fg = parseColor(css(el).color) || [255, 255, 255, 1]; const light = lum(fg) > 0.4; const rgb = light ? '10,10,12' : '255,255,255';
@@ -2274,16 +2330,15 @@
               el.style.setProperty('background-color', `rgba(${rgb},${a})`, 'important'); el.style.setProperty('border-radius', '4px', 'important');
               if (!px(css(el).paddingLeft)) el.style.setProperty('padding', '.1em .3em', 'important');
               el.style.setProperty('box-decoration-break', 'clone', 'important'); el.style.setProperty('-webkit-box-decoration-break', 'clone', 'important');
-              scanProtection(); last = a;
-              if (!state.warnings.some(x => (el === x.el || el.contains(x.el)) && /contrast|busy|text-over/.test(x.kind))) { passed = a; break; }
+              last = a;
+              if (!textFails(el).length) { passed = a; break; }
             }
-            const unsampled = w.kind === 'text-over-image' && /could not be sampled/.test(w.msg);
-            if (passed != null || unsampled) {
-              const a = passed != null ? passed : 0.6; if (passed == null) { el.style.setProperty('background-color', `rgba(${rgb},${a})`, 'important'); }
-              record(el, 'text', { scrim: 'tint', tint: `rgba(${rgb},${a})`, verified: passed != null }, `tint behind text rgba(${rgb},${a})${passed != null ? '' : ' (image not sampleable; unverified)'}`, 'tint');
-              state.autoFixes.push({ el, ctl: 'text', sub: 'tint', what: `tint behind text, ${Math.round(a * 100)}%${passed != null ? ' (now passes)' : ' (unverified: image not sampleable)'}`, undo }); 
+            // an image the jig can't read stays a note: a fix it can't verify is a guess, and the jig doesn't ship guesses
+            if (passed != null) {
+              record(el, 'text', { scrim: 'tint', tint: `rgba(${rgb},${passed})` }, `tint behind text rgba(${rgb},${passed})`, 'tint');
+              state.autoFixes.push({ el, ctl: 'text', sub: 'tint', what: `tint behind text, ${Math.round(passed * 100)}% (now passes)`, undo });
               return true;
-            } else { undo(); scanProtection(); return false; }
+            } else { undo(); return false; }
     };
     // a photo section that already has a dark overlay (a builder's ::before layer): darken that overlay before putting anything behind the words
     const ovRules = state.ovRules || (state.ovRules = new Map());
@@ -2296,13 +2351,13 @@
       seen.add(key(host, 'overlay'));
       const id = 'o' + (ovRules.size + 1) + '-' + Math.random().toString(36).slice(2, 6); host.setAttribute('data-jig-ov', id);
       const a0 = Math.round(base[3] * 100) / 100; const rgb = base.slice(0, 3).map(Math.round).join(',');
-      const failing = () => state.warnings.filter(x => host.contains(x.el) && /contrast|busy|text-over/.test(x.kind));
+      const failing = () => textFails(host);
       const before = failing().length; let a = a0, passed = false;
       for (let step = Math.round((a0 + 0.1) * 10) / 10; step <= 0.6 + 1e-9; step = Math.round((step + 0.1) * 10) / 10) {
-        ovRules.set(id, `[data-jig-ov="${id}"]${ps}{background-color:rgba(${rgb},${step}) !important}`); ovSheet(); scanProtection(); a = step;
+        ovRules.set(id, `[data-jig-ov="${id}"]${ps}{background-color:rgba(${rgb},${step}) !important}`); ovSheet(); a = step;
         if (!failing().length) { passed = true; break; }
       }
-      if (failing().length >= before) { ovRules.delete(id); ovSheet(); host.removeAttribute('data-jig-ov'); scanProtection(); return { found: true, passed: false, changed: false }; }   // darker didn't help: leave the overlay alone
+      if (failing().length >= before) { ovRules.delete(id); ovSheet(); host.removeAttribute('data-jig-ov'); return { found: true, passed: false, changed: false }; }   // darker didn't help: leave the overlay alone
       host.__jigOvPassed = passed;
       record(host, 'text', { overlay: { pseudo: ps, color: `rgb(${rgb})`, from: a0, to: a } }, `overlay ${ps} ${Math.round(a0 * 100)}% → ${Math.round(a * 100)}% (darkens the photo behind the text)`, 'overlay');
       state.autoFixes.push({ el: host, ctl: 'text', sub: 'overlay', what: `photo overlay ${Math.round(a0 * 100)}% → ${Math.round(a * 100)}%${passed ? ' (text on it now passes)' : ' (helps; some text still short)'}`, undo: () => { ovRules.delete(id); ovSheet(); host.removeAttribute('data-jig-ov'); delete host.__jigOvPassed; } });
@@ -2313,21 +2368,27 @@
     for (let pass = 0; pass < 4; pass++) {
       let did = false;
       for (const w of state.warnings.slice()) {
+        // a time budget: a huge page (a news front page) hands control back before the browser calls the tab unresponsive;
+        // what's left is fixed on the next click ("Fix more")
+        if (performance.now() - t0 > BUDGET) { state.axMore = true; break; }
+        // "Fix what I can" fixes accessibility failures (WCAG A/AA). Design notes (hierarchy, small text, wrapping
+        // buttons, crops) are auto fix's job: a reviewer asking for AX fixes didn't ask for the sidebar restyled
+        if (state.axOnly && (AX_RULES[w.kind] || {}).cat !== 'wcag' && w.kind !== 'dup-link') continue;   // dup-link's fix is aria only; it changes nothing visible
         const plain = w.kind === 'contrast' && /on background/.test(w.msg);
         if (!plain && (w.kind === 'contrast' || w.kind === 'busy-background' || w.kind === 'text-over-image')) {
           const ov = w.el.closest('.jig-el[data-jig-ctl="text"]');
           if (!ov || !ov.__jigSetScrim) {
             const o = overlayFix(w); if (o.changed) did = true;
-            if (o.found && (o.passed || !state.warnings.some(x => x.el === w.el && /contrast|busy|text-over/.test(x.kind)))) continue;
+            if (o.found && (o.passed || !textFails(w.el).length)) continue;
             if (isLarge(w.el)) continue;   // a headline never gets a tint box; if the overlay couldn't carry it, it stays a note
             if (tintFallback(w)) did = true; continue;
           }
           if (seen.has(key(ov, 'scrim'))) continue;
           seen.add(key(ov, 'scrim'));
           for (const sc of ['gradient', 'tint', 'glass']) {
-            ov.__jigSetScrim(sc); scanProtection();
-            if (!state.warnings.some(x => ov.contains(x.el) && /contrast|busy|text-over/.test(x.kind))) { state.autoFixes.push({ el: ov, what: `scrim ${sc} (text over image now passes)` }); did = true; break; }
-            if (sc === 'glass') { ov.__jigSetScrim('none'); scanProtection(); if (tintFallback(w)) did = true; else { ov.__jigSetScrim('glass'); state.autoFixes.push({ el: ov, what: 'scrim glass (best effort; still short of AA)' }); } }
+            ov.__jigSetScrim(sc);
+            if (!textFails(ov).length) { state.autoFixes.push({ el: ov, what: `scrim ${sc} (text over image now passes)` }); did = true; break; }
+            if (sc === 'glass') { ov.__jigSetScrim('none'); if (tintFallback(w)) did = true; else { ov.__jigSetScrim('glass'); state.autoFixes.push({ el: ov, what: 'scrim glass (best effort; still short of AA)' }); } }
           }
         }
         if (plain && !seen.has(key(w.el, w.kind))) {
@@ -2445,7 +2506,7 @@
         }
       }
       scanProtection();
-      if (!did) break;
+      if (!did || state.axMore) break;
     }
   }
   // 1/32: the page's own (inferred or edited) steps. 1/16: a 1.25 modular scale off the body size + 4..96 ladder. 1/8: four sizes, four spaces.
@@ -2666,7 +2727,7 @@
     if (state.F.mode && state.F.mode !== 'inferred') $('#jig-q-res').value = '32';   // the site has tokens: light = its own steps; medium/strict stay on offer
     $('#jig-reset-btn').onclick = () => { if (state.axFix) fixAX(false); normalizePage(false); $$('.jig-el').forEach(el => el.__jigReset && el.__jigReset()); state.changes.clear(); state.frame = { changes: [], warnings: [] }; closeDevice(); scanProtection(); };
     $('#jig-copy-btn').onclick = copyPatch;
-    $('#jig-axfix').onclick = () => { const b = $('#jig-axfix'); if (b.dataset.busy) return; b.dataset.busy = '1'; b.textContent = 'working…'; setTimeout(() => { try { fixAX(!state.axFix); } finally { delete b.dataset.busy; renderAXPanel(); } }, 30); };
+    $('#jig-axfix').onclick = () => { const b = $('#jig-axfix'); if (b.dataset.busy) return; b.dataset.busy = '1'; b.textContent = 'working…'; setTimeout(() => { try { fixAX(state.axFix && state.axMore ? true : !state.axFix); } finally { delete b.dataset.busy; renderAXPanel(); } }, 30); };
     $('#jig-axdl').onclick = () => { const r = downloadReport(); const b = $('#jig-axdl'); const t = b.textContent; b.textContent = r ? 'Downloaded' : 'Blocked here'; setTimeout(() => (b.textContent = t), 1600); };
     $('#jig-axmd').onclick = async () => { const r = await copyText(reportMarkdown()); const b = $('#jig-axmd'); const t = b.textContent; b.textContent = r === 'ok' ? 'Copied' : 'Press ⌘C'; setTimeout(() => (b.textContent = t), 1600); };
 
