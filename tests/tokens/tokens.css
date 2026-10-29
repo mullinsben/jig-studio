@@ -1,0 +1,7 @@
+/* a theme file */
+:root {
+  --font-size-100: 12px; --font-size-200: 14px; --font-size-300: 16px; --font-size-400: 20px; --font-size-500: 25px; --font-size-600: 31px;
+  --font-family-body: Georgia, serif; --font-size-header-height: 72px;
+  --space-1: 4px; --space-2: 8px; --space-3: 16px; --space-4: 24px; --space-5: 40px;
+  --color-brand: #3f6fff; --radius-md: 8px;
+}

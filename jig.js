@@ -68,21 +68,106 @@
   // ------------------------------------------------------------ foundation
   async function loadFoundation() {
     const saved = safeGet('jig-foundation:' + location.host);
-    if (saved) { try { state.F = JSON.parse(saved); state.foundationSource = 'edited in the jig (saved for this site)'; state.F.edited = true; return; } catch (e) {} }
+    if (saved) { try { state.F = JSON.parse(saved); state.foundationSource = state.F.source ? `tokens from ${state.F.source} (saved for this site)` : 'edited in the jig (saved for this site)'; state.F.edited = !state.F.source; return; } catch (e) {} }
     const inline = document.getElementById('jig-foundation');
     if (inline && inline.textContent.trim()) {
       try { state.F = JSON.parse(inline.textContent); state.foundationSource = 'inline'; return; } catch (e) {}
     }
-    const src = (SCRIPT && SCRIPT.dataset.foundation) || document.body.dataset.jigFoundation || 'jig.foundation.json';
-    try {
-      const r = await fetch(src, { cache: 'no-store' });
-      if (r.ok) { state.F = await r.json(); state.foundationSource = src; return; }
-    } catch (e) {}
+    // 1. a foundation or design-tokens URL the site points at: data-foundation on the script tag, a <meta name="jig-foundation">,
+    //    data-jig-foundation on <body>, or jig.foundation.json beside the page. Any of: the jig's own JSON, W3C design tokens JSON
+    //    (Figma Variables, Tokens Studio, Style Dictionary), or a CSS file of :root custom properties
+    const meta = document.querySelector('meta[name="jig-foundation"]');
+    const src = (SCRIPT && SCRIPT.dataset.foundation) || (meta && meta.content) || document.body.dataset.jigFoundation || 'jig.foundation.json';
+    const got = await foundationFromURL(src);
+    if (got.F) { state.F = got.F; state.foundationSource = got.how; return; }
+    if (got.error && src !== 'jig.foundation.json') state.foundationError = `${src}: ${got.error}`;   // the site asked for a file and it didn't work: say so in the HUD
     // 2. the site's own CSS custom properties
     const vars = readRootVars();
     if (vars) { state.F = vars; state.foundationSource = 'css custom properties on :root'; return; }
     // 3. nothing to read: measure the page and manufacture the scales
     state.F = inferFromPage(); state.foundationSource = 'inferred from this page';
+  }
+  // fetch a URL and turn whatever it holds into a foundation. Returns { F, how } or { error }
+  async function foundationFromURL(src) {
+    let text, type;
+    try { const r = await fetch(src, { cache: 'no-store' }); if (!r.ok) return { error: `HTTP ${r.status}` }; text = await r.text(); type = (r.headers.get('content-type') || '').toLowerCase(); }
+    catch (e) { return { error: 'could not fetch it (a different domain needs CORS headers, or the URL is wrong)' }; }
+    const label = src.replace(/^https?:\/\//, '').replace(/\?.*$/, '');
+    let json = null; try { json = JSON.parse(text); } catch (e) {}
+    if (json && typeof json === 'object') {
+      if (json.type && (json.type.ramp || json.type.sizes || json.type.steps) || Array.isArray(json.spacing)) { json.source = src; return { F: json, how: `foundation file ${label}` }; }   // the jig's own shape
+      const F = foundationFromTokens(json, src);
+      if (F) return { F, how: `design tokens from ${label}` };
+      return { error: 'JSON, but no type or spacing sizes the jig could use (it reads W3C design tokens, Tokens Studio, Style Dictionary, or jig.foundation.json)' };
+    }
+    if (/css/.test(type) || /--[\w-]+\s*:/.test(text)) {
+      const F = foundationFromCss(text, src);
+      if (F) return { F, how: `css custom properties from ${label}` };
+      return { error: 'CSS, but no size-like custom properties on :root' };
+    }
+    return { error: 'not JSON or CSS' };
+  }
+  // design tokens → foundation. Walks any depth; a token is a node with $value (W3C) or value (Tokens Studio / Style Dictionary).
+  // Sorted by what the token's path says it is: font sizes become the type ramp, spacing becomes the spacing scale, grid and
+  // breakpoints come along when present. Names are kept, so the patch speaks the site's own language.
+  function foundationFromTokens(root, src) {
+    const leaves = [];
+    const walk = (node, path, inherited) => {
+      if (!node || typeof node !== 'object') return;
+      const t = node.$type || node.type || inherited;
+      if ('$value' in node || ('value' in node && !(node.value && typeof node.value === 'object' && !('fontSize' in node.value)))) { leaves.push({ path, type: t, value: '$value' in node ? node.$value : node.value }); return; }
+      for (const k of Object.keys(node)) { if (k.startsWith('$')) continue; walk(node[k], path.concat(k), t); }
+    };
+    walk(root, [], null);
+    if (!leaves.length) return null;
+    const refs = new Map(leaves.map(l => [l.path.join('.'), l]));
+    const resolve = (v, depth = 0) => { if (depth > 6) return v; if (typeof v === 'string') { const m = v.match(/^\{([^}]+)\}$/); if (m && refs.has(m[1])) return resolve(refs.get(m[1]).value, depth + 1); } if (v && typeof v === 'object' && v.value !== undefined && v.unit) return `${v.value}${v.unit}`; return v; };   // {alias} references and W3C {value, unit} dimensions
+    const lenPx = v => { v = resolve(v); if (v && typeof v === 'object' && v.fontSize !== undefined) v = resolve(v.fontSize); if (typeof v === 'number') return v; if (typeof v !== 'string') return NaN; const m = v.trim().match(/^(-?[\d.]+)(px|rem|em)?$/); return m ? (m[2] === 'rem' || m[2] === 'em' ? parseFloat(m[1]) * 16 : parseFloat(m[1])) : NaN; };
+    const name = l => l.path.join('-').replace(/[^\w-]+/g, '-').toLowerCase();
+    const NOT = /weight|family|line-?height|leading|letter|tracking|transform|opacity|duration|z-?index|shadow|colou?r|border-?width|stroke/i;
+    const typeT = [], spaceT = [], radiusT = [], bpT = {}, grid = {};
+    for (const l of leaves) {
+      const p = name(l), px = lenPx(l.value); if (!isFinite(px)) continue;
+      if (NOT.test(p) && !/size/.test(p)) continue;
+      if (/breakpoint|screen|viewport|\bbp\b/.test(p)) { bpT[p] = px; continue; }
+      if (/grid/.test(p) && /column|gutter|margin|max-?width|container/.test(p)) { grid[/column/.test(p) ? 'columns' : /gutter/.test(p) ? 'gutter' : /margin/.test(p) ? 'margin' : 'maxWidth'] = px; continue; }
+      if (/radius|rounded|corner/.test(p)) { radiusT.push({ token: p, px }); continue; }
+      const isType = l.type === 'fontSize' || l.type === 'fontSizes' || l.type === 'typography' || /font-?size|fontsize|text-?size|type-?scale|typography|\btype\b|\btext\b|heading|display|body|caption/.test(p);
+      const isSpace = l.type === 'spacing' || l.type === 'space' || /space|spacing|gap|inset|padding|margin|\bsize\b|sizes?-\d|scale-\d/.test(p);
+      if (isType && !/space|spacing|gap|inset/.test(p) && px >= 8 && px <= 160) typeT.push({ token: p, px });
+      else if (isSpace && px >= 0 && px <= 320) spaceT.push({ token: p, px });
+      else if ((l.type === 'dimension' || l.type === 'sizing') && px >= 0 && px <= 320) spaceT.push({ token: p, px });
+    }
+    const dedupe = arr => { const seen = new Map(); arr.sort((a, b) => a.px - b.px || a.token.length - b.token.length).forEach(x => { const k = Math.round(x.px * 2) / 2; if (!seen.has(k)) seen.set(k, x); }); return Array.from(seen.values()); };
+    const type = dedupe(typeT), space = dedupe(spaceT).filter(x => x.px > 0);
+    if (type.length < 3 && space.length < 3) return null;
+    const F = JSON.parse(JSON.stringify(DEFAULT_FOUNDATION));
+    F.name = (src.split('/').pop() || 'tokens').replace(/\.\w+(\?.*)?$/, '') || 'tokens'; F.mode = 'tokens'; F.source = src;
+    if (type.length >= 3) F.type = { ramp: type.map(t => t.token), steps: type.map(t => ({ token: t.token, px: t.px, var: '--' + t.token })), fromTokens: true }; else F.type = inferType();
+    if (space.length >= 3) { F.spacing = space.map(x => x.px); F.spacingSteps = space.map(x => ({ token: x.token, px: x.px, var: '--' + x.token })); } else { const sp = inferSpacing(); F.spacing = sp.map(x => x.px); F.spacingSteps = sp; }
+    if (radiusT.length) F.radius = dedupe(radiusT);
+    const bps = Object.entries(bpT).sort((a, b) => a[1] - b[1]); if (bps.length) F.breakpoints = { phone: Math.min(390, bps[0][1]), desktop: bps[bps.length - 1][1] };
+    F.buttons = inferButtons(); F.grid = Object.assign(inferGrid(), grid);
+    F.tokenCounts = { type: type.length, space: space.length, radius: radiusT.length, all: leaves.length };
+    return F;
+  }
+  // a CSS file (a tokens.css, a theme.css) → foundation, from the custom properties on :root / html
+  function foundationFromCss(text, src) {
+    const found = {}; const re = /(--[\w-]+)\s*:\s*([^;{}]+);/g; let m;
+    // keep to :root / html blocks when the file has them; a plain list of vars (a tokens.css) is taken whole
+    const blocks = Array.from(text.matchAll(/(?:^|[}\s])(:root|html)[^{]*\{([^}]*)\}/g)).map(x => x[2]);
+    const hay = blocks.length ? blocks.join('\n') : text;
+    while ((m = re.exec(hay))) found[m[1]] = m[2].trim();
+    const scales = scalesFromVars(found, false); if (!scales) return null;
+    const F = JSON.parse(JSON.stringify(DEFAULT_FOUNDATION));
+    F.name = (src.split('/').pop() || 'tokens').replace(/\.\w+(\?.*)?$/, '') || 'tokens'; F.mode = 'tokens'; F.source = src;
+    const full = arr => arr.map(x => ({ ...x, token: x.var.slice(2) }));   // keep the whole variable name as the token: 'font-size-100', not '100'
+    const T = full(scales.type), S = full(scales.space);
+    if (T.length >= 3) F.type = { ramp: T.map(t => t.token), steps: T, fromTokens: true }; else F.type = inferType();
+    if (S.length >= 3) { F.spacing = S.map(x => x.px); F.spacingSteps = S; } else { const sp = inferSpacing(); F.spacing = sp.map(x => x.px); F.spacingSteps = sp; }
+    F.buttons = inferButtons(); F.grid = inferGrid();
+    F.tokenCounts = { type: T.length, space: S.length, all: Object.keys(found).length };
+    return F;
   }
 
   // Foundation shape used by the controls once resolved:
@@ -98,6 +183,26 @@
     // clamp()/calc()/var(): let the browser resolve it
     document.body.appendChild(measureEl); measureEl.style[prop || 'fontSize'] = v; const r = px(css(measureEl)[prop || 'fontSize']); measureEl.remove(); return r;
   }
+  // name → value map of custom properties → { type, space } scale steps, or null. checkPage: the type ramp must be the one
+  // the page is actually set in (at least half its steps rendered somewhere), which guards the :root reader against vars that
+  // only look like sizes; an explicit tokens file the site pointed at is trusted as written
+  function scalesFromVars(found, checkPage) {
+    const names = Object.keys(found);
+    // a scale step is a length (px/rem/em, or a calc/clamp of one), named for a size and not for something else: Engadget's
+    // --text-body-family and --text-header-height both start with "text" and neither is a type size
+    const isLen = v => /^-?[\d.]+(px|rem|em)$/.test(v) || /^(calc|clamp|min|max)\(/.test(v);
+    const NOT = /family|weight|transform|letter|tracking|line|leading|height|width|icon|logo|header|footer|nav|radius|shadow|colou?r|opacity|duration|ease|index|offset/i;
+    const pick = (re, lo, hi) => names.filter(n => re.test(n) && !NOT.test(n.replace(re, '')) && isLen(found[n])).map(n => ({ var: n, token: n.replace(re, ''), px: toPx(found[n]) })).filter(x => x.px >= lo && x.px <= hi).sort((a, b) => a.px - b.px);
+    let type = pick(/^--(?:text|font-size|font|fs|type|typo|size)-/i, 9, 120);
+    const space = pick(/^--(?:space|spacing|sp|gap)-/i, 1, 200);
+    if (checkPage && type.length >= 3) {
+      const used = new Set(); $$('h1, h2, h3, h4, h5, h6, p, li, a, span, button, label, td').slice(0, 1500).forEach(el => used.add(Math.round(px(css(el).fontSize) * 2) / 2));
+      const hits = type.filter(t => used.has(Math.round(t.px * 2) / 2)).length;
+      if (hits < Math.ceil(type.length / 2)) type = [];
+    }
+    if (type.length < 3 && space.length < 3) return null;
+    return { type, space };
+  }
   function readRootVars() {
     const found = {};
     for (const sheet of Array.from(document.styleSheets)) {
@@ -108,19 +213,7 @@
       }
     }
     const names = Object.keys(found); if (!names.length) return null;
-    // a scale step is a length (px/rem/em, or a calc/clamp of one), named for a size and not for something else: Engadget's
-    // --text-body-family and --text-header-height both start with "text" and neither is a type size
-    const isLen = v => /^-?[\d.]+(px|rem|em)$/.test(v) || /^(calc|clamp|min|max)\(/.test(v);
-    const NOT = /family|weight|transform|letter|tracking|line|leading|height|width|icon|logo|header|footer|nav|radius|shadow|colou?r|opacity|duration|ease|index|offset/i;
-    const pick = (re, lo, hi) => names.filter(n => re.test(n) && !NOT.test(n.replace(re, '')) && isLen(found[n])).map(n => ({ var: n, token: n.replace(re, ''), px: toPx(found[n]) })).filter(x => x.px >= lo && x.px <= hi).sort((a, b) => a.px - b.px);
-    let type = pick(/^--(?:text|font-size|font|fs|type|typo|size)-/i, 9, 120);
-    const space = pick(/^--(?:space|spacing|sp|gap)-/i, 1, 200);
-    // the ramp must be the one the page is set in: at least half its steps have to show up as rendered font sizes
-    if (type.length >= 3) {
-      const used = new Set(); $$('h1, h2, h3, h4, h5, h6, p, li, a, span, button, label, td').slice(0, 1500).forEach(el => used.add(Math.round(px(css(el).fontSize) * 2) / 2));
-      const hits = type.filter(t => used.has(Math.round(t.px * 2) / 2)).length;
-      if (hits < Math.ceil(type.length / 2)) type = [];
-    }
+    const scales = scalesFromVars(found, true); if (!scales) return null; const { type, space } = scales;
     if (type.length < 3 && space.length < 3) return null;   // vars exist but say nothing about scales
     const F = JSON.parse(JSON.stringify(DEFAULT_FOUNDATION));
     F.name = (location.hostname || 'site').replace(/^www\./, ''); F.mode = 'vars';
@@ -1099,6 +1192,7 @@
     #jig-found h6 { margin: 12px 0 4px; font-size: 11px; letter-spacing: .14em; text-transform: uppercase; opacity: .6; }
     #jig-found .lead { opacity: .7; font-size: 12px; margin: 0 0 4px; }
     #jig-found .frow { display: grid; grid-template-columns: 1fr 72px 24px; gap: 6px; align-items: center; margin: 3px 0; }
+    #jig-found .frow.jf-url { grid-template-columns: 1fr 64px; } #jig-found .jf-err { color: #ff6b9d; display: block; margin: 4px 0 8px; } #jig-found small.o code { font: 11px ui-monospace, monospace; color: #cfd3dc; }
     #jig-found .frow.obs { grid-template-columns: 1fr 72px 24px; }
     #jig-found input { font: 12px ui-monospace, Menlo, monospace; background: #13141a; color: #f3f4f7; border: 1px solid #262833; border-radius: 6px; padding: 5px 7px; min-width: 0; width: 100%; box-sizing: border-box; }
     #jig-found input:focus { outline: 2px solid #3f6fff; outline-offset: 1px; }
@@ -1878,7 +1972,9 @@
     if (!state.device) $('#jig-bp').textContent = `${state.bp} · ${window.innerWidth}px`;
     renderAXPanel();
     const F = state.F; const inf = F.mode === 'inferred' || F.type.inferred || F.buttons.inferred;
-    $('#jig-src').textContent = `${INJECTED ? 'injected by bookmarklet · ' : ''}foundation: ${F.name} · ${state.foundationSource}${inf ? ` · ${F.type.steps.length} type steps, ${F.spacingSteps.length} spacing steps, ${F.buttons.sizes.length} button size${F.buttons.sizes.length === 1 ? '' : 's'} · proposed tokens ride in the patch` : ''}`;
+    const tk = F.mode === 'tokens' && F.tokenCounts ? ` · ${F.tokenCounts.type} type steps, ${F.tokenCounts.space} spacing steps from your tokens` : '';
+    const err = state.foundationError ? ` · ⚠ foundation URL failed: ${state.foundationError}` : '';
+    $('#jig-src').textContent = `${INJECTED ? 'injected by bookmarklet · ' : ''}foundation: ${F.name} · ${state.foundationSource}${tk}${err}${inf ? ` · ${F.type.steps.length} type steps, ${F.spacingSteps.length} spacing steps, ${F.buttons.sizes.length} button size${F.buttons.sizes.length === 1 ? '' : 's'} · proposed tokens ride in the patch` : ''}`;
   }
   function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
 
@@ -1933,7 +2029,9 @@
     }
     lines.push('', '---', JSON.stringify(json, null, 2));
     const F = state.F;
-    if (F.mode === 'inferred' || F.type.inferred || F.buttons.inferred || F.mode === 'vars' || F.edited) {
+    if (F.mode === 'tokens') {
+      lines.push('', `foundation: ${F.name} · design tokens loaded from ${F.source} · type and spacing values above are those tokens; apply them as the tokens, not as px`);
+    } else if (F.mode === 'inferred' || F.type.inferred || F.buttons.inferred || F.mode === 'vars' || F.edited) {
       const t = proposedTokens();
       const how = F.edited ? 'edited by hand in the jig' : F.mode === 'vars' ? 'read from this site\'s CSS variables' : 'inferred from the rendered page';
       lines.push('', '---', `# proposed tokens · ${how}`, '', (F.edited ? 'The person reviewed and adjusted these scales in the jig. ' : 'This site has no jig foundation. The scales below were ' + (F.mode === 'vars' ? 'read from :root' : 'measured, clustered, and snapped') + '. ') + 'Save as jig.foundation.json and add the :root block.', '', '```css', t.css, '```', '', '```json', t.json, '```');
@@ -2568,6 +2666,7 @@
       <h6>spacing (px)</h6><div id="jf-space">${stepRows(F.spacingSteps, 'space')}</div><button data-add="space">+ step</button>
       <h6>grid</h6><div class="grid4">${['columns', 'gutter', 'margin', 'maxWidth'].map(k => `<div><label>${k}</label><input data-g="${k}" type="number" value="${F.grid[k]}"></div>`).join('')}</div>
       <h6>buttons</h6><p class="lead">${F.buttons.mode === 'measured' ? `measured: ${F.buttons.sizes.map(x => `${x.token} ${x.h}px`).join(' · ')}; variants ${F.buttons.variants.map(x => x.token).join(', ')}` : `classes: ${F.buttons.classPrefix}{${F.buttons.sizes.join('|')}} · {${F.buttons.variants.join('|')}}`}</p>
+      <h6>load a design system</h6><div class="frow jf-url"><input id="jf-url" type="url" placeholder="https://yoursite.com/tokens.json (or .css)" value="${esc(F.source || '')}" title="W3C design tokens JSON (Figma Variables, Tokens Studio, Style Dictionary), a CSS file of :root variables, or jig.foundation.json"><button id="jf-load">Load</button></div><small class="o">Permanent install: add <code>data-foundation="…"</code> to the jig script tag, or <code>&lt;meta name="jig-foundation" content="…"&gt;</code>.</small>
       <div class="actions"><button class="primary" id="jf-apply">Apply to page</button><button id="jf-canon" title="replace the scales with a modular type scale off the body size and a 4/8/12/16/24/32/48/64 ladder">Canonical</button><button id="jf-remember">Remember for this site</button><button id="jf-forget">Forget</button><button id="jf-copy">Copy foundation.json</button><button id="jf-reinfer">Re-infer</button></div>`;
     document.body.appendChild(foundEl);
     const readBack = () => {
@@ -2598,6 +2697,16 @@
         if (state.normalize) { normalizePage(false); normalizePage(true); }
         return;
       }
+      if (b.id === 'jf-load') {
+        const url = ($('#jf-url', foundEl).value || '').trim(); if (!url) return; b.textContent = 'loading…';
+        foundationFromURL(url).then(got => {
+          if (!got.F) { b.textContent = 'Load'; const n = document.createElement('small'); n.className = 'o jf-err'; n.textContent = '⚠ ' + got.error; $('.jf-url', foundEl).after(n); return; }
+          state.F = got.F; state.foundationSource = got.how; state.foundationError = null; resolveFoundation(); gridAnchor = null;
+          safeSet('jig-foundation:' + location.host, JSON.stringify(exportFoundation()));
+          rewire(); renderFoundationPanel(); renderHUD(); if (state.normalize) { normalizePage(false); normalizePage(true); }
+        });
+        return;
+      }
       if (b.id === 'jf-apply') { readBack(); rewire(); renderFoundationPanel(); flashBtn(b, 'Applied'); }
       if (b.id === 'jf-remember') { readBack(); safeSet('jig-foundation:' + location.host, JSON.stringify(exportFoundation())); state.foundationSource = 'edited in the jig (saved for this site)'; renderHUD(); flashBtn(b, 'Saved'); }
       if (b.id === 'jf-forget') { try { localStorage.removeItem('__jig-foundation:' + location.host); } catch (x) {} flashBtn(b, 'Forgotten; reload to re-infer'); }
@@ -2609,8 +2718,10 @@
   function exportFoundation() {
     const F = state.F; const A = autoScale(); const steps = A ? A.type : (F.type.steps || []);
     const G = F.grid.desktop ? { ...F.grid.desktop, maxWidth: F.grid.maxWidth, phone: { columns: F.grid.columns, gutter: F.grid.gutter, margin: F.grid.margin } } : { columns: F.grid.columns, gutter: F.grid.gutter, margin: F.grid.margin, maxWidth: F.grid.maxWidth, phone: F.grid.phone || { columns: 4, gutter: 16, margin: 16 } };
-    return { name: F.name, version: 1, grid: G, breakpoints: F.breakpoints || DEFAULT_FOUNDATION.breakpoints,
-      spacing: (A ? A.space : (F.spacingSteps || [])).map(x => x.px), type: { ramp: steps.map(x => x.token), sizes: Object.fromEntries(steps.map(x => [x.token, x.px])) },
+    // a tokens foundation keeps its token names and source, so a reload (or the saved copy) speaks the same language
+    const tok = F.mode === 'tokens' ? { mode: 'tokens', source: F.source, tokenCounts: F.tokenCounts, spacingSteps: F.spacingSteps, radius: F.radius } : {};
+    return { name: F.name, version: 1, grid: G, breakpoints: F.breakpoints || DEFAULT_FOUNDATION.breakpoints, ...tok,
+      spacing: (A ? A.space : (F.spacingSteps || [])).map(x => x.px), type: { ramp: steps.map(x => x.token), sizes: Object.fromEntries(steps.map(x => [x.token, x.px])), ...(F.mode === 'tokens' ? { steps: F.type.steps, fromTokens: true } : {}) },
       buttons: F.buttons.mode === 'measured' ? { sizes: F.buttons.sizes.map(x => x.token), variants: F.buttons.variants.map(x => x.token), classPrefix: 'btn-', measured: { sizes: F.buttons.sizes, variants: F.buttons.variants } } : F.buttons, protect: F.protect };
   }
 

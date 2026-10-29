@@ -42,6 +42,8 @@ Each JSON entry has:
 
 The rule for all of them: **edit tokens and classes, never write pixel values.** The site has a foundation (`jig.foundation.json`) and its CSS exposes custom properties and classes that match. Use those names.
 
+When the patch header says `foundation: <name> · design tokens loaded from <url>`, the site pointed the jig at its own design system (a W3C tokens file, a Tokens Studio or Style Dictionary export, or a CSS file of `:root` variables). Every `type` and `spacing` entry then names the site's tokens (`"from": "font-size-xl", "to": "font-size-2xl", "var": "--font-size-2xl"`). Apply the token: `font-size: var(--font-size-2xl)` in CSS, or the equivalent in the site's token pipeline. The `px` is there so you can verify, not so you can write it. Such a patch has no `# proposed tokens` section; the system already exists.
+
 | `ctl` | fields | what to change in source |
 | --- | --- | --- |
 | `crop` | `objectPosition` (or `backgroundPosition`), optional `zoom` | Set `object-position` (or `background-position`) on that element in the stylesheet or inline style. If `zoom` is present, apply `transform: scale(zoom)` with `transform-origin` equal to the position, and make sure the container has `overflow: hidden`. |
@@ -105,7 +107,7 @@ If the site has no `jig.foundation.json`, the jig runs on a built-in default and
 2. **Generate `jig.foundation.json`** from it. Match the schema in the README: `grid`, `breakpoints`, `spacing`, `type.ramp`, `type.headings`, `buttons`, `protect`. Reuse the system's own names.
 3. **If there is no system**, sample the site: collect every font-size, padding, margin, gap, and radius in use; cluster near-duplicates (14/15/16 → 16); snap to a clean scale; name them `--space-N` and `--text-<step>`; emit a `:root` block plus the foundation file; list what you collapsed so the person can review. This is a design-debt audit as much as a setup step; say so.
 4. **Name the targets.** The jig finds images, text, buttons, sections, and overlays on its own. Add `data-jig-name` to the ones the person will talk about most so patches read well ("Hero image" beats `section:nth-of-type(1) > div > img`). Use `data-jig="off"` on anything that must stay untouchable, and `data-jig="grid"` on a row that should sit on the columns.
-5. **Load the script** once, at the end of `<body>`: `<script src="/jig.js" data-foundation="/jig.foundation.json"></script>`. It does nothing unless `?jig` is in the URL, so it is safe on production.
+5. **Load the script** once, at the end of `<body>` (the README's loader snippet), with `data-foundation` pointing at the foundation file, or straight at the site's existing tokens file if it has one (W3C tokens JSON or a CSS file of variables both work; no conversion needed). It does nothing unless `?jig` is in the URL, so it is safe on production.
 6. **Report connection issues.** Tell the person about anything that will stop the jig working: images served cross-origin without CORS (contrast can't be sampled), headings without tokens, buttons that don't follow a class convention, a CSS-in-JS setup where tokens don't surface as custom properties.
 
 ## 5. Auto

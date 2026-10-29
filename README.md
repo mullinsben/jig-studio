@@ -21,7 +21,7 @@ Paste this once, at the end of `<body>` (or in `<head>`; either works):
     if (!on) return;
     var s = document.createElement('script');
     s.src = '/jig.js';                                          // where you put jig.js
-    s.setAttribute('data-foundation', '/jig.foundation.json');  // optional
+    s.setAttribute('data-foundation', '/tokens.json');          // optional: your design system (see below)
     document.head.appendChild(s);
   })();
 </script>
@@ -30,7 +30,16 @@ Paste this once, at the end of `<body>` (or in `<head>`; either works):
 Then add `?jig` to any URL on your site. Normal visitors never download `jig.js`; it only loads when the URL asks for it, so it's safe on production. "It's just a jig."
 
 1. **Put `jig.js` on your site** (copy it next to your pages) and point `s.src` at it. Until the repo is public and has a versioned CDN URL, self-hosting is the way.
-2. **A foundation file is optional.** Without one the jig reads your CSS custom properties or measures the page and infers scales, and the patch proposes a `jig.foundation.json` you can commit. Drop the `data-foundation` line if you don't have one.
+2. **Point it at your design system, if you have one.** `data-foundation` takes a URL; the jig works out what's there and uses it as the scales it may move along, with your names. It reads any of:
+   - **W3C design tokens JSON** (`$value` / `$type`): what Figma Variables, Tokens Studio and Style Dictionary export. Aliases like `{font.size.lg}` resolve; composite typography tokens contribute their `fontSize`.
+   - **A CSS file** of `:root { --vars }` (a `tokens.css`, a `theme.css`).
+   - **`jig.foundation.json`**, the jig's own file (schema below).
+
+   Font sizes become the type ramp, spacing tokens the spacing scale; grid, radius and breakpoints come along when present. Everything else in the file (colours, shadows) is ignored for now. A type change then lands in the patch as `font-size-lg → font-size-xl` with the variable name, so whoever applies it writes `var(--font-size-xl)`, not `20px`. The URL can be on another domain if that server sends CORS headers (GitHub raw and most CDNs do).
+
+   Can't edit the script tag (a CMS manages it)? `<meta name="jig-foundation" content="https://…/tokens.json">` anywhere in `<head>` does the same. And in the jig itself, **advanced → foundation → load a design system** takes a URL to try one out; it's remembered for that site.
+
+   **No design system?** Drop the line. The jig reads your CSS custom properties, or measures the page and infers scales, and the patch proposes a `jig.foundation.json` you can commit.
 3. **Naming things is optional too.** The jig finds cover-cropped images, all text, buttons, sections and image overlays by itself; names just make the patch read better:
 
 ```html
@@ -97,7 +106,7 @@ Press **Copy patch**. Paste it to your AI along with [`GIVE-THIS-TO-YOUR-AI.md`]
 
 It looks for a source of truth in this order and stops at the first hit:
 
-1. `jig.foundation.json` (or an inline `#jig-foundation` script)
+1. the URL in `data-foundation` / `<meta name="jig-foundation">`: design tokens JSON, a CSS tokens file, or `jig.foundation.json` (or an inline `#jig-foundation` script); else `jig.foundation.json` beside the page
 2. CSS custom properties on `:root` named like `--space-*`, `--spacing-*`, `--text-*`, `--font-size-*`
 3. Nothing to read: it measures the rendered page, clusters near values, snaps to clean scales, and labels the result `inferred`
 

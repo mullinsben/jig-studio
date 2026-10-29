@@ -1,0 +1,8 @@
+{
+  "global": {
+    "fontSizes": { "caption": { "value": "12", "type": "fontSizes" }, "body": { "value": "16", "type": "fontSizes" }, "h3": { "value": "20", "type": "fontSizes" }, "h2": { "value": "28", "type": "fontSizes" }, "h1": { "value": "40", "type": "fontSizes" } },
+    "spacing": { "xs": { "value": "4", "type": "spacing" }, "sm": { "value": "8", "type": "spacing" }, "md": { "value": "16", "type": "spacing" }, "lg": { "value": "24", "type": "spacing" }, "xl": { "value": "40", "type": "spacing" } },
+    "lineHeights": { "body": { "value": "150%", "type": "lineHeights" } },
+    "typography": { "hero": { "value": { "fontFamily": "Inter", "fontSize": "56", "fontWeight": "700" }, "type": "typography" } }
+  }
+}
