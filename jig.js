@@ -344,7 +344,10 @@
     const parts = [];
     let n = el;
     const jigWrap = x => x.classList && (x.classList.contains('jig-crop-box') || x.classList.contains('jig-scrim-panel'));
-    while (n && n.nodeType === 1 && n !== document.body && n !== document.documentElement && parts.length < 6) {
+    const unique = () => { try { return document.querySelectorAll(parts.join(' > ')).length === 1; } catch (e) { return true; } };
+    // six class-qualified steps is plenty on a hand-written page; on a styled-components page (Wired) the classes repeat per card,
+    // so the chain keeps climbing, with positions, until it names exactly one element
+    while (n && n.nodeType === 1 && n !== document.body && n !== document.documentElement && (parts.length < 6 || (parts.length < 14 && !unique()))) {
       if (jigWrap(n)) { n = n.parentNode; continue; }
       if (n !== el && n.id) { parts.unshift('#' + CSS.escape(n.id)); break; }
       if (n !== el && n.dataset.jigName) { parts.unshift(`[data-jig-name="${n.dataset.jigName}"]`); break; }
@@ -1447,8 +1450,9 @@
     };
     hs.forEach(h => {
       if (h.querySelector("img, svg, picture") && !(h.textContent || "").trim().replace(/\s+/g, "").length) return;   // a logo heading: its size is the image
-      const f = px(css(h).fontSize); const bold = px(css(h).fontWeight) >= 600; const lb = localBody(h);
-      const distinct = f > lb + 0.5 && (f >= lb * 1.15 - 0.01 || bold);
+      const hc = css(h); const f = px(hc.fontSize); const bold = px(hc.fontWeight) >= 600; const lb = localBody(h);
+      const eyebrow = hc.textTransform === 'uppercase' && px(hc.letterSpacing) > 0;   // small caps with tracking (Wired's TODAY'S PICKS): a heading treatment that doesn't rely on size
+      const distinct = eyebrow || (f > lb + 0.5 && (f >= lb * 1.15 - 0.01 || bold));
       if (!distinct) W.push({ kind: 'hierarchy', el: h, msg: `${h.tagName.toLowerCase()} renders at ${r1(f)}px${bold ? '' : ', regular weight'}, next to body copy at ${r1(lb)}px; it doesn't read as a heading`, small: true, bodyPx: lb });
     });
     // 2. tap targets
@@ -1460,7 +1464,8 @@
       if (r.height < min - 0.5) W.push({ kind: 'tap-target', el: b, msg: `tap target ${Math.round(r.width)}×${Math.round(r.height)}px, min ${min}px tall${min <= 24 ? ' (WCAG 2.2 AA)' : ''}` });
       else if (r.width < min - 0.5) W.push({ kind: 'tap-target', el: b, narrow: true, msg: `tap target ${Math.round(r.width)}×${Math.round(r.height)}px, min ${min}px wide` });
       // a label that wraps inside a button reads as two buttons
-      if (b.getClientRects().length === 1 && (b.textContent || '').trim()) { // count the label's real lines (distinct line tops), not height ÷ line-height: a min-height makes a box tall without wrapping anything
+      const labelish = !b.querySelector('h1, h2, h3, h4, h5, h6, p, img, picture, ul, ol') && (b.textContent || '').trim().length <= 60;   // a clickable card (Wired's carousel items) carries a headline, not a label
+      if (labelish && b.getClientRects().length === 1 && (b.textContent || '').trim()) { // count the label's real lines (distinct line tops), not height ÷ line-height: a min-height makes a box tall without wrapping anything
         const rg = document.createRange(); rg.selectNodeContents(b); const tops = new Set(Array.from(rg.getClientRects()).filter(q => q.width > 1).map(q => Math.round(q.top / 4))); const lines = tops.size;
         if (lines > 1 && (b.textContent || '').trim().split(/\s+/).length > 1) W.push({ kind: 'button-wrap', el: b, msg: `button label wraps to ${lines} lines` }); }
     });
@@ -1667,9 +1672,29 @@
   }
   function hexColor(h) { h = h.slice(1); if (h.length === 3) h = h.split('').map(x => x + x).join(''); const n = parseInt(h.slice(0, 6), 16); if (isNaN(n)) return null; return [n >> 16 & 255, n >> 8 & 255, n & 255, h.length === 8 ? parseInt(h.slice(6), 16) / 255 : 1]; }
   const bgImgs = new Map();
+  // A picture served from another domain taints the canvas, so its pixels can't be read. Asked for again with CORS
+  // (crossOrigin = anonymous) most CDNs hand it over readable; the copy is cached per URL and a scan re-runs when it lands.
+  // A CDN that refuses leaves the picture unmeasured, as before: no guesses.
+  const corsImgs = new Map();   // url -> HTMLImageElement (readable), or null (refused / not yet loaded)
+  function readableImage(img) {
+    const src = img.currentSrc || img.src; if (!src) return null;
+    let foreign = false; try { foreign = new URL(src, location.href).origin !== location.origin; } catch (e) {}
+    if (!foreign || img.crossOrigin === 'anonymous') return img;   // same origin, or already CORS-enabled by the site
+    if (corsImgs.has(src)) { const c = corsImgs.get(src); return c && c.complete && c.naturalWidth ? c : null; }
+    const c = new Image(); c.crossOrigin = 'anonymous'; c.decoding = 'async'; corsImgs.set(src, c);
+    c.onload = () => scanSoon(); c.onerror = () => corsImgs.set(src, null);
+    c.src = src;
+    return null;
+  }
   function bgImage(el, pseudo) {
     const m = ((pseudo ? getComputedStyle(el, pseudo) : css(el)).backgroundImage || '').match(/url\(["']?([^"')]+)["']?\)/); if (!m) return null;
-    let im = bgImgs.get(m[1]); if (!im) { im = new Image(); im.decoding = 'async'; im.onload = () => scanSoon(); im.src = m[1]; bgImgs.set(m[1], im); }
+    let im = bgImgs.get(m[1]);
+    if (!im) {
+      im = new Image(); im.decoding = 'async'; im.onload = () => scanSoon();
+      let foreign = false; try { foreign = new URL(m[1], location.href).origin !== location.origin; } catch (e) {}
+      if (foreign) { im.crossOrigin = 'anonymous'; im.onerror = () => { const plain = new Image(); plain.decoding = 'async'; plain.onload = () => scanSoon(); plain.src = m[1]; bgImgs.set(m[1], plain); }; }   // CDN refuses CORS: fall back to a plain load (unmeasurable, but still "there is a picture here")
+      im.src = m[1]; bgImgs.set(m[1], im);
+    }
     return im.complete && im.naturalWidth ? im : null;
   }
   // where a CSS background image lands inside its box: background-size cover/contain/auto/px, background-position in % or px
@@ -1698,6 +1723,7 @@
     if (img.tagName === 'VIDEO') return sampleVideo(img, t);
     if (img.tagName !== 'IMG') return /url\(/.test(css(img).backgroundImage) ? sampleBg(img, t) : null;
     if (!img.complete || !img.naturalWidth) return null;
+    const pix = readableImage(img); if (!pix) return null;   // the page's own <img> keeps its geometry; the CORS copy supplies the pixels
     try {
       const c = document.createElement('canvas'); const ir = img.getBoundingClientRect(), tr = t.getBoundingClientRect();
       const fit = naturalFit(img); const [ox, oy] = parsePos(css(img).objectPosition);
@@ -1709,7 +1735,7 @@
       const w = Math.max(1, Math.round(x1 - x0)), h = Math.max(1, Math.round(y1 - y0));
       // 8x8 patches; each patch is averaged, then we keep every patch so the caller can grade by the worst one
       const N = 8; c.width = N; c.height = N; const ctx = c.getContext('2d');
-      ctx.imageSmoothingEnabled = true; ctx.drawImage(img, x0, y0, w, h, 0, 0, N, N);
+      ctx.imageSmoothingEnabled = true; ctx.drawImage(pix, x0, y0, w, h, 0, 0, N, N);
       const d = ctx.getImageData(0, 0, N, N).data; const patches = [];
       for (let i = 0; i < d.length; i += 4) patches.push([d[i], d[i + 1], d[i + 2], d[i + 3] / 255]);
       return patches;
@@ -2242,7 +2268,7 @@
     } catch (e) {}
     try {
       const N = 64, c = document.createElement('canvas'); c.width = N; c.height = N; const ctx = c.getContext('2d');
-      ctx.drawImage(img, 0, 0, N, N); const d = ctx.getImageData(0, 0, N, N).data;
+      ctx.drawImage(readableImage(img) || img, 0, 0, N, N); const d = ctx.getImageData(0, 0, N, N).data;
       const lum = new Float32Array(N * N); for (let i = 0; i < N * N; i++) lum[i] = 0.299 * d[i * 4] + 0.587 * d[i * 4 + 1] + 0.114 * d[i * 4 + 2];
       const e = new Float32Array(N * N); let cells = [];
       for (let y = 1; y < N - 1; y++) for (let x = 1; x < N - 1; x++) { const i = y * N + x; const gx = lum[i + 1] - lum[i - 1], gy = lum[i + N] - lum[i - N]; e[i] = Math.hypot(gx, gy); cells.push([i, e[i]]); }
@@ -2443,11 +2469,8 @@
             else { const prev = x.style.getPropertyValue('max-width'); x.style.setProperty('max-width', getComputedStyle(w.el).maxWidth, 'important'); state.autoFixes.push({ el: x, what: 'max-width matches the paragraph beside it', undo: () => { x.style.removeProperty('max-width'); if (prev) x.style.setProperty('max-width', prev); } }); } });
           did = true;
         }
-        if (w.kind === 'tap-target' && w.narrow && w.el.__jigStepSize && !seen.has(key(w.el, w.kind))) {
-          seen.add(key(w.el, w.kind)); let steps = 0; const min = (state.F.protect || {}).minTapTarget || 24;
-          while (steps < 2 && w.el.getBoundingClientRect().width < min - 0.5 && w.el.__jigStepSize(1)) steps++;
-          if (steps) { state.autoFixes.push({ el: w.el, what: `size +${steps} (tap target now ${Math.round(w.el.getBoundingClientRect().width)}px wide)` }); did = true; }
-        }
+        // a target that is too NARROW (an icon button) gets min-width below, never a size step: two steps up a button scale turned
+        // AP's 20px icon buttons into 98px-wide ones. Size steps are for targets that are too short, where the scale is the point.
         if (w.kind === 'button-wrap' && !seen.has(key(w.el, w.kind))) {
           // a wrapped label: step the size down only if that keeps the tap target; otherwise keep the size and stop the wrap
           seen.add(key(w.el, w.kind)); const el = w.el; const minTap = (state.F.protect || {}).minTapTarget || 24;
