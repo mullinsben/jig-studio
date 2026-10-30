@@ -55,8 +55,8 @@
   <footer>Part of <a href="https://github.com/mullinsben/jig-studio">Jig Studio</a> · <a href="/#lab">AI Lab</a> at benjaminmullins.tv</footer>
 </main>
 <script>
-  // The hosted jig.js lives next to this page.
-  const src = new URL('jig.js', location.href).href;
+  // The bookmarklet loads the pinned release from jsDelivr, the same file the install snippet uses.
+  const src = 'https://cdn.jsdelivr.net/gh/mullinsben/jig-studio@v0.1.0/jig.js';
   const code = `javascript:(function(){if(window.__jig){alert('Jig Studio is already on this page.');return;}var s=document.createElement('script');s.src='${src}?v='+Date.now();s.setAttribute('data-jig-injected','1');s.onerror=function(){alert('This site blocked the jig script (Content-Security-Policy). Try the extension route.');};document.body.appendChild(s);})();`;
   document.getElementById('bm').setAttribute('href', code);
   document.getElementById('code').value = code;
