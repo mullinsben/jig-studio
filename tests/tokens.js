@@ -30,18 +30,24 @@ const want = {
     const ok = e && e.from === 'font-size-xl' && e.to === 'font-size-2xl' && e.var === '--font-size-2xl' && e.px === 32; if (!ok) bad++; console.log(ok ? 'OK  ' : 'FAIL', 'type step in patch →', JSON.stringify(e)); await p.close(); }
   // the Foundation panel's Load button: load another file, and it survives a reload (saved for the site)
   { const p = await b.newPage({ viewport: { width: 1280, height: 800 } }); await p.goto('http://localhost:8765/tests/tokens/page-json.html?jig'); await p.waitForSelector('#jig-hud'); await p.waitForTimeout(800);
-    await p.evaluate(() => { document.getElementById('jig-adv-btn').click(); document.getElementById('jig-found-btn').click(); });
-    await p.waitForSelector('#jf-url'); await p.fill('#jf-url', 'tokens-studio.json'); await p.click('#jf-load'); await p.waitForTimeout(1200);
+    await p.click('#jig-ds-btn'); await p.waitForSelector('#jig-ds-menu:not([hidden])'); await p.fill('#jig-ds-url', 'tokens-studio.json'); await p.click('#jig-ds-load'); await p.waitForTimeout(1200);
     const a = await p.evaluate(() => ({ mode: window.__jig.state.F.mode, name: window.__jig.state.F.name, first: window.__jig.state.F.type.steps[0].token }));
     await p.reload(); await p.waitForSelector('#jig-hud'); await p.waitForTimeout(800);
     const r = await p.evaluate(() => ({ mode: window.__jig.state.F.mode, name: window.__jig.state.F.name, first: window.__jig.state.F.type.steps[0].token, src: document.getElementById('jig-src').textContent.slice(0, 90) }));
     const chk = await p.evaluate(() => { const F = window.__jig.state.F; return { s0: F.type.steps[0], s3: F.type.steps[3], sp: F.spacingSteps[1] }; });
-    const ok = a.name === 'tokens-studio' && r.mode === 'tokens' && r.first === 'global-fontsizes-caption' && chk.s0.px === 12 && chk.s0.var === '--global-fontsizes-caption' && chk.s3.px === 28 && chk.sp.token === 'global-spacing-sm' && chk.sp.px === 8 && chk.sp.var === '--global-spacing-sm'; if (!ok) bad++; console.log('   after reload:', JSON.stringify(chk)); console.log(ok ? 'OK  ' : 'FAIL', 'panel load + reload →', JSON.stringify({ a, r }));
+    const ok = a.name === 'tokens-studio' && r.mode === 'tokens' && r.first === 'global-fontsizes-caption' && chk.s0.px === 12 && chk.s0.var === '--global-fontsizes-caption' && chk.s3.px === 28 && chk.sp.token === 'global-spacing-sm' && chk.sp.px === 8 && chk.sp.var === '--global-spacing-sm'; if (!ok) bad++; console.log('   after reload:', JSON.stringify(chk)); console.log(ok ? 'OK  ' : 'FAIL', 'menu load + reload →', JSON.stringify({ a, r }));
     await p.evaluate(() => localStorage.removeItem('__jig-foundation:' + location.host)); await p.close(); }
   // the jig's own panels are furniture, not page: open the foundation panel, rescan, nothing in it may be a finding
   { const p = await b.newPage({ viewport: { width: 1280, height: 800 } }); await p.goto('http://localhost:8765/tests/tokens/page-json.html?jig'); await p.waitForSelector('#jig-hud'); await p.waitForTimeout(600);
-    await p.evaluate(() => { document.getElementById('jig-adv-btn').click(); document.getElementById('jig-found-btn').click(); }); await p.waitForSelector('#jf-url');
+    await p.evaluate(() => { document.getElementById('jig-ds-btn').click(); document.getElementById('jig-found-btn').click(); }); await p.waitForSelector('#jig-found');
     const n = await p.evaluate(() => { window.__jig.scan(); return window.__jig.state.warnings.filter(w => w.el && w.el.closest && w.el.closest('#jig-found, #jig-hud')).map(w => w.kind + ' ' + (w.el.id || w.el.tagName)); });
     const ok = n.length === 0; if (!ok) bad++; console.log(ok ? 'OK  ' : 'FAIL', 'jig UI never audited →', JSON.stringify(n)); await p.close(); }
+  // one link does the demo: ?jig&tokens=URL loads the system on arrival; the button says so; the welcome card offers the field when inferring
+  { const p = await b.newPage({ viewport: { width: 1280, height: 800 } }); await p.goto('http://localhost:8765/tests/tokens/page-bad.html?jig&tokens=tokens-studio.json'); await p.waitForSelector('#jig-hud'); await p.waitForTimeout(800);
+    const r = await p.evaluate(() => ({ mode: window.__jig.state.F.mode, name: window.__jig.state.F.name, btn: document.getElementById('jig-ds-btn').textContent, now: document.getElementById('jig-ds-name').textContent + ' · ' + document.getElementById('jig-ds-how').textContent, welcomeDs: document.getElementById('jig-welcome-ds').hidden }));
+    const ok = r.mode === 'tokens' && r.name === 'tokens-studio' && /✓/.test(r.btn) && r.welcomeDs === true; if (!ok) bad++; console.log(ok ? 'OK  ' : 'FAIL', '?tokens= link →', JSON.stringify(r));
+    await p.evaluate(() => localStorage.removeItem('__jig-foundation:' + location.host));
+    await p.goto('http://localhost:8765/tests/tokens/page-bad.html?jig'); await p.waitForSelector('#jig-hud'); await p.waitForTimeout(800);
+    const w = await p.evaluate(() => ({ welcomeDs: document.getElementById('jig-welcome-ds').hidden, btn: document.getElementById('jig-ds-btn').textContent })); const ok2 = w.welcomeDs === false && !/✓/.test(w.btn); if (!ok2) bad++; console.log(ok2 ? 'OK  ' : 'FAIL', 'inferred page offers the field →', JSON.stringify(w)); await p.close(); }
   await b.close(); process.exit(bad ? 1 : 0);
 })();

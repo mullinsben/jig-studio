@@ -68,6 +68,8 @@
 
   // ------------------------------------------------------------ foundation
   async function loadFoundation() {
+    const linked = url.searchParams.get('tokens') || url.searchParams.get('foundation');
+    if (linked) { const got = await foundationFromURL(linked); if (got.F) { state.F = got.F; state.foundationSource = got.how; safeSet('jig-foundation:' + location.host, JSON.stringify(exportFoundation())); return; } state.foundationError = `${linked}: ${got.error}`; }
     const saved = safeGet('jig-foundation:' + location.host);
     if (saved) { try { state.F = JSON.parse(saved); state.foundationSource = state.F.source ? `tokens from ${state.F.source} (saved for this site)` : 'edited in the jig (saved for this site)'; state.F.edited = !state.F.source; return; } catch (e) {} }
     const inline = document.getElementById('jig-foundation');
@@ -87,6 +89,20 @@
     if (vars) { state.F = vars; state.foundationSource = 'css custom properties on :root'; return; }
     // 3. nothing to read: measure the page and manufacture the scales
     state.F = inferFromPage(); state.foundationSource = 'inferred from this page';
+  }
+  // load a design system by URL from the HUD: menu, welcome link, or ?jig&tokens=URL
+  function loadDesignSystem(url) {
+    if (!url) return; const b = $('#jig-ds-load'), err = $('#jig-ds-err'); if (b) { b.disabled = true; b.textContent = 'loading…'; } if (err) err.hidden = true;
+    return foundationFromURL(url).then(got => {
+      if (b) { b.disabled = false; b.textContent = 'Load'; }
+      if (!got.F) { if (err) { err.textContent = '⚠ ' + got.error; err.hidden = false; } return false; }
+      state.F = got.F; state.foundationSource = got.how; state.foundationError = null; resolveFoundation(); gridAnchor = null;
+      safeSet('jig-foundation:' + location.host, JSON.stringify(exportFoundation()));
+      if (foundEl) renderFoundationPanel();
+      rewire(); renderHUD(); if (state.normalize) { normalizePage(false); normalizePage(true); }
+      const m = $('#jig-ds-menu'); if (m) { m.hidden = true; const db = $('#jig-ds-btn'); if (db) { db.setAttribute('aria-expanded', 'false'); db.classList.remove('on'); } }
+      return true;
+    });
   }
   // fetch a URL and turn whatever it holds into a foundation. Returns { F, how } or { error }
   async function foundationFromURL(src) {
@@ -1200,7 +1216,6 @@
     #jig-found h6 { margin: 12px 0 4px; font-size: 11px; letter-spacing: .14em; text-transform: uppercase; opacity: .6; }
     #jig-found .lead { opacity: .7; font-size: 12px; margin: 0 0 4px; }
     #jig-found .frow { display: grid; grid-template-columns: 1fr 72px 24px; gap: 6px; align-items: center; margin: 3px 0; }
-    #jig-found .frow.jf-url { grid-template-columns: 1fr 64px; } #jig-found .jf-err { color: #ff6b9d; display: block; margin: 4px 0 8px; } #jig-found small.o code { font: 11px ui-monospace, monospace; color: #cfd3dc; }
     #jig-found .frow.obs { grid-template-columns: 1fr 72px 24px; }
     #jig-found input { font: 12px ui-monospace, Menlo, monospace; background: #13141a; color: #f3f4f7; border: 1px solid #262833; border-radius: 6px; padding: 5px 7px; min-width: 0; width: 100%; box-sizing: border-box; }
     #jig-found input:focus { outline: 2px solid #3f6fff; outline-offset: 1px; }
@@ -1239,6 +1254,17 @@
     #jig-device-menu button.on { background: #3f6fff; color: #fff; } #jig-device-menu button.on small { color: #dfe6ff; }
     #jig-device-menu button.back { border-top: 1px solid #262833; border-radius: 0 0 6px 6px; margin-top: 2px; color: #9aa3b8; }
     #jig-device-menu[hidden] { display: none !important; }
+    #jig-ds-menu { margin: 0 12px 10px; background: #13141a; border: 1px solid #262833; border-radius: 8px; padding: 10px 12px; font: 12px/1.45 ui-sans-serif, system-ui; color: #dfe6ff; }
+    #jig-ds-menu[hidden] { display: none !important; }
+    #jig-ds-menu .now { display: flex; flex-direction: column; gap: 1px; margin: 0 0 8px; } #jig-ds-menu .now b { color: #fff; font-weight: 600; font-size: 13px; } #jig-ds-menu .now small { color: #9aa3b8; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    #jig-ds-menu form { display: grid; grid-template-columns: 1fr auto; gap: 6px; }
+    #jig-ds-menu input { min-width: 0; font: 12px ui-monospace, Menlo, monospace; background: #0b0b0d; color: #fff; border: 1px solid #262833; border-radius: 6px; padding: 6px 8px; } #jig-ds-menu input:focus { outline: 2px solid #3f6fff; outline-offset: 0; }
+    #jig-ds-menu button { font: 600 12px ui-sans-serif, system-ui; background: #3f6fff; color: #fff; border: 0; border-radius: 6px; padding: 6px 12px; cursor: pointer; } #jig-ds-menu button[disabled] { opacity: .5; }
+    #jig-ds-menu .ds-help { display: block; margin: 8px 0 0; color: #9aa3b8; font-size: 11px; line-height: 1.45; } #jig-ds-menu code { font: 11px ui-monospace, Menlo, monospace; color: #cfd3dc; }
+    #jig-ds-menu .ds-err { display: block; margin: 8px 0 0; color: #ff6b9d; font-size: 11px; } #jig-ds-menu .ds-err[hidden] { display: none; }
+    #jig-ds-menu .ds-actions { display: flex; gap: 6px; margin: 10px 0 0; } #jig-ds-menu .ds-actions button { background: #262833; color: #dfe6ff; padding: 6px 10px; } #jig-ds-menu .ds-actions button:hover { background: #3a3d4a; }
+    #jig-ds-btn.on, #jig-ds-btn.ds-tokens { box-shadow: inset 0 0 0 1px #3f6fff; }
+    #jig-hud .welcome a { color: #fff; text-decoration: underline; text-underline-offset: 2px; }
     #jig-hud .tools button.ghost { background: transparent; color: #9aa3b8; border: 1px solid #262833; }
     #jig-hud .tools button.ghost.on { background: transparent; color: #fff; border-color: #3f6fff; }
     #jig-hud .tools button:hover, #jig-hud footer button:hover, #jig-hud .axb button:hover:not(:disabled) { background: #3f6fff; }
@@ -1274,7 +1300,7 @@
       #jig-hud { resize: none; max-height: 62vh; padding-bottom: env(safe-area-inset-bottom, 0px); }
       .jig-tb button { width: 36px; height: 36px; }
       /* check-and-nudge: a slim bar (count + jigs) that opens into a findings sheet; no grid, device, advanced or foundation on a phone */
-      #jig-hud .tools, #jig-hud .advpanel, #jig-hud .welcome, #jig-hud .hint, #jig-found { display: none !important; }
+      #jig-hud .tools, #jig-hud .advpanel, #jig-hud .dspanel, #jig-hud .welcome, #jig-hud .hint, #jig-found { display: none !important; }
       #jig-hud header { touch-action: none; padding-bottom: 8px; }
       #jig-hud header small { display: none; }
       #jig-hud header .min { display: none; }
@@ -1338,7 +1364,7 @@
   on(window, 'scroll', () => { if (state.selected) refreshToolbar(state.selected); }, { passive: true });
   on(window, 'resize', () => { if (state.selected) refreshToolbar(state.selected); drawGrid(); });
   on(document, 'keydown', e => {
-    if (e.key === 'Escape') { if (foundEl) return closeFoundationPanel(); if (deviceEl) return closeDevice(); $$('.jig-selected').forEach(x => x.classList.remove('jig-selected')); state.selected = null; toolbar.hidden = true; }
+    if (e.key === 'Escape') { if (foundEl) return closeFoundationPanel(); { const m = $('#jig-ds-menu'); if (m && !m.hidden) { m.hidden = true; const db = $('#jig-ds-btn'); db.classList.remove('on'); db.setAttribute('aria-expanded', 'false'); return; } } if (deviceEl) return closeDevice(); $$('.jig-selected').forEach(x => x.classList.remove('jig-selected')); state.selected = null; toolbar.hidden = true; }
     if (e.key === 'g' && !e.metaKey && !e.ctrlKey && !/input|textarea/i.test(e.target.tagName)) toggleGrid();
     if (state.selected && state.selected.__jigNudge && /^Arrow/.test(e.key)) {
       e.preventDefault(); const step = e.shiftKey ? 5 : 1;
@@ -1906,19 +1932,27 @@
   hud.innerHTML = `
     <header><b>jig <i>studio</i></b><small id="jig-bp"></small><em class="phn" id="jig-ph-n" title="accessibility failures"></em><button class="min" id="jig-min-btn" title="minimize">–</button></header>
     <div class="jigs">${JIGS.map(j => `<button data-jig-toggle="${j.id}" aria-pressed="false">${j.label}</button>`).join('')}</div>
-    <div class="welcome" id="jig-welcome" hidden><b>Pink is what fails accessibility.</b> Switch on <i>images</i>, <i>type</i>, <i>buttons</i> or <i>spacing</i>, then drag or click anything outlined. Everything you do lands in one patch; <b>Copy patch</b> and hand it to your AI.</div>
+    <div class="welcome" id="jig-welcome" hidden><b>Pink is what fails accessibility.</b> Switch on a jig, then drag or click anything outlined; <b>Copy patch</b> hands it all to your AI.<span id="jig-welcome-ds" hidden><br>No design system found, so the jig measured one. Have one? <a href="#" id="jig-welcome-load">paste its URL</a>.</span></div>
     <div class="tools">
       <button id="jig-grid-btn" title="g">grid</button>
       <span class="devwrap"><button id="jig-device-btn" title="preview on a phone or tablet" aria-haspopup="menu" aria-expanded="false">device ▾</button>
       <div id="jig-device-menu" role="menu" hidden>${DEVICES.map(d => `<button role="menuitemradio" data-device="${d.id}"><span>${d.name}</span><small>${d.w}×${d.h}</small></button>`).join('')}<button role="menuitem" data-device="" class="back">back to desktop</button></div></span>
+      <button id="jig-ds-btn" title="which design system the jig measures against" aria-expanded="false" aria-controls="jig-ds-menu">design system ▾</button>
       <span class="spacer"></span>
-      <button id="jig-adv-btn" class="ghost" title="foundation, columns, auto, rescan, reset">advanced</button>
+      <button id="jig-adv-btn" class="ghost" title="columns, auto fix, rescan, reset">advanced</button>
     </div>
+    <div id="jig-ds-menu" class="dspanel" role="region" aria-label="design system" hidden>
+        <div class="now"><b id="jig-ds-name"></b><small id="jig-ds-how"></small></div>
+        <form id="jig-ds-form"><input id="jig-ds-url" type="text" inputmode="url" autocomplete="off" placeholder="https://yoursite.com/tokens.json" spellcheck="false" aria-label="design system URL"><button type="submit" id="jig-ds-load">Load</button></form>
+        <small class="ds-help">A tokens file (Figma Variables, Tokens Studio, Style Dictionary), a CSS file of <code>:root</code> variables, or <code>jig.foundation.json</code>. To install for good: <code>data-foundation="…"</code> on the jig script tag.</small>
+        <small class="ds-err" id="jig-ds-err" hidden></small>
+        <div class="ds-actions"><button type="button" id="jig-found-btn">edit scales</button><button type="button" id="jig-ds-reinfer">measure this page instead</button></div>
+      </div>
     <div class="advpanel">
       <div class="arow"><label>columns</label><div><select id="jig-cols-sel" title="grid columns"></select></div></div>
       <div class="arow"><label>auto fix</label><div><button id="jig-norm-btn" title="snap every size and space to the scales, and fix what protection flagged" aria-pressed="false">off</button><select id="jig-q-res" title="how many steps to snap to"><option value="32">light</option><option value="16" selected>medium</option><option value="8">strict</option></select></div></div>
-      <div class="arow"><label>scales</label><div><button id="jig-found-btn">foundation</button><button id="jig-scan-btn">rescan</button><button id="jig-reset-btn">reset all</button></div></div>
-      <div class="src" id="jig-src"></div>
+      <div class="arow"><label>page</label><div><button id="jig-scan-btn">rescan</button><button id="jig-reset-btn">reset all</button></div></div>
+      <div class="src" id="jig-src" hidden></div>
     </div>
     <div class="list"><h6 class="fold" data-fold="ax" aria-expanded="false"><span>accessibility</span><em id="jig-ax-n">0</em></h6><div id="jig-ax" class="axr" hidden><div class="axh"><b id="jig-axr-n">0</b><span id="jig-axr-l">accessibility failures</span></div><div id="jig-axr-rules"></div><div class="axb"><button id="jig-axfix" title="fix the accessibility failures the jig knows how to fix; no other changes">Fix what I can</button><button id="jig-axdl" title="download a styled report you can share or print to PDF">Report</button><button id="jig-axmd" class="ghost" title="copy the same report as markdown, for a ticket">Markdown</button></div></div><h6 class="fold" data-fold="changes" aria-expanded="false"><span>changes</span><em id="jig-ch-n">0</em></h6><div id="jig-changes" hidden></div><h6 class="fold" data-fold="warn" aria-expanded="false"><span>notes</span><em id="jig-wn-n">0</em></h6><div id="jig-warn" hidden></div></div>
     <footer><button class="primary" id="jig-copy-btn">Copy patch</button><small id="jig-count"></small></footer>
@@ -1982,6 +2016,10 @@
     const F = state.F; const inf = F.mode === 'inferred' || F.type.inferred || F.buttons.inferred;
     const tk = F.mode === 'tokens' && F.tokenCounts ? ` · ${F.tokenCounts.type} type steps, ${F.tokenCounts.space} spacing steps from your tokens` : '';
     const err = state.foundationError ? ` · ⚠ foundation URL failed: ${state.foundationError}` : '';
+    { const n = $('#jig-ds-name'), h = $('#jig-ds-how'), b = $('#jig-ds-btn'); if (n) { n.textContent = F.name; h.textContent = `${state.foundationSource}${tk}`; h.title = h.textContent; b.classList.toggle('ds-tokens', F.mode === 'tokens' || F.mode === 'file'); b.textContent = (F.mode === 'tokens' || F.mode === 'file' ? 'design system ✓' : 'design system') + ' ▾'; }
+      const e = $('#jig-ds-err'); if (e && state.foundationError && !e.dataset.shown) { e.textContent = '⚠ ' + state.foundationError; e.hidden = false; e.dataset.shown = '1'; }
+      const wd = $('#jig-welcome-ds'); if (wd) wd.hidden = !(F.mode === 'inferred' || F.mode === 'vars');
+      const ri = $('#jig-ds-reinfer'); if (ri) ri.hidden = F.mode === 'inferred'; }
     $('#jig-src').textContent = `${INJECTED ? 'injected by bookmarklet · ' : ''}foundation: ${F.name} · ${state.foundationSource}${tk}${err}${inf ? ` · ${F.type.steps.length} type steps, ${F.spacingSteps.length} spacing steps, ${F.buttons.sizes.length} button size${F.buttons.sizes.length === 1 ? '' : 's'} · proposed tokens ride in the patch` : ''}`;
   }
   function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
@@ -2669,13 +2707,12 @@
     foundEl.innerHTML = `
       <button class="x close" id="jf-close" title="close (Esc)" style="position:absolute;top:10px;right:10px">×</button>
       <h5>foundation <i>${esc(F.name)}</i></h5>
-      <p class="lead">${esc(state.foundationSource)}. ${inf ? 'These are a reading of the page, not a decision. Rename, retune, add or remove steps; the controls and the patch follow.' : 'Edit here to try a different scale on this page; the patch will carry the change as a proposal.'}</p>
+      <p class="lead">${inf ? 'A reading of the page, not a decision: rename, retune, add or remove steps and the controls follow.' : 'Try a different scale on this page; the patch carries the change as a proposal.'}</p>
       <h6>type ramp (px)</h6><div id="jf-type">${stepRows(F.type.steps, 'type')}</div><button data-add="type">+ step</button>
       <h6>spacing (px)</h6><div id="jf-space">${stepRows(F.spacingSteps, 'space')}</div><button data-add="space">+ step</button>
       <h6>grid</h6><div class="grid4">${['columns', 'gutter', 'margin', 'maxWidth'].map(k => `<div><label>${k}</label><input data-g="${k}" type="number" value="${F.grid[k]}"></div>`).join('')}</div>
       <h6>buttons</h6><p class="lead">${F.buttons.mode === 'measured' ? `measured: ${F.buttons.sizes.map(x => `${x.token} ${x.h}px`).join(' · ')}; variants ${F.buttons.variants.map(x => x.token).join(', ')}` : `classes: ${F.buttons.classPrefix}{${F.buttons.sizes.join('|')}} · {${F.buttons.variants.join('|')}}`}</p>
-      <h6>load a design system</h6><div class="frow jf-url"><input id="jf-url" type="url" placeholder="https://yoursite.com/tokens.json (or .css)" value="${esc(F.source || '')}" title="W3C design tokens JSON (Figma Variables, Tokens Studio, Style Dictionary), a CSS file of :root variables, or jig.foundation.json"><button id="jf-load">Load</button></div><small class="o">Permanent install: add <code>data-foundation="…"</code> to the jig script tag, or <code>&lt;meta name="jig-foundation" content="…"&gt;</code>.</small>
-      <div class="actions"><button class="primary" id="jf-apply">Apply to page</button><button id="jf-canon" title="replace the scales with a modular type scale off the body size and a 4/8/12/16/24/32/48/64 ladder">Canonical</button><button id="jf-remember">Remember for this site</button><button id="jf-forget">Forget</button><button id="jf-copy">Copy foundation.json</button><button id="jf-reinfer">Re-infer</button></div>`;
+      <div class="actions"><button class="primary" id="jf-apply">Apply to page</button><button id="jf-canon" title="replace the scales with a modular type scale off the body size and a 4/8/12/16/24/32/48/64 ladder">Canonical</button><button id="jf-remember">Remember for this site</button><button id="jf-forget">Forget</button><button id="jf-copy">Copy foundation.json</button></div>`;
     document.body.appendChild(foundEl);
     const readBack = () => {
       const steps = kind => { const rows = {}; $$(`input[data-k="${kind}"]`, foundEl).forEach(inp => { (rows[inp.dataset.i] = rows[inp.dataset.i] || {})[inp.dataset.f] = inp.dataset.f === 'px' ? +inp.value : inp.value.trim(); }); return Object.values(rows).filter(r => r.token).sort((a, b) => a.px - b.px); };
@@ -2705,21 +2742,10 @@
         if (state.normalize) { normalizePage(false); normalizePage(true); }
         return;
       }
-      if (b.id === 'jf-load') {
-        const url = ($('#jf-url', foundEl).value || '').trim(); if (!url) return; b.textContent = 'loading…';
-        foundationFromURL(url).then(got => {
-          if (!got.F) { b.textContent = 'Load'; const n = document.createElement('small'); n.className = 'o jf-err'; n.textContent = '⚠ ' + got.error; $('.jf-url', foundEl).after(n); return; }
-          state.F = got.F; state.foundationSource = got.how; state.foundationError = null; resolveFoundation(); gridAnchor = null;
-          safeSet('jig-foundation:' + location.host, JSON.stringify(exportFoundation()));
-          rewire(); renderFoundationPanel(); renderHUD(); if (state.normalize) { normalizePage(false); normalizePage(true); }
-        });
-        return;
-      }
       if (b.id === 'jf-apply') { readBack(); rewire(); renderFoundationPanel(); flashBtn(b, 'Applied'); }
       if (b.id === 'jf-remember') { readBack(); safeSet('jig-foundation:' + location.host, JSON.stringify(exportFoundation())); state.foundationSource = 'edited in the jig (saved for this site)'; renderHUD(); flashBtn(b, 'Saved'); }
       if (b.id === 'jf-forget') { try { localStorage.removeItem('__jig-foundation:' + location.host); } catch (x) {} flashBtn(b, 'Forgotten; reload to re-infer'); }
       if (b.id === 'jf-copy') { readBack(); copyText(JSON.stringify(exportFoundation(), null, 2)).then(r => flashBtn(b, r === 'ok' ? 'Copied' : 'Selected; press ⌘C')); }
-      if (b.id === 'jf-reinfer') { try { localStorage.removeItem('__jig-foundation:' + location.host); } catch (x) {} state.F = inferFromPage(); state.foundationSource = 'inferred from this page'; rewire(); renderFoundationPanel(); }
     };
   }
   function flashBtn(b, msg) { const t = b.textContent; b.textContent = msg; setTimeout(() => (b.textContent = t), 1600); }
@@ -2828,6 +2854,13 @@
     devBtn.onclick = e => { e.stopPropagation(); showDevMenu(devMenu.hidden); };
     $$('[data-device]', devMenu).forEach(m => m.onclick = e => { e.stopPropagation(); showDevMenu(false); if (m.dataset.device) openDevice(m.dataset.device); else closeDevice(); });
     on(document, 'pointerdown', e => { if (!devMenu.hidden && !e.target.closest('.devwrap')) showDevMenu(false); }, true);
+    // design system menu: what's loaded, load another by URL, edit the scales, or go back to measuring the page
+    const dsBtn = $('#jig-ds-btn'), dsMenu = $('#jig-ds-menu');
+    const showDs = show => { dsMenu.hidden = !show; dsBtn.setAttribute('aria-expanded', show ? 'true' : 'false'); dsBtn.classList.toggle('on', show); if (show) { const u = $('#jig-ds-url'); u.value = state.F.source || ''; setTimeout(() => u.focus(), 30); } };
+    dsBtn.onclick = e => { e.stopPropagation(); showDs(dsMenu.hidden); };
+    const wl = $('#jig-welcome-load'); if (wl) wl.onclick = e => { e.preventDefault(); showDs(true); };
+    $('#jig-ds-form').onsubmit = e => { e.preventDefault(); loadDesignSystem($('#jig-ds-url').value.trim()); };
+    $('#jig-ds-reinfer').onclick = () => { try { localStorage.removeItem('__jig-foundation:' + location.host); } catch (x) {} state.F = inferFromPage(); state.foundationSource = 'inferred from this page'; state.foundationError = null; closeFoundationPanel(); rewire(); renderHUD(); showDs(false); };
     // on a real phone the device previews make no sense: you're already holding one
     { const coarse = window.matchMedia && matchMedia('(hover: none) and (pointer: coarse)').matches; if (state.bp === 'phone' || coarse && Math.min(screen.width, screen.height) <= 600) $('.devwrap', hud).hidden = true; }
     syncDeviceBtn();
@@ -2860,7 +2893,7 @@
       renderHUD();
     };
     $('#jig-scan-btn').onclick = scanProtection;
-    $('#jig-found-btn').onclick = toggleFoundationPanel;
+    $('#jig-found-btn').onclick = () => { const m = $('#jig-ds-menu'); if (m) { m.hidden = true; $('#jig-ds-btn').classList.remove('on'); } toggleFoundationPanel(); };
     $('#jig-norm-btn').onclick = () => {   // auto can take a few seconds on huge pages: say so, and let the label paint before the work starts
       const nb = $('#jig-norm-btn'); if (nb.dataset.busy) return; nb.dataset.busy = '1'; const label = nb.textContent; nb.textContent = 'working…';
       setTimeout(() => { Promise.resolve().then(() => normalizePage(!state.normalize)).finally(() => { nb.textContent = state.normalize ? 'on' : 'off'; delete nb.dataset.busy; }); }, 30);
