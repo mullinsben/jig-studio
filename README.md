@@ -1,12 +1,24 @@
 # Jig Studio
 
-Drag, pinch, and adjust presentation on the live site. Copy the patch. Let your AI apply it.
+**Measure a website against its design system. Fix what's off by dragging it. Hand the patch to your AI.**
 
-Jig Studio is a single script you add to any website. Put `?jig` on the URL and the page becomes adjustable: photo crops drag, headings step up and down the type ramp, buttons cycle through the system's sizes and variants, sections step along the spacing scale, overlaid copy snaps to a nine-point anchor, and a grid overlay shows what's off. A HUD lists every change and every accessibility warning, and **Copy patch** puts a human-readable, AI-applicable patch on the clipboard.
+One file, no build, no dependencies on the page. Add `?jig` to any URL on your site and the page becomes adjustable: crops drag, type steps along your ramp, buttons cycle through your sizes, text over photos gets a scrim. Everything that fails accessibility is painted pink, numbered, and listed in a report. Everything you do lands in one patch that a human can read and an AI can apply. The jig never writes to your site; it proposes.
 
-The jig never writes to your site. It proposes. Approval is reading the patch and saying yes.
+![Jig Studio on Capybutz: the type jig on, a headline selected, three accessibility failures counted and numbered on the page](docs/hero.png)
 
-Non-designers get to fix what looks wrong without opening a design tool. Designers get a faster loop than mockup, handoff, wait, review.
+## Three reasons to use it
+
+1. **It gets you from 80% to 100% faster.** AI builds the site; the last mile is a headless capybara and a button one size too small. Fix those by grabbing them, not by typing "move it up a bit" four times. The patch tells your AI exactly what you did, in your design system's own names.
+2. **It's an accessibility tool you can run on any site.** Contrast is measured from the rendered pixels, including text over photos. Findings are numbered on the page, grouped by WCAG rule, downloadable as a report you can send, and fixable with one button where a fix is safe. It never guesses; what it can't measure, it says so.
+3. **It finds the design system your site already has.** Point it at your tokens (Figma Variables, Tokens Studio, Style Dictionary, a CSS file) and it moves only along them. No tokens? It reads your CSS variables, or measures the page and proposes a system, with notes on everything it had to collapse. That proposal is a design-debt audit you didn't have to run.
+
+## Try it in ten seconds
+
+- **See it on a site that's wrong on purpose:** [capybutz.com/?jig](https://capybutz.com/?jig). Seven planted mistakes; the jig finds them.
+- **See it speak someone else's design system:** [capybutz.com/?jig&tokens=https://frontiercreatives.design/tokens.css](https://capybutz.com/?jig&tokens=https://frontiercreatives.design/tokens.css). Same page, measured against Frontier Creatives' tokens; the patch names *their* steps.
+- **Run it on a site you're looking at:** drag the [🦆 bookmarklet](https://capybutz.com/bookmarklet.html) to your bookmarks bar and click it on any page. Audit anything; the page goes inert while the jig is on.
+
+Then install it on your own site, which is the point:
 
 ## Install on your site
 
@@ -70,16 +82,10 @@ Anything else with a "custom code" box (Tilda, Duda, Framer, Carrd) works the sa
 
 The jig never changes your site. You drag, it writes a patch; **Copy patch**, hand it to your AI with [`GIVE-THIS-TO-YOUR-AI.md`](GIVE-THIS-TO-YOUR-AI.md), and the AI (or you) makes the change in your code.
 
-## Try it without installing
-
-[capybutz.com/bookmarklet.html](https://capybutz.com/bookmarklet.html) (or `bookmarklet.html` here) gives you a "🦆 Jig this page" button for your bookmarks bar. Click it on any page: the hosted `jig.js` is injected, the jig turns on, nothing is written to the page. Infer, drag, copy the patch, send the patch to whoever owns the site. Sites with a strict Content-Security-Policy will block the injection (the button tells you); an extension is the way past that, and it's on the list.
-
-The bookmarklet is the zero-setup way to try the jig on your own site (copy the patch, hand it to your AI with your code), and an audit tool on anyone else's: turn on **ax** and download the report.
-
 ## Try the demo
 
 ```bash
-git clone <this repo>
+git clone https://github.com/mullinsben/jig-studio.git
 cd jig-studio
 python3 -m http.server 8000      # any static server; file:// blocks image sampling
 ```
@@ -127,7 +133,20 @@ Everything below is found automatically; `data-jig="<control>"` forces one, `dat
 
 Nothing is live until you switch a jig on. The HUD's top row has five press-state toggles, **images · type · buttons · spacing · ax** (type covers the ramp, placement to the grid, and scrims; **ax** is on by default and paints everything that fails protection pink, with a chip saying why; the notes list jumps to each one); only the active kinds get outlines and respond to the mouse, so a busy page stays readable while you work on one thing. The choice is remembered per site. Protection scans everything regardless.
 
-HUD: **grid** (or press **g**) with a column picker (2 to 16), **design system** (what the jig is measuring against and where it came from; paste a URL to load another; *edit scales* opens the foundation panel to rename or retune steps, add or remove them, set the grid, apply live, remember for this site, copy as `jig.foundation.json`; *measure this page instead* goes back to inference), **auto fix** with a strength picker (one click snaps every font-size, padding, margin, and gap on the page to the nearest step and then fixes what protection flagged: scrims escalate gradient → tint → glass until text over an image passes, short buttons step up to 44px, buttons that sit together are brought to one size (the primary's), an h2 that outgrew the h1 steps down, blocks sitting up to 16px off a column line go back on the grid, images re-centre on their subject (faces where the browser can detect them, otherwise the densest detail), and text that fails contrast on a plain background moves to the nearest passing shade of the same hue (a button that paints its own background darkens the background instead). Alt text is the one thing left as a note; nothing on the page can know what the picture is. Strength: light uses the page's own steps (its tokens, or the inferred scales) and just removes drift; it's the default on a site that has tokens; medium uses a 1.25 modular scale off the body size (8 sizes) and a 4 to 96 ladder (9 spaces); strict is four sizes and four spaces, the brutal setting; the patch lists the snaps grouped by rule so the AI changes CSS rules, not elements), **rescan** protection, a **device** button (iPhone 15 Pro, iPhone SE, Pixel 8, Galaxy S24, iPad Mini; opens the page in a true-size frame that starts from the desktop's current state (your changes and auto carry over; only placement stays per breakpoint), the button shows which device is live, and "back to desktop" or Esc closes it; changes made there land in the same patch tagged with the device), **reset all**, **Copy patch**. The HUD drags by its header, minimizes with –, and resizes from its corner. Esc deselects. Click × on any change to undo just that one.
+The panel, top to bottom:
+
+- **images · type · buttons · spacing · ax**: the five jigs. Only the ones switched on get outlines and respond to the mouse; **ax** is on by default. Remembered per site.
+- **grid** (or press **g**): the column overlay, with a column picker (2 to 16).
+- **device ▾**: iPhone 15 Pro, iPhone SE, Pixel 8, Galaxy S24, iPad Mini. Opens the page in a true-size frame that starts from the desktop's current state (your changes and auto fix carry over; only text placement stays per breakpoint). Changes made there land in the same patch, tagged with the device. Esc or "back to desktop" closes it.
+- **design system ▾**: what the jig is measuring against and where it came from. Paste a URL to load another (tokens JSON, a CSS file, or `jig.foundation.json`). *Edit scales* opens the foundation panel: rename or retune steps, add or remove them, set the grid, apply live, remember for this site, copy as `jig.foundation.json`. *Measure this page instead* goes back to inference.
+- **advanced**: the column count, **auto fix** with its strength picker, **rescan**, **reset all**.
+- **accessibility** (a fold): the report. Numbered findings grouped by rule with WCAG references; click one to jump to it. **Fix what I can** fixes the WCAG failures the jig can fix safely; **Report** downloads a styled HTML file (print it for a PDF); **Markdown** copies the same for a ticket. Dismiss a finding with × and it stays dismissed for that page; the report lists it.
+- **changes** and **notes** (folds): what you did, and what the scan found that isn't an accessibility failure. × on any change undoes just that one.
+- **Copy patch**: everything, for a human and an AI.
+
+**Auto fix**, one toggle: it snaps every font size, padding, margin and gap on the page to the nearest step, then fixes what the scan flagged. Scrims escalate gradient → tint → glass until text over an image passes (an existing photo overlay is darkened first; a headline is never boxed); short buttons step up to the tap target; buttons that sit together are brought to one size, the primary's; an h2 that outgrew the h1 steps down; blocks a few px off a column line go back on the grid; images re-centre on their subject (faces where the browser can detect them, otherwise the densest detail); text that fails contrast on a plain background moves to the nearest passing shade of the same hue (a button darkens its own background instead). Alt text stays a note; nothing on the page can know what a picture is. Strength: **light** uses the page's own steps and removes drift (the default on a site with tokens); **medium** is a 1.25 modular scale off the body size and a 4-to-96 ladder; **strict** is four sizes and four spaces. The patch lists the snaps grouped by rule so an AI changes CSS rules, not elements.
+
+The panel drags by its header or its footer, minimizes with –, resizes from its corner, and never leaves the screen. Esc deselects. On a phone it's a slim bar with a findings sheet; crops and type steps still work on the page.
 
 ## Protection
 
