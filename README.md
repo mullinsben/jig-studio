@@ -96,7 +96,7 @@ Open <http://localhost:8000/demo/>. Seven things are deliberately wrong. Then op
 | --- | --- |
 | David's card shows a wing and very little David | drag the duck |
 | "Meet the herd" is bigger than the h1; the names look like body copy | click any text, press − / + |
-| The membership CTA is tiny next to a huge secondary | click a button, step its size |
+| The membership CTA is too small to tap | click a button, step its size |
 | The card row is nudged off the grid | press **auto fix**; anything a few px off a column line goes back on it |
 | White copy over the palest part of the banner; contrast fails | drag the copy to a darker corner |
 | Section padding is 24 / 48 / 16 | click a section, step its padding |

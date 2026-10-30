@@ -1273,6 +1273,7 @@
     #jig-hud .axr { padding: 6px 0 10px; }
     #jig-hud:not(.jig-frame) h6.fold[data-fold="warn"], #jig-hud:not(.jig-frame) #jig-warn { display: none !important; }
     #jig-hud .axh { display: flex; align-items: baseline; gap: 8px; margin-bottom: 6px; } #jig-hud .axh b { font: 700 26px/1 ui-sans-serif, system-ui; color: #ff2d9b; } #jig-hud .axh b.ok { color: #35c186; } #jig-hud .axh span { font: 12px ui-sans-serif, system-ui; color: #9aa3b8; }
+    #jig-hud .axdiv { margin: 8px 0 2px; padding: 4px 0 0; border-top: 1px dashed #2a2c38; font: 500 10px/1.4 ui-sans-serif, system-ui; color: #9aa3b8; letter-spacing: .02em; }
     #jig-hud .axrow { align-items: center; } #jig-hud .axrow .c { flex: 0 0 26px; font: 700 12px ui-monospace, Menlo, monospace; text-align: right; color: #ffb84d; } #jig-hud .axrow .c.wcag { color: #ff2d9b; } #jig-hud .axrow.done .c { color: #35c186; } #jig-hud .axrow.done { opacity: .55; }
     #jig-hud .axrow .s small { display: block; font: 10.5px ui-monospace, Menlo, monospace; opacity: .6; }
     #jig-hud .axb { display: flex; gap: 6px; flex-wrap: nowrap; margin-top: 8px; } #jig-hud .axb button { flex: 1 1 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 6px 6px !important; font-size: 11.5px !important; } #jig-hud #jig-axfix.on { background: #35c186; border-color: #35c186; color: #0b0b0d; } #jig-hud .axb button:disabled { opacity: .45; cursor: default; }
@@ -2310,10 +2311,14 @@
     $('#jig-axr-l').textContent = (T.wcagOpen === 1 ? 'accessibility failure' : 'accessibility failures') + (T.practice + T.design ? ` · ${T.practice + T.design} more` : '') + (T.fixed ? ` · ${T.fixed} fixed` : '');
     const list = $('#jig-axr-rules'); list.innerHTML = '';
     state.axOpen = state.axOpen || new Set();
+    let lastCat = null;
     R.rules.forEach(r => {
       const openNow = state.axOpen.has(r.kind);
+      // the list runs WCAG failures first, then notes; a divider says so, because a yellow row left after "Fix what I can" otherwise reads as a miss
+      if (lastCat === 'wcag' && r.cat !== 'wcag') { const d = document.createElement('div'); d.className = 'axdiv'; d.textContent = 'notes · not accessibility failures, not counted; auto fix (advanced) handles the ones marked'; list.appendChild(d); }
+      lastCat = r.cat;
       const row = document.createElement('div'); row.className = 'row axrow' + (r.open ? '' : ' done'); row.setAttribute('aria-expanded', openNow ? 'true' : 'false');
-      row.innerHTML = `<span class="c ${r.cat}">${r.open}</span><span class="s">${esc(r.t)}<span class="tw">${openNow ? '▾' : '▸'}</span><small>${esc(r.ref)}${r.auto ? ' · auto fix' : ''}</small></span>`;
+      row.innerHTML = `<span class="c ${r.cat}">${r.open}</span><span class="s">${esc(r.t)}<span class="tw">${openNow ? '▾' : '▸'}</span><small>${esc(r.ref)}${r.auto ? (r.cat === 'wcag' ? ' · Fix what I can' : ' · auto fix') : ''}</small></span>`;
       row.onclick = () => { if (openNow) state.axOpen.delete(r.kind); else state.axOpen.add(r.kind); renderAXPanel(); };
       list.appendChild(row);
       if (!openNow) return;
@@ -2646,6 +2651,16 @@
           seen.add(key(w.el, w.kind)); let steps = 0;
           while (steps < 2 && w.el.getBoundingClientRect().height < ((state.F.protect || {}).minTapTarget || 24) - 0.5 && w.el.__jigStepSize(1)) steps++;
           if (steps) { state.autoFixes.push({ el: w.el, what: `size +${steps} (tap target now ${Math.round(w.el.getBoundingClientRect().height)}px)` }); did = true; }
+          // the button that grew now sits beside buttons it no longer matches: bring the group to its size (never below the tap target), so one fix doesn't leave a mismatched row (Capybutz: "Become a member" grew, "Meet the herd" stayed lg)
+          if (steps && w.el.__jigSizeIndex) {
+            const target = w.el.__jigSizeIndex(), minT = (state.F.protect || {}).minTapTarget || 24;
+            Array.from(w.el.parentElement.children).filter(b => b !== w.el && b.classList.contains('jig-el') && b.dataset.jigCtl === 'button' && b.__jigSizeIndex && b.__jigStepSize && b.offsetParent).forEach(b => {
+              const was = b.__jigSizeIndex(); if (was === target || seen.has(key(b, 'tap-group'))) return; seen.add(key(b, 'tap-group')); let g = 0;
+              while (b.__jigSizeIndex() !== target && g++ < 6) { if (!b.__jigStepSize(b.__jigSizeIndex() < target ? 1 : -1)) break; }
+              while (b.getBoundingClientRect().height < minT - 0.5 && b.__jigStepSize(1)) {}
+              if (b.__jigSizeIndex() !== was) state.autoFixes.push({ el: b, what: `size ${was > b.__jigSizeIndex() ? '−' : '+'}${Math.abs(b.__jigSizeIndex() - was)} (matches the button beside it, which grew to the tap target)` });
+            });
+          }
         }
         if (w.kind === 'tap-target' && !seen.has(key(w.el, 'tap-min'))) {
           // still short (no bigger size in the system, or not a wired button): give it the height directly, label centred
