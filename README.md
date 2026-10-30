@@ -202,8 +202,21 @@ You can also inline it: `<script type="application/json" id="jig-foundation">{â€
 
 Top half for the person approving. Bottom half for the AI applying. If you want a paper trail, save patches to `jig-patches/<date>-<page>.md` in your repo; the format is already a markdown file.
 
+## What it doesn't do (yet, or on purpose)
+
+- **It never writes to your site.** Every change is a proposal in the patch; you, or your AI, apply it in the code. That's the design, not a gap.
+- **Colour tokens are read but not yet used.** A loaded design system contributes its type ramp, spacing, grid, radius and breakpoints. Contrast fixes still move text to the nearest passing shade of the same hue rather than to a token in your palette. That's the first item on the list after 0.1.
+- **Photos on CDNs that refuse CORS can't be measured.** The jig re-requests cross-origin images with CORS and most CDNs allow it; when one doesn't, text over that photo is a note ("check by eye"), never a guess. A browser extension would close this; it's on the roadmap.
+- **Sites with a strict Content Security Policy block the bookmarklet.** Install the loader instead (your own script is allowed), or allow the CDN that hosts `jig.js`.
+- **Automated checks are part of the picture.** The jig measures what renders on this page at this viewport. ARIA validity, keyboard order, focus visibility and screen-reader output are not checked; pair it with axe DevTools and a keyboard pass. A clean report is a good sign, not a conformance claim.
+- **Inference is a reading, not a decision.** On a site with no tokens the scales are measured and clustered; review them in the foundation panel before you commit the proposal.
+
+## Contributing
+
+Bugs, rules and layering techniques are the contributions we want most; see [CONTRIBUTING.md](CONTRIBUTING.md) for the three rules every change is held to, how to add an accessibility rule, and how to run `npm test`. This project follows the [Contributor Covenant](CODE_OF_CONDUCT.md).
+
 ## Status
 
-v0. Works on static sites and anything that exposes tokens as CSS custom properties. Not yet: colour beyond contrast fixes, new components, layout changes, a visual approval UI. Those are on purpose; the jig stays small.
+v0.1.0, the first public release; see [CHANGELOG.md](CHANGELOG.md). Works on static sites, sites with tokens as CSS custom properties or a tokens file, and sites with nothing (inferred). Tested on WordPress, Blogger and large news sites; see `tests/` for what's proven.
 
-MIT. Capybara photos in the demo are from the author's own collection.
+MIT. "Jig Studio" is this project's name; forks, please choose your own. Capybara photos in the demo are from the author's own collection.

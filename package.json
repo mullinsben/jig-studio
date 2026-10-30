@@ -1,0 +1,18 @@
+{
+  "name": "jig-studio",
+  "version": "0.1.0",
+  "description": "Measure a website against its design system, fix what's off, and hand the patch to your AI. One file, zero dependencies on the page.",
+  "license": "MIT",
+  "author": "Ben Mullins",
+  "repository": { "type": "git", "url": "https://github.com/mullinsben/jig-studio" },
+  "main": "jig.js",
+  "files": ["jig.js", "jig.foundation.json", "GIVE-THIS-TO-YOUR-AI.md"],
+  "scripts": {
+    "test": "node tests/run.js",
+    "serve": "node tests/serve.js"
+  },
+  "devDependencies": {
+    "playwright": "^1.49.0",
+    "sharp": "^0.33.5"
+  }
+}

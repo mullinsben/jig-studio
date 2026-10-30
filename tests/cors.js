@@ -1,5 +1,5 @@
 // Cross-origin photos: with a CDN that allows CORS the jig must measure text over them; without it, they stay honest notes.
-// Run with tests/cors-server.py on 8777 (CORS) and again with `python3 -m http.server 8777` from /tmp/foreign (no CORS).
+// `node tests/serve.js` serves tests/foreign on 8777 with CORS (a CDN that allows it); `--no-cors` shows the refusing case.
 const { chromium } = require('playwright');
 (async () => {
   const b = await chromium.launch(); const p = await b.newPage({ viewport: { width: 1440, height: 900 } });
