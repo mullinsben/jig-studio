@@ -20,7 +20,7 @@ Paste this once, at the end of `<body>` (or in `<head>`; either works):
     try { on = on || localStorage.getItem('__jig') === '1'; } catch (e) {}
     if (!on) return;
     var s = document.createElement('script');
-    s.src = '/jig.js';                                          // where you put jig.js
+    s.src = 'https://cdn.jsdelivr.net/gh/mullinsben/jig-studio@v0.1.0/jig.js';   // or '/jig.js' if you self-host
     s.setAttribute('data-foundation', '/tokens.json');          // optional: your design system (see below)
     document.head.appendChild(s);
   })();
@@ -29,7 +29,7 @@ Paste this once, at the end of `<body>` (or in `<head>`; either works):
 
 Then add `?jig` to any URL on your site. Normal visitors never download `jig.js`; it only loads when the URL asks for it, so it's safe on production. "It's just a jig."
 
-1. **Put `jig.js` on your site** (copy it next to your pages) and point `s.src` at it. Until the repo is public and has a versioned CDN URL, self-hosting is the way.
+1. **Where `jig.js` comes from.** The snippet loads a pinned release from jsDelivr (`@v0.1.0`), so your install never changes under you; bump the version when you want a newer one. Prefer to self-host? Copy `jig.js` next to your pages and point `s.src` at it. Either way it's one file with no dependencies.
 2. **Point it at your design system, if you have one.** `data-foundation` takes a URL; the jig works out what's there and uses it as the scales it may move along, with your names. It reads any of:
    - **W3C design tokens JSON** (`$value` / `$type`): what Figma Variables, Tokens Studio and Style Dictionary export. Aliases like `{font.size.lg}` resolve; composite typography tokens contribute their `fontSize`.
    - **A CSS file** of `:root { --vars }` (a `tokens.css`, a `theme.css`).
@@ -49,11 +49,11 @@ Then add `?jig` to any URL on your site. Normal visitors never download `jig.js`
 <aside data-jig="off">…</aside>                                       <!-- leave this alone -->
 ```
 
-Prefer a plain tag? `<script src="/jig.js" data-foundation="/jig.foundation.json"></script>` also works and also stays inert without `?jig`, but every visitor downloads the script.
+Prefer a plain tag? `<script src="https://cdn.jsdelivr.net/gh/mullinsben/jig-studio@v0.1.0/jig.js" data-foundation="/tokens.json"></script>` also works and also stays inert without `?jig`, but every visitor downloads the script.
 
 ### On a CMS or site builder
 
-Paste the same loader wherever your platform takes site-wide code. On hosted builders you can't upload a `.js` file of your own, so point `s.src` at the hosted copy, `https://capybutz.com/jig.js` for now (a versioned CDN link replaces it at launch), and drop the `data-foundation` line.
+Paste the same loader wherever your platform takes site-wide code. On hosted builders you can't upload a `.js` file of your own, which is fine: the snippet already loads `jig.js` from jsDelivr. Drop the `data-foundation` line unless your tokens live at a URL.
 
 | Platform | Paste the loader in | `jig.js` lives | Notes |
 | --- | --- | --- | --- |
