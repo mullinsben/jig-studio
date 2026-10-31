@@ -1,6 +1,6 @@
 {
   "name": "jig-studio",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Measure a website against its design system, fix what's off, and hand the patch to your AI. One file, zero dependencies on the page.",
   "license": "MIT",
   "author": "Ben Mullins",

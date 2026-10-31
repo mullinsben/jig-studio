@@ -32,7 +32,7 @@ Paste this once, at the end of `<body>` (or in `<head>`; either works):
     try { on = on || localStorage.getItem('__jig') === '1'; } catch (e) {}
     if (!on) return;
     var s = document.createElement('script');
-    s.src = 'https://cdn.jsdelivr.net/gh/mullinsben/jig-studio@v0.1.0/jig.js';   // or '/jig.js' if you self-host
+    s.src = 'https://cdn.jsdelivr.net/gh/mullinsben/jig-studio@v0.1.1/jig.js';   // or '/jig.js' if you self-host
     s.setAttribute('data-foundation', '/tokens.json');          // optional: your design system (see below)
     document.head.appendChild(s);
   })();
@@ -61,7 +61,7 @@ Then add `?jig` to any URL on your site. Normal visitors never download `jig.js`
 <aside data-jig="off">…</aside>                                       <!-- leave this alone -->
 ```
 
-Prefer a plain tag? `<script src="https://cdn.jsdelivr.net/gh/mullinsben/jig-studio@v0.1.0/jig.js" data-foundation="/tokens.json"></script>` also works and also stays inert without `?jig`, but every visitor downloads the script.
+Prefer a plain tag? `<script src="https://cdn.jsdelivr.net/gh/mullinsben/jig-studio@v0.1.1/jig.js" data-foundation="/tokens.json"></script>` also works and also stays inert without `?jig`, but every visitor downloads the script.
 
 ### On a CMS or site builder
 
