@@ -8,6 +8,7 @@ All notable changes to Jig Studio. The format follows [Keep a Changelog](https:/
 - **Fix what I can** now brings a button's row along: when it grows a too-small button to the tap target, the buttons beside it step to the same size (never below the target), so one click doesn't leave a mismatched pair.
 - The accessibility list shows a divider between WCAG failures and notes, and each row says which button fixes it (Fix what I can, or auto fix under advanced).
 - Demo: "Meet the herd" is `btn-md`; the planted sin is the too-small primary.
+- While a device frame is open, **Fix what I can**, **auto fix** (and its strength) and a design-system load are repeated inside the frame, not only on the desktop behind it.
 
 Next up, in order:
 - Colour tokens: contrast fixes pick the nearest passing token (`var(--ink-900)`) instead of a computed shade, and a design note lists off-palette colours with counts and the nearest token.

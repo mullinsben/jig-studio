@@ -91,6 +91,8 @@
     state.F = inferFromPage(); state.foundationSource = 'inferred from this page';
   }
   // load a design system by URL from the HUD: menu, welcome link, or ?jig&tokens=URL
+  // the open device frame, if any: the parent's auto fix, Fix what I can and design-system load are repeated there
+  function tellFrame(msg) { try { const fr = deviceEl && $('iframe', deviceEl); if (fr && fr.contentWindow) fr.contentWindow.postMessage(msg, '*'); } catch (e) {} }   // deviceEl is declared later in this file; before init it simply isn't there yet
   function loadDesignSystem(url) {
     if (!url) return; const b = $('#jig-ds-load'), err = $('#jig-ds-err'); if (b) { b.disabled = true; b.textContent = 'loading…'; } if (err) err.hidden = true;
     return foundationFromURL(url).then(got => {
@@ -100,6 +102,7 @@
       safeSet('jig-foundation:' + location.host, JSON.stringify(exportFoundation()));
       if (foundEl) renderFoundationPanel();
       rewire(); renderHUD(); if (state.normalize) { normalizePage(false); normalizePage(true); }
+      if (!EMBED) tellFrame({ jig: 'foundation', url });
       const m = $('#jig-ds-menu'); if (m) { m.hidden = true; const db = $('#jig-ds-btn'); if (db) { db.setAttribute('aria-expanded', 'false'); db.classList.remove('on'); } }
       return true;
     });
@@ -2839,6 +2842,13 @@
       $$('.jig-el').forEach(el => el.classList.toggle('jig-active', state.jigs.has(groupOf(el.dataset.jigCtl))));
       on(window, 'message', e => { if (e.data && e.data.jig === 'jigs') { state.jigs = new Set(e.data.jigs); $$('.jig-el').forEach(el => el.classList.toggle('jig-active', state.jigs.has(groupOf(el.dataset.jigCtl)))); if (state.selected && !state.selected.classList.contains('jig-active')) deselect(); paintAX(); } });
       on(window, 'message', e => { if (e.data && e.data.jig === 'reveal') { const el = $(e.data.el); if (el) { el.scrollIntoView({ block: 'center', behavior: 'smooth' }); if (el.classList.contains('jig-el') && el.classList.contains('jig-active')) select(el); } } });
+      // while a frame is open the parent's auto fix, Fix what I can and design-system load must land here too, not only on the desktop behind (Ben, Oct 30: "it's not making the changes on the iPhone version")
+      on(window, 'message', async e => {
+        const d = e.data; if (!d || !d.jig) return;
+        if (d.jig === 'auto') { normalizePage(false); if (d.on) { state.autoRes = d.res; await normalizePage(true); } scanProtection(); postToParent(); }
+        else if (d.jig === 'axfix') { fixAX(!!d.on); scanProtection(); postToParent(); }
+        else if (d.jig === 'foundation') { const ok = await loadDesignSystem(d.url); if (ok) { scanProtection(); postToParent(); } }
+      });
       on(window, 'message', async e => {
         if (!e.data || e.data.jig !== 'replay') return;
         state.replaying = true;
@@ -2911,13 +2921,13 @@
     $('#jig-found-btn').onclick = () => { const m = $('#jig-ds-menu'); if (m) { m.hidden = true; $('#jig-ds-btn').classList.remove('on'); } toggleFoundationPanel(); };
     $('#jig-norm-btn').onclick = () => {   // auto can take a few seconds on huge pages: say so, and let the label paint before the work starts
       const nb = $('#jig-norm-btn'); if (nb.dataset.busy) return; nb.dataset.busy = '1'; const label = nb.textContent; nb.textContent = 'working…';
-      setTimeout(() => { Promise.resolve().then(() => normalizePage(!state.normalize)).finally(() => { nb.textContent = state.normalize ? 'on' : 'off'; delete nb.dataset.busy; }); }, 30);
+      setTimeout(() => { Promise.resolve().then(() => normalizePage(!state.normalize)).finally(() => { nb.textContent = state.normalize ? 'on' : 'off'; delete nb.dataset.busy; tellFrame({ jig: 'auto', on: !!state.normalize, res: state.autoRes || $('#jig-q-res').value }); }); }, 30);
     };
-    $('#jig-q-res').onchange = () => { if (state.normalize) { normalizePage(false); normalizePage(true); } };
+    $('#jig-q-res').onchange = () => { if (state.normalize) { normalizePage(false); normalizePage(true); tellFrame({ jig: 'auto', on: true, res: state.autoRes || $('#jig-q-res').value }); } };
     if (state.F.mode && state.F.mode !== 'inferred') $('#jig-q-res').value = '32';   // the site has tokens: light = its own steps; medium/strict stay on offer
     $('#jig-reset-btn').onclick = () => { if (state.axFix) fixAX(false); normalizePage(false); $$('.jig-el').forEach(el => el.__jigReset && el.__jigReset()); state.changes.clear(); state.frame = { changes: [], warnings: [] }; closeDevice(); scanProtection(); };
     $('#jig-copy-btn').onclick = copyPatch;
-    $('#jig-axfix').onclick = () => { const b = $('#jig-axfix'); if (b.dataset.busy) return; b.dataset.busy = '1'; b.textContent = 'working…'; setTimeout(() => { try { fixAX(state.axFix && state.axMore ? true : !state.axFix); } finally { delete b.dataset.busy; renderAXPanel(); } }, 30); };
+    $('#jig-axfix').onclick = () => { const b = $('#jig-axfix'); if (b.dataset.busy) return; b.dataset.busy = '1'; b.textContent = 'working…'; setTimeout(() => { try { fixAX(state.axFix && state.axMore ? true : !state.axFix); } finally { delete b.dataset.busy; renderAXPanel(); tellFrame({ jig: 'axfix', on: !!state.axFix }); } }, 30); };
     $('#jig-axdl').onclick = () => { const r = downloadReport(); const b = $('#jig-axdl'); const t = b.textContent; b.textContent = r ? 'Downloaded' : 'Blocked here'; setTimeout(() => (b.textContent = t), 1600); };
     $('#jig-axmd').onclick = async () => { const r = await copyText(reportMarkdown()); const b = $('#jig-axmd'); const t = b.textContent; b.textContent = r === 'ok' ? 'Copied' : 'Press ⌘C'; setTimeout(() => (b.textContent = t), 1600); };
 
