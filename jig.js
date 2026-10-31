@@ -7,7 +7,7 @@
   'use strict';
 
   // ------------------------------------------------------------ activation
-  const JIG_VERSION = '0.1.0';
+  const JIG_VERSION = '0.1.1';
   const COARSE = !!(window.matchMedia && matchMedia('(hover: none) and (pointer: coarse)').matches);   // a touch device: pinching belongs to the browser
   // never the site's content: elements marked off, and the CMS's own chrome a logged-in owner sees (WordPress admin bar)
   const OFF = '[data-jig="off"], #wpadminbar';
