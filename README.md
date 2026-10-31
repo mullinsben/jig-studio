@@ -4,7 +4,7 @@
 
 One file, no build, no dependencies on the page. Add `?jig` to any URL on your site and the page becomes adjustable: crops drag, type steps along your ramp, buttons cycle through your sizes, text over photos gets a scrim. Everything that fails accessibility is painted pink, numbered, and listed in a report. Everything you do lands in one patch that a human can read and an AI can apply. The jig never writes to your site; it proposes.
 
-![Jig Studio on Capybutz: ?jig opens the panel, accessibility failures turn pink, Fix what I can clears them](docs/hero.gif)
+![Jig Studio on Capybutz: the type jig on, a headline selected, three accessibility failures counted and numbered on the page](docs/hero.png)
 
 ## Three reasons to use it
 
