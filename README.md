@@ -1,12 +1,16 @@
 # Jig Studio
 
-**Fix accessibility and layout problems on any website, in its own design system, without opening Figma.**
+**Get from 80% to 100% faster.** Fix accessibility and layout problems on any website, in its own design system, without opening Figma.
 
-Add `?jig` to the URL. Everything that fails turns pink; one click fixes most issues. Pick a device and visually edit anything that looks wrong (images, text, buttons, grid, spacing) until it doesn't. Copy the patch and hand it to your AI or developer. It never writes to your site.
+Add `?jig` to the URL. Everything that fails turns pink; one click fixes most issues. Pick a device, dial in anything that looks wrong (images, text, buttons, grid, spacing). Copy the patch and hand it to your AI or developer. It never writes to your site.
 
 ![Jig Studio on Capybutz: ?jig opens the panel, accessibility failures turn pink, Fix what I can clears them](docs/hero.gif)
 
 The full tour, with videos of each job: **[benjaminmullins.tv/lab/jig-studio](https://benjaminmullins.tv/lab/jig-studio)**.
+
+## Why it exists
+
+AI can get an experience most of the way there in an afternoon. The last stretch is where it matters: a headline slightly too big, a photo cropped through someone's forehead, a button nobody can tap on an old Android. Asking the model to "move it up a bit" four times gets old. Once you have a prototype, turn on the jig and dial it in: you drag, it writes the patch, your AI applies it. The longer version is in [The rise of the Crab People](https://benjaminmullins.tv/thinking/crab-people).
 
 ## Try it in ten seconds
 
